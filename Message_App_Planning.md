@@ -47,10 +47,10 @@ Database tables:
         UNIQUE (sender_id, receiver_id)
         CHECK (sender_id != receiver_id)
 
-    Friend:
-        uid1 PK FKEY User(id) 
-        uid2 PK FKEY User(id)
-        CHECK (uid1 < uid2)
+    FriendListMember: //add a mutual friendship between A and B mean adding 2 records, (A,B) and (B,A)
+        id PK FKEY User(id)
+        friendId PK FKEY User(id)
+    //There is no constraint stopping user from befriending themself, you just have to check for it in the middlewares.
 
 API Specifications:
 
