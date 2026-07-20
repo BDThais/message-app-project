@@ -45,7 +45,6 @@ Database tables:
         sender_id FKEY User(id)
         receiver_id FKEY User(id)
         UNIQUE (sender_id, receiver_id)
-        CHECK (sender_id != receiver_id)
 
     FriendListMember: //add a mutual friendship between A and B mean adding 2 records, (A,B) and (B,A)
         id PK FKEY User(id)
