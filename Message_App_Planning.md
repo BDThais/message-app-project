@@ -13,7 +13,7 @@ Database tables:
 
     User:
         id PK
-        name
+        name    //only accept alphanumeric characters
         email
         password_hash
         tel
@@ -46,7 +46,7 @@ Database tables:
         receiver_id FKEY User(id)
         UNIQUE (sender_id, receiver_id)
 
-    FriendListMember: //add a mutual friendship between A and B mean adding 2 records, (A,B) and (B,A)
+    FriendListMember: //adding a mutual friendship between A and B mean adding 2 records, (A,B) and (B,A)
         id PK FKEY User(id)
         friendId PK FKEY User(id)
     //There is no constraint stopping user from befriending themself, you just have to check for it in the middlewares.
@@ -68,3 +68,25 @@ API Specifications:
     POST    /friend-requests                                    //send a friend request (body: receiver_id). If the receiver already sent one to you, deny and point to inbox instead
     POST    /friend-requests/:id/accept                         //accept the friend request
     DELETE  /friend-requests/:id                                //reject the friend request
+
+Example project structure:
+
+ts-node-express/
+├── src/
+│   ├── config/
+│   │   └── config.ts           // Load and type environment variables
+│   ├── controllers/
+│   │   └── itemController.ts   // CRUD logic for "items"
+│   ├── middlewares/
+│   │   └── errorHandler.ts     // Global typed error handling middleware
+│   ├── models/
+│   │   └── item.ts             // Define item type and in-memory storage
+│   ├── routes/
+│   │   └── itemRoutes.ts       // Express routes for items
+│   ├── app.ts                  // Express app configuration (middlewares, routes)
+│   └── server.ts               // Start the server
+├── .env                        // Environment variables
+├── package.json                // Project scripts, dependencies, etc.
+├── tsconfig.json               // TypeScript configuration
+├── .eslintrc.js                // ESLint configuration
+└── .prettierrc                 // Prettier configuration
