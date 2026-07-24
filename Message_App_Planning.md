@@ -61,7 +61,7 @@ API Specifications:
     POST    /chatrooms                                          //create a new chat room (body: type, member_ids, name?)
     GET     /:chatid/messages?before=<message_id>&limit=50      //retrieve all messages of that chat room
     POST    /:chatid/messages                                   //post a message to the database
-    GET     /users?search=<query>                               //search users by name/email to find someone to friend-request
+    GET     /users?search=<tel>                                 //search users by phone number to find someone to friend-request
     GET     /friends                                            //retrieve the user's friends list
     DELETE  /friends/:id                                        //unfriend
     GET     /friend-requests                                    //retrieve the list of friend requests

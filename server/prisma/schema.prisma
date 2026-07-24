@@ -19,7 +19,7 @@ model User {
   name         String
   email        String   @unique
   passwordHash String   @map("password_hash")
-  tel          String?
+  tel          String
 
   sessions               Session[]
   chatMemberships        ChatMember[]
