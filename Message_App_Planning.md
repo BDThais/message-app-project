@@ -71,18 +71,18 @@ API Specifications:
 
 Example project structure:
 
-ts-node-express/
+message-app/
 ├── src/
 │   ├── config/
 │   │   └── config.ts           // Load and type environment variables
 │   ├── controllers/
-│   │   └── itemController.ts   // CRUD logic for "items"
+│   │   └── Controller.ts       // CRUD logic
 │   ├── middlewares/
 │   │   └── errorHandler.ts     // Global typed error handling middleware
 │   ├── models/
-│   │   └── item.ts             // Define item type and in-memory storage
+│   │   └── item.ts             // Define item type and in-memory storage (Not needed in this project, since it already have prisma)
 │   ├── routes/
-│   │   └── itemRoutes.ts       // Express routes for items
+│   │   └── Routes.ts           // Express routes
 │   ├── app.ts                  // Express app configuration (middlewares, routes)
 │   └── server.ts               // Start the server
 ├── .env                        // Environment variables
