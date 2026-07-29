@@ -53,21 +53,21 @@ Database tables:
 
 API Specifications:
 
-    POST    /signup
-    POST    /login
-    POST    /logout
-    GET     /me
-    GET     /chatrooms                                          //retrieve a list of all the chat rooms that have this user as it's member
-    POST    /chatrooms                                          //create a new chat room (body: type, member_ids, name?)
-    GET     /:chatid/messages?before=<message_id>&limit=50      //retrieve all messages of that chat room
-    POST    /:chatid/messages                                   //post a message to the database
-    GET     /users?search=<tel>                                 //search users by phone number to find someone to friend-request
-    GET     /friends                                            //retrieve the user's friends list
-    DELETE  /friends/:id                                        //unfriend
-    GET     /friend-requests                                    //retrieve the list of friend requests
-    POST    /friend-requests                                    //send a friend request (body: receiver_id). If the receiver already sent one to you, deny and point to inbox instead
-    POST    /friend-requests/:id/accept                         //accept the friend request
-    DELETE  /friend-requests/:id                                //reject the friend request
+    POST    /account/signup
+    POST    /account/login
+    POST    /account/logout
+    GET     /account/me
+    GET     /chatrooms                                                      //retrieve a list of all the chat rooms that have this user as it's member
+    POST    /chatrooms                                                      //create a new chat room (body: type, member_ids, name?)
+    GET     /chatrooms/:chatid/messages?before=<message_id>&limit=50        //retrieve all messages of that chat room
+    POST    /chatrooms/:chatid/messages                                     //post a message to the database
+    GET     /friend/search/:tel                                             //search users by phone number to find someone to friend-request
+    GET     /friend                                                         //retrieve the user's friends list
+    DELETE  /friend/:id                                                     //unfriend
+    GET     /friend/requests                                                //retrieve the list of friend requests
+    POST    /friend/requests                                                //send a friend request (body: receiver_id). If the receiver already sent one to you, deny and point to inbox instead
+    POST    /friend/requests/:id/accept                                     //accept the friend request
+    DELETE  /friend/requests/:id                                            //reject the friend request
 
 Example project structure:
 
@@ -87,6 +87,13 @@ message-app/
 │   └── server.ts               // Start the server
 ├── .env                        // Environment variables
 ├── package.json                // Project scripts, dependencies, etc.
-├── tsconfig.json               // TypeScript configuration
-├── .eslintrc.js                // ESLint configuration
-└── .prettierrc                 // Prettier configuration
+├── tsconfig.json               // TypeScript configuration.
+└── eslintrc.js                 // ESLint configuration
+
+Example cors details for sending cookies:
+
+// Express (origin: http://localhost:3000)
+app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+
+// React (origin: http://localhost:5173)
+fetch('http://localhost:3000/me', { credentials: 'include' });
