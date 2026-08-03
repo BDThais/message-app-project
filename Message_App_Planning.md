@@ -53,7 +53,7 @@ Database tables:
 
 API Specifications:
 
-    POST    /account/signup
+    POST    /account/signup                                                 //body: {name,email,password,tel}
     POST    /account/login
     POST    /account/logout
     GET     /account/me
