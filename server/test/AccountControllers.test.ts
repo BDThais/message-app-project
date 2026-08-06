@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
-import { createAccount } from './AccountControllers';
-import { prisma } from '../lib/prisma';
-import { hashPassword } from '../lib/passwordHash';
+import { createAccount } from '../src/controllers/AccountControllers';
+import { prisma } from '../src/lib/prisma';
+import { hashPassword } from '../src/lib/passwordHash';
 
 // Replace the real Prisma client and password hasher with test doubles so
 // these tests don't touch a real database or run real hashing.
-vi.mock('../lib/prisma', () => ({
+vi.mock('../src/lib/prisma', () => ({
   prisma: {
     user: {
       findFirst: vi.fn(),
@@ -16,7 +16,7 @@ vi.mock('../lib/prisma', () => ({
   },
 }));
 
-vi.mock('../lib/passwordHash', () => ({
+vi.mock('../src/lib/passwordHash', () => ({
   hashPassword: vi.fn().mockResolvedValue('hashed-password'),
 }));
 
