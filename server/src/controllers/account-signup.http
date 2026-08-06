@@ -1,0 +1,76 @@
+### Account signup — manual requests for POST /account/signup
+### Requires the "REST Client" extension in VS Code (Huachao Mao).
+### Click "Send Request" above any block to run it.
+###
+### Order matters for #2 and #3 — they depend on the row #1 creates.
+### If you've already run #1 in an earlier session, it'll return 409
+### here instead of 201, since that row is still in the DB — expected,
+### not a bug. Test data below is prefixed "test" so it's easy to spot
+### and clean up later.
+
+@baseUrl = http://localhost:3000
+
+### 1. Valid signup — expect 201
+POST {{baseUrl}}/account/signup
+Content-Type: application/json
+
+{
+  "name": "testsignup1",
+  "email": "test.signup1@example.com",
+  "tel": "+14155552671",
+  "password": "Str0ng!Pass1"
+}
+
+### 2. Same email + phone as #1 — expect 409 "Email already exists"
+POST {{baseUrl}}/account/signup
+Content-Type: application/json
+
+{
+  "name": "testsignup1",
+  "email": "test.signup1@example.com",
+  "tel": "+14155552671",
+  "password": "Str0ng!Pass1"
+}
+
+### 3. New name/email, same phone as #1 — expect 409 "Phone number already exists"
+POST {{baseUrl}}/account/signup
+Content-Type: application/json
+
+{
+  "name": "testsignup2",
+  "email": "test.signup2@example.com",
+  "tel": "+14155552671",
+  "password": "Str0ng!Pass2"
+}
+
+### 4. Missing password — expect 400 "All fields are required"
+POST {{baseUrl}}/account/signup
+Content-Type: application/json
+
+{
+  "name": "testsignup3",
+  "email": "test.signup3@example.com",
+  "tel": "+14155552671"
+}
+
+### 5. Malformed email — expect 400 "Invalid email format"
+POST {{baseUrl}}/account/signup
+Content-Type: application/json
+
+{
+  "name": "testsignup4",
+  "email": "not-an-email",
+  "tel": "+14155552671",
+  "password": "Str0ng!Pass1"
+}
+
+### 6. Malformed phone — expect 400 "Invalid phone number format"
+POST {{baseUrl}}/account/signup
+Content-Type: application/json
+
+{
+  "name": "testsignup5",
+  "email": "test.signup5@example.com",
+  "tel": "12345",
+  "password": "Str0ng!Pass1"
+}
