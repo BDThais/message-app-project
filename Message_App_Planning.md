@@ -53,10 +53,13 @@ Database tables:
 
 API Specifications:
 
-    POST    /account/signup                                                 //body: {name,email,password,tel}
-    POST    /account/login
-    POST    /account/logout
-    GET     /account/me
+    POST    /account/signup                                                 //body: {name,email,password,tel} (route unprotected)
+    POST    /account/login                                                  //check if account existed then validate the password (if either of these checks failed, return the same fail response "Invalid email or password").
+                                                                            //After validation, create a new session record for this account, if an unexpired/expired
+                                                                            //session record of the same account already existed then delete the session record and create a new session record. Then if validation is valid, set
+                                                                            //the cookie header with session id and send back the response (route unprotected)
+    POST    /account/logout                                                 //always send back the header to clear session cookies and delete the session record in the db (if it exist)
+    GET     /account/me                                                     //return the user's data or { user: null } (status:200) if there is no session
     GET     /chatrooms                                                      //retrieve a list of all the chat rooms that have this user as it's member
     POST    /chatrooms                                                      //create a new chat room (body: type, member_ids, name?)
     GET     /chatrooms/:chatid/messages?before=<message_id>&limit=50        //retrieve all messages of that chat room
