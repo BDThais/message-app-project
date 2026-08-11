@@ -53,47 +53,85 @@ Database tables:
 
 API Specifications:
 
-    POST    /account/signup                                                 //body: {name,email,password,tel} (route unprotected)
-    POST    /account/login                                                  //check if account existed then validate the password (if either of these checks failed, return the same fail response "Invalid email or password").
-                                                                            //After validation, create a new session record for this account, if an unexpired/expired
-                                                                            //session record of the same account already existed then delete the session record and create a new session record. Then if validation is valid, set
-                                                                            //the cookie header with session id and send back the response (route unprotected)
-    POST    /account/logout                                                 //always send back the header to clear session cookies and delete the session record in the db (if it exist)
-    GET     /account/me                                                     //return the user's data or { user: null } (status:200) if there is no session
-    GET     /chatrooms                                                      //retrieve a list of all the chat rooms that have this user as it's member
-    POST    /chatrooms                                                      //create a new chat room (body: type, member_ids, name?)
-    GET     /chatrooms/:chatid/messages?before=<message_id>&limit=50        //retrieve all messages of that chat room
-    POST    /chatrooms/:chatid/messages                                     //post a message to the database
-    GET     /friend/search/:tel                                             //search users by phone number to find someone to friend-request
-    GET     /friend                                                         //retrieve the user's friends list
-    DELETE  /friend/:id                                                     //unfriend
-    GET     /friend/requests                                                //retrieve the list of friend requests
-    POST    /friend/requests                                                //send a friend request (body: receiver_id). If the receiver already sent one to you, deny and point to inbox instead
-    POST    /friend/requests/:id/accept                                     //accept the friend request
-    DELETE  /friend/requests/:id                                            //reject the friend request
+    POST    /account/signup
+        //body: {name,email,password,tel} (route unprotected)
 
-Example project structure:
+    POST    /account/login                                                  
+        //Check if account existed then validate the password (if either of these checks failed, return the same fail response "Invalid email or password").
+        //After validation return valid, if an expired session record of the same account already existed then delete the session record. After that, create a new session record for this account. Finally, set the cookie header with session id and send back the response (route unprotected)
+
+    POST    /account/logout
+        //always send back the header to clear session cookies and delete the session record in the db (if it exist)
+
+    GET     /account/me
+        //return the user's data or { user: null } (status:200) if there is no session
+
+    GET     /chatrooms
+        //retrieve a list of all the chat rooms that have this user as it's member
+
+    POST    /chatrooms
+        //create a new chat room (body: type, member_ids, name?)
+
+    GET     /chatrooms/:chatid/messages?before=<message_id>&limit=50
+        //retrieve all messages of that chat room
+
+    POST    /chatrooms/:chatid/messages
+        //post a message to the database
+
+    GET     /friend/search/:tel
+        //search users by phone number to find someone to friend-request
+
+    GET     /friend
+        //retrieve the user's friends list
+
+    DELETE  /friend/:id
+        //unfriend
+
+    GET     /friend/requests
+        //retrieve the list of friend requests
+
+    POST    /friend/requests
+        //send a friend request (body: receiver_id). If the receiver already sent one to you, deny and point to inbox instead
+
+    POST    /friend/requests/:id/accept
+        //accept the friend request
+
+    DELETE  /friend/requests/:id
+        //reject the friend request
+
+Example project folder structure:
 
 message-app/
-├── src/
-│   ├── config/
-│   │   └── config.ts           // Load and type environment variables
-│   ├── controllers/
-│   │   └── Controller.ts       // CRUD logic
-│   ├── middlewares/
-│   │   └── errorHandler.ts     // Global typed error handling middleware
-│   ├── models/
-│   │   └── item.ts             // Define item type and in-memory storage (Not needed in this project, since it already have prisma)
-│   ├── routes/
-│   │   └── Routes.ts           // Express routes
-│   ├── app.ts                  // Express app configuration (middlewares, routes)
-│   └── server.ts               // Start the server
-├── .env                        // Environment variables
-├── package.json                // Project scripts, dependencies, etc.
-├── tsconfig.json               // TypeScript configuration.
-└── eslintrc.js                 // ESLint configuration
+├── frontend/                   // React frontend workspace (currently empty)
+├── server/
+│   ├── package.json            // Server dependencies and scripts
+│   ├── tsconfig.json           // Server TypeScript configuration
+│   ├── prisma.config.ts        // Prisma client configuration
+│   ├── .env                    // Server environment variables
+│   ├── prisma/
+│   │   ├── schema.prisma
+│   │   └── migrations
+│   │       
+│   ├── src/
+│   │   ├── app.ts              // Express app configuration (middlewares, routes)
+│   │   ├── server.ts           // Start the server
+│   │   ├── config/
+│   │   │   └── config.ts       // Load and type environment variables
+│   │   ├── controllers/
+│   │   │   └── AccountControllers.ts
+│   │   ├── lib/
+│   │   │   ├── passwordHash.ts
+│   │   │   └── prisma.ts
+│   │   ├── routes/
+│   │   │   ├── AccountRoutes.ts
+│   │   │   └── ChatRoomRoutes.ts
+│   │   └── generated/          // Prisma generated client and models
+│   │       └── prisma/
+│   └── test/
+│       ├── account-signup.http
+│       └── AccountControllers.test.ts
 
-Example cors details for sending cookies:
+Cors config details to keep in mind when sending cookies:
 
 // Express (origin: http://localhost:3000)
 app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
