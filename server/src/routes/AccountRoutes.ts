@@ -1,11 +1,11 @@
 import Router from 'express';
-import {createAccount} from '../controllers/AccountControllers';
+import {createAccount, login, logout, me} from '../controllers/AccountControllers';
 
 const accountRouter = Router();
 
 accountRouter.post('/signup', createAccount);
-// accountRouter.post('/login', (req, res) => {});
-// accountRouter.post('/logout', (req, res) => {});
-// accountRouter.get('/me', (req, res) => {});
+accountRouter.post('/login', login);
+accountRouter.post('/logout', logout);
+accountRouter.get('/me', me);
 
 export default accountRouter;

@@ -4,7 +4,8 @@ import { hashPassword } from '../lib/passwordHash';
 import { validateAccountBody, checkDuplication } from './SignUpFormValidators';
 import type { AccountBody } from './SignUpFormValidators';
 import { validateLogin } from './LoginValidator';
-import { createSession } from '../lib/session';
+import { createSession, getSessionUser, clearSessionCookie } from '../lib/session';
+import config from '../config/config';
 
 export async function createAccount(req: Request, res: Response) {
     try {
@@ -48,24 +49,50 @@ export async function createAccount(req: Request, res: Response) {
 
 export async function login(req: Request, res: Response) {
   try {
-  const { email, password } = req.body;
- 
-  if (typeof email !== 'string' || typeof password !== 'string') {
-    return res.status(400).json({ error: 'Email and password are required' });
-  }
- 
-  const user = await validateLogin(email, password);
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid email or password' });
-  }
- 
-  await createSession(res, user.id);
- 
-  res.status(200).json({
-    user: { id: user.id, name: user.name, email: user.email, tel: user.tel },
-  });
+    const { email, password } = req.body;
+  
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+  
+    const user = await validateLogin(email, password);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+  
+    await createSession(res, user.id);
+  
+    res.status(200).json({
+      user: { id: user.id, name: user.name, email: user.email, tel: user.tel },
+    });
   } catch (error) {
     console.error('Error during login:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function me(req: Request, res: Response) {
+  try {
+    const user = await getSessionUser(req, res);
+    res.status(200).json({ user });
+  } catch (error) {
+    console.error('Error fetching user session:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function logout(req: Request, res: Response) {
+  try {
+    const sessionId = req.cookies?.[config.SESSION_COOKIE];
+  
+    if (sessionId) {
+      await prisma.session.deleteMany({ where: { id: sessionId } });
+    }
+  
+    clearSessionCookie(res);
+    res.status(200).json({ user: null });
+  } catch (error) {
+    console.error('Error during logout:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
