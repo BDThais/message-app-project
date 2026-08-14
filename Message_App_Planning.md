@@ -110,18 +110,20 @@ message-app/
 │   ├── .env                    // Server environment variables
 │   ├── prisma/
 │   │   ├── schema.prisma
-│   │   └── migrations
-│   │       
+│   │   └── migrations/
 │   ├── src/
 │   │   ├── app.ts              // Express app configuration (middlewares, routes)
 │   │   ├── server.ts           // Start the server
 │   │   ├── config/
 │   │   │   └── config.ts       // Load and type environment variables
 │   │   ├── controllers/
-│   │   │   └── AccountControllers.ts
+│   │   │   ├── AccountControllers.ts
+│   │   │   ├── LoginValidator.ts
+│   │   │   └── SignUpFormValidators.ts
 │   │   ├── lib/
 │   │   │   ├── passwordHash.ts
-│   │   │   └── prisma.ts
+│   │   │   ├── prisma.ts
+│   │   │   └── session.ts
 │   │   ├── routes/
 │   │   │   ├── AccountRoutes.ts
 │   │   │   └── ChatRoomRoutes.ts
