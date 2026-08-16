@@ -12,7 +12,7 @@ export async function validateLogin(email: string, password: string) {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) return null;
 
-  const passwordMatches = await verifyPassword(password, user.passwordHash);
+  const passwordMatches = await verifyPassword(user.passwordHash, password);
   if (!passwordMatches) return null;
 
   return user;
