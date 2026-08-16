@@ -58,8 +58,7 @@ export async function getSessionUser(req: Request, res: Response) {
 /**
  * Tells the browser to drop the session cookie.
  * Used by POST /account/logout. The logout route still needs to delete the
- * session row itself (a one-liner with prisma.session.delete) — kept out of
- * this function since you asked to scope this to just the 3 auth functions.
+ * session row itself (a one-liner with prisma.session.delete).
  */
 export function clearSessionCookie(res: Response): void {
   res.clearCookie(config.SESSION_COOKIE, {
