@@ -1,0 +1,91 @@
+# Account session tests: /account/login, /account/me, /account/logout
+# Run with the REST Client extension, top to bottom, dev server + dev db already running.
+#
+# Uses REST Client's cookie jar (rest-client.rememberCookiesForSubsequentRequests, default:
+# true) to carry the session cookie from login into the later /me and /logout requests
+# automatically, same as a browser would - no manual cookie copying needed.
+#
+# Re-running the whole file: request 2 (signup) will fail with 409 "already exists" since
+# the account is already in the db. Start from request 3 on repeat runs, or change the test
+# email below and clear REST Client's cookies (Command Palette > "Rest Client: Clear Cookies")
+# for a fully clean slate.
+
+@baseUrl = http://localhost:3000
+@testName = testuser1
+@testEmail = testuser1@example.com
+# isValidPhoneNumber() is called with no default country, so this needs full E.164 (leading + and country code)
+@testTel = +84901234567
+@testPassword = TestPass123!
+
+### 1. GET /account/me - no session yet
+# Expect: 200 { "user": null }
+GET {{baseUrl}}/account/me
+
+### 2. POST /account/signup - create the account these tests use
+# Expect: 201
+POST {{baseUrl}}/account/signup
+Content-Type: application/json
+
+{
+    "name": "{{testName}}",
+    "email": "{{testEmail}}",
+    "tel": "{{testTel}}",
+    "password": "{{testPassword}}"
+}
+
+### 3. POST /account/login - wrong password
+# Expect: 401 { "error": "Invalid email or password" }
+POST {{baseUrl}}/account/login
+Content-Type: application/json
+
+{
+    "email": "{{testEmail}}",
+    "password": "wrongpassword"
+}
+
+### 4. POST /account/login - email that was never signed up
+# Expect: 401 { "error": "Invalid email or password" } - same message as #3, doesn't leak
+# whether the account exists
+POST {{baseUrl}}/account/login
+Content-Type: application/json
+
+{
+    "email": "nobody@example.com",
+    "password": "{{testPassword}}"
+}
+
+### 5. POST /account/login - malformed body (password not a string)
+# Expect: 400 { "error": "Email and password are required" }
+POST {{baseUrl}}/account/login
+Content-Type: application/json
+
+{
+    "email": "{{testEmail}}",
+    "password": 12345
+}
+
+### 6. POST /account/login - correct credentials
+# Expect: 200 + user object in the body, Set-Cookie header with the session id
+POST {{baseUrl}}/account/login
+Content-Type: application/json
+
+{
+    "email": "{{testEmail}}",
+    "password": "{{testPassword}}"
+}
+
+### 7. GET /account/me - now with a session cookie
+# Expect: 200 { "user": {...} } with the logged-in account's data
+GET {{baseUrl}}/account/me
+
+### 8. POST /account/logout - end the session
+# Expect: 200 { "user": null }, Set-Cookie clearing the cookie, session row removed from the db
+POST {{baseUrl}}/account/logout
+
+### 9. GET /account/me - after logout
+# Expect: 200 { "user": null } again - cookie is cleared and/or session no longer exists
+GET {{baseUrl}}/account/me
+
+### 10. POST /account/logout - calling logout again with no active session
+# Expect: 200 { "user": null }, no 500 - should be a no-op when there's nothing to clear
+POST {{baseUrl}}/account/logout

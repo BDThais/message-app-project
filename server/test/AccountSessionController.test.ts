@@ -11,11 +11,6 @@ const loginRoute = '/account/login';
 const meRoute = '/account/me';
 const logoutRoute = '/account/logout';
 
-// login/me/logout are plain (req, res) handlers, so we don't need the real
-// app.ts to exercise them through supertest - mounting them on a bare Express
-// app is enough, as long as we replicate the middleware they depend on
-// (json body parsing, cookie-parser for req.cookies).
-
 // Everything these controllers talk to gets mocked: LoginValidator and the
 // session helpers are collaborators with their own tests, and prisma is a
 // real database client we don't want to hit here.
