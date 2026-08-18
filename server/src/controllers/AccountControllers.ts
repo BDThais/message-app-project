@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma';
-import type { Request, Response } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { hashPassword } from '../lib/passwordHash';
 import { validateAccountBody, checkDuplication } from './SignUpFormValidators';
 import type { AccountBody } from './SignUpFormValidators';
@@ -7,7 +7,7 @@ import { validateLogin } from './LoginValidator';
 import { createSession, getSessionUser, clearSessionCookie } from '../lib/session';
 import config from '../config/config';
 
-export async function createAccount(req: Request, res: Response) {
+export async function createAccount(req: Request, res: Response, next: NextFunction) {
     try {
         const { name, email, tel, password } = req.body as AccountBody;
             
@@ -43,11 +43,11 @@ export async function createAccount(req: Request, res: Response) {
         }
 
         console.error('Error creating account:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        next(error);
     }
 }
 
-export async function login(req: Request, res: Response) {
+export async function login(req: Request, res: Response, next: NextFunction) {
   try {
     const { email, password } = req.body;
   
@@ -67,21 +67,21 @@ export async function login(req: Request, res: Response) {
     });
   } catch (error) {
     console.error('Error during login:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    next(error);
   }
 }
 
-export async function me(req: Request, res: Response) {
+export async function me(req: Request, res: Response, next: NextFunction) {
   try {
     const user = await getSessionUser(req, res);
     res.status(200).json({ user });
   } catch (error) {
     console.error('Error fetching user session:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    next(error);
   }
 }
 
-export async function logout(req: Request, res: Response) {
+export async function logout(req: Request, res: Response, next: NextFunction) {
   try {
     const sessionId = req.cookies?.[config.SESSION_COOKIE];
   
@@ -93,6 +93,6 @@ export async function logout(req: Request, res: Response) {
     res.status(200).json({ user: null });
   } catch (error) {
     console.error('Error during logout:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    next(error);
   }
 }
