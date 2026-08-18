@@ -1,6 +1,9 @@
 import Router from 'express';
+import { requireAuth } from '../middlewares/AuthMiddleware';
 
 const chatRoomRouter = Router();
+
+chatRoomRouter.use(requireAuth);
 
 chatRoomRouter.get('/', (req, res) => {});
 chatRoomRouter.post('/', (req, res) => {});
