@@ -30,6 +30,7 @@
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.6.2",
     "libphonenumber-js": "^1.13.10",
     "pg": "^8.22.0",
     "validator": "^13.15.35"
@@ -39,5 +40,8 @@
     "argon2@0.45.1": true,
     "@prisma/engines@7.9.1": true,
     "prisma@7.9.1": true
+  },
+  "overrides": {
+  "deepmerge-ts": "^8.0.0"
   }
 }
