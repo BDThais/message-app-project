@@ -76,6 +76,16 @@ FriendListMember:
 
 Note: the mutual friendship model stores two rows per friendship pair, one for each user, as described in the project requirements.
 
+## Permission model
+Action	                    admin  member
+Send / read messages	     ✅     ✅
+Update room name/avatar	     ✅	   ❌
+Delete room	                 ✅	   ❌
+Add members	                 ✅	   ❌
+Remove other members	     ✅	   ❌
+Leave the room	             ✅	   ✅
+Promote/demote a member	     ✅	   ❌
+
 ## API Status
 ### Auth endpoints (implemented)
 POST /account/signup
@@ -99,12 +109,45 @@ POST /account/logout
 - Returns the user as null
 
 ### Planned future endpoints
-GET /chatrooms
-- retrieve a list of all the chat rooms that have this user as its member
-
 POST /chatrooms
 - create a new chat room
 - body: type, member_ids, name?
+
+GET /chatrooms
+- retrieve a list of all the chat rooms that have this user as its member
+
+GET /chatrooms/:chatid
+- retrieve data about a specific room
+
+PATCH /chatrooms/:chatid
+- update the room's name and/or avatar_url
+- only valid for type: group rooms
+- requires the requester to hold admin in this room
+- body: { name?, avatar_url? }
+
+DELETE /chatrooms/:chatid
+- delete the room; cascades to its messages and memberships automatically
+- only valid for type: group rooms
+- requires admin
+
+POST /chatrooms/:chatid/members
+- add one existing user to the room
+- only valid for type: group rooms
+- requires admin
+- body: { member_id }
+- new member are inserted with role: member
+
+DELETE /chatrooms/:chatid/members/:userid
+- remove a member from the room
+- a user can always remove themself (leave); removing someone else requires admin
+- only valid for type: group rooms
+- reject with 409 if the target is the room's only remaining admin and other members are still present, otherwise the room becomes unmanageable
+- if there are less than 1 member in the room after a removal, delete the chat room
+
+PATCH /chatrooms/:chatid/members/:userid
+- change a member's role
+- requires admin
+- body: { role: 'admin' | 'member' }
 
 GET /chatrooms/:chatid/messages?before=<message_id>&limit=50
 - retrieve all messages of that chat room
