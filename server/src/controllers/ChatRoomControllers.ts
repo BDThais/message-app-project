@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { Prisma, ChatRoomType, ChatMemberRole } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
-import { addChatRoomMembers } from '../lib/ChatMembers';
+import { addChatRoomMembers } from '../lib/chatMembers';
 import { validateCreateChatRoomInput } from './ChatRoomValidators';
 
 const memberInclude = {

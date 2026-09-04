@@ -36,11 +36,11 @@ Note: In the database, the mutual friendship model stores two rows per friendshi
 
 ## Permission model
 Action	                    admin  member
-Send / read messages	     ✅     ✅
+Send / read messages	       ✅     ✅
 Update room name/avatar	     ✅	   ❌
 Delete room	                 ✅	   ❌
 Add members	                 ✅	   ❌
-Remove other members	     ✅	   ❌
+Remove other members	       ✅	   ❌
 Leave the room	             ✅	   ✅
 Promote/demote a member	     ✅	   ❌
 
@@ -77,7 +77,7 @@ req.user shape = {
 
 A direct room has no name/avatar to edit, it's members also can't add or remove the other member from the room, all of it's members are admins.
 
-POST /chatrooms
+POST /chatrooms (implemented | untested)
 - create a new chat room
 - body: type, member_ids, name?, avatar_url?
 
