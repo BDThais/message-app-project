@@ -32,49 +32,7 @@ Not implemented yet:
 
 These unimplemented features remain part of the planned roadmap and should be treated as future work rather than current API behavior.
 
-## Target Database Schema
-The database design reflects the planned messaging app architecture.
-
-User:
-- id PK
-- name
-- email
-- password_hash
-- tel
-
-Session:
-- id PK
-- userId FKEY User(id)
-- expires_at
-
-ChatRoom:
-- id PK
-- name
-- type CHECK ('direct' or 'group')
-
-ChatMember:
-- member_id PK FKEY User(id)
-- chat_id PK FKEY ChatRoom(id)
-- last_read_message_id FKEY Message(id) NULLABLE
-
-Message:
-- id PK
-- chat_id FKEY ChatRoom(id)
-- sender FKEY User(id)
-- created_at
-- content
-
-PendingFriendRequest:
-- id PK
-- sender_id FKEY User(id)
-- receiver_id FKEY User(id)
-- UNIQUE (sender_id, receiver_id)
-
-FriendListMember:
-- id PK FKEY User(id)
-- friendId PK FKEY User(id)
-
-Note: the mutual friendship model stores two rows per friendship pair, one for each user, as described in the project requirements.
+Note: In the database, the mutual friendship model stores two rows per friendship pair, one for each user, as described in the project requirements.
 
 ## Permission model
 Action	                    admin  member
@@ -108,10 +66,20 @@ POST /account/logout
 - Clears the session cookie
 - Returns the user as null
 
-### Planned future endpoints
+### Planned future endpoints 
+All of these endpoints are routed after auth middleware so they can access user's data with req.user.
+req.user shape = {
+  id: number;
+  name: string;
+  email: string;
+  tel: string;
+}
+
+A direct room has no name/avatar to edit, it's members also can't add or remove the other member from the room, all of it's members are admins.
+
 POST /chatrooms
 - create a new chat room
-- body: type, member_ids, name?
+- body: type, member_ids, name?, avatar_url?
 
 GET /chatrooms
 - retrieve a list of all the chat rooms that have this user as its member
@@ -131,16 +99,16 @@ DELETE /chatrooms/:chatid
 - requires admin
 
 POST /chatrooms/:chatid/members
-- add one existing user to the room
+- add one or many existing user to the room
 - only valid for type: group rooms
 - requires admin
-- body: { member_id }
-- new member are inserted with role: member
+- body: { member_ids }
+- new members are inserted with role: member
 
 DELETE /chatrooms/:chatid/members/:userid
 - remove a member from the room
 - a user can always remove themself (leave); removing someone else requires admin
-- only valid for type: group rooms
+- if the chat room is of type "direct", don't let them remove any member other than themself even if they're admin
 - reject with 409 if the target is the room's only remaining admin and other members are still present, otherwise the room becomes unmanageable
 - if there are less than 1 member in the room after a removal, delete the chat room
 
