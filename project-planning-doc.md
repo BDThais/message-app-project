@@ -1,7 +1,8 @@
 # Message App Project Planning & Progress
 
 ## Overview
-This project is a real-time messaging application built with PostgreSQL, Prisma, TypeScript, Express.js, and a React frontend. The backend is currently in a working MVP state for account authentication and session management.
+This project is a real-time messaging application built with PostgreSQL, Prisma, TypeScript, Express.js, and a React frontend. 
+The backend is currently in a working MVP state for account authentication and session management.
 
 ## Tech Stack
 - PostgreSQL
@@ -83,6 +84,11 @@ POST /chatrooms (implemented | untested)
 
 GET /chatrooms
 - retrieve a list of all the chat rooms that have this user as its member
+- make separate functions for retrieving direct and group chat room, the functions return all direct/group chat rooms that has req.user 
+  as member (with datas of the last message in that room like it's content, time created) when it's not supplied with a specific chatid. 
+  The function responsible for retrieving direct chat room return the other user'name as the room's name and use their avatar url (if it's not null) 
+  as the room's avatar url
+- the success response return the chat rooms sorted by how recent is the last message, the rooms that doesn't have last message is sorted by time created
 
 GET /chatrooms/:chatid
 - retrieve data about a specific room
@@ -211,4 +217,5 @@ fetch('http://localhost:3000/account/me', { credentials: 'include' });
 6. Add deployment configuration and production hardening
 
 ## Notes
-This document reflects the current state of the repository. The auth module is complete and working; the rest of the messaging feature set is a planned extension of the app and should be implemented incrementally.
+This document reflects the current state of the repository. The auth module is complete and working; 
+the rest of the messaging feature set is a planned extension of the app and should be implemented incrementally.

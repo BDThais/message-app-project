@@ -52,6 +52,7 @@ model ChatRoom {
   name String?
   type ChatRoomType
   avatarUrl String?      @map("avatar_url")
+  createdAt DateTime     @default(now()) @map("created_at")
 
   members  ChatMember[]
   messages Message[]
