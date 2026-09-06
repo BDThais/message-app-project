@@ -1,4 +1,4 @@
-import type { Request, Response } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { Prisma, ChatRoomType, ChatMemberRole } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 import { addChatRoomMembers } from '../lib/chatMembers';
@@ -107,5 +107,122 @@ export async function createChatRoom(req: Request, res: Response) {
         .json({ error: 'one or more member_ids do not refer to an existing user' });
     }
     throw err;
+  }
+}
+
+
+// Shape returned to the client for every chat room, regardless of type.
+interface ChatRoomSummary {
+  id: number;
+  type: 'direct' | 'group';
+  name: string | null;
+  avatarUrl: string | null;
+  createdAt: Date;
+  lastMessage: { content: string; createdAt: Date } | null;
+}
+ 
+/**
+ * Fetch direct chat rooms for a user.
+ * Reusable by GET /chatrooms (no chatId) and later by GET /chatrooms/:chatid
+ * (pass chatId to scope the query down to a single room).
+ * name/avatarUrl come from the *other* member, since direct rooms have
+ * no name/avatar of their own.
+ */
+async function getDirectChatRoomsForUser(
+  userId: number,
+  chatId?: number
+): Promise<ChatRoomSummary[]> {
+  const rooms = await prisma.chatRoom.findMany({
+    where: {
+      type: 'direct',
+      ...(chatId !== undefined ? { id: chatId } : {}),
+      members: { some: { memberId: userId } },
+    },
+    include: {
+      members: {
+        where: { memberId: { not: userId } },
+        include: { member: { select: { name: true, avatarUrl: true } } },
+      },
+      messages: {
+        orderBy: { id: 'desc' },
+        take: 1,
+        select: { content: true, createdAt: true },
+      },
+    },
+  });
+ 
+  return rooms.map((room) => {
+    // otherMember can be missing if they've since left the room (a direct
+    // room isn't deleted until it has zero members left, so a lone
+    // remaining member can still list it).
+    const otherMember = room.members[0]?.member;
+    const lastMessage = room.messages[0] ?? null;
+ 
+    return {
+      id: room.id,
+      type: 'direct',
+      name: otherMember?.name ?? null,
+      avatarUrl: otherMember?.avatarUrl ?? null,
+      createdAt: room.createdAt,
+      lastMessage,
+    };
+  });
+}
+ 
+/**
+ * Fetch group chat rooms for a user. Same reuse intent as the direct
+ * variant above. Group rooms use their own name/avatarUrl fields.
+ */
+async function getGroupChatRoomsForUser(
+  userId: number,
+  chatId?: number
+): Promise<ChatRoomSummary[]> {
+  const rooms = await prisma.chatRoom.findMany({
+    where: {
+      type: 'group',
+      ...(chatId !== undefined ? { id: chatId } : {}),
+      members: { some: { memberId: userId } },
+    },
+    include: {
+      messages: {
+        orderBy: { id: 'desc' },
+        take: 1,
+        select: { content: true, createdAt: true },
+      },
+    },
+  });
+ 
+  return rooms.map((room) => ({
+    id: room.id,
+    type: 'group',
+    name: room.name,
+    avatarUrl: room.avatarUrl,
+    createdAt: room.createdAt,
+    lastMessage: room.messages[0] ?? null,
+  }));
+}
+ 
+// Most recent activity first: last message time if there is one,
+// otherwise the room's creation time.
+function activityTimestamp(room: ChatRoomSummary): number {
+  return (room.lastMessage?.createdAt ?? room.createdAt).getTime();
+}
+ 
+export async function getChatRooms(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id;
+ 
+    const [directRooms, groupRooms] = await Promise.all([
+      getDirectChatRoomsForUser(userId),
+      getGroupChatRoomsForUser(userId),
+    ]);
+ 
+    const chatRooms = [...directRooms, ...groupRooms].sort(
+      (a, b) => activityTimestamp(b) - activityTimestamp(a)
+    );
+ 
+    res.json({ chatRooms });
+  } catch (err) {
+    next(err);
   }
 }
