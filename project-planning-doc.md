@@ -75,16 +75,16 @@ req.user shape = {
   email: string;
   tel: string;
 }
-
 A direct room has no name/avatar to edit, it's members also can't add or remove the other member from the room, all of it's members are admins.
+Endpoints that required authorization to access have to be routed after the auth middlewares in /middlewares
 
 POST /chatrooms (implemented | untested)
 - create a new chat room
 - body: type, member_ids, name?, avatar_url?
 
-GET /chatrooms
+GET /chatrooms (implemented | untested)
 - retrieve a list of all the chat rooms that have this user as its member
-- make separate functions for retrieving direct and group chat room, the functions return all direct/group chat rooms that has req.user 
+- have separate functions for retrieving direct and group chat room, the functions return all direct/group chat rooms that has req.user 
   as member (with datas of the last message in that room like it's content, time created) when it's not supplied with a specific chatid. 
   The function responsible for retrieving direct chat room return the other user'name as the room's name and use their avatar url (if it's not null) 
   as the room's avatar url

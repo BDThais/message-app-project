@@ -226,3 +226,23 @@ export async function getChatRooms(req: Request, res: Response, next: NextFuncti
     next(err);
   }
 }
+
+// Existence + membership is already guaranteed by loadChatMembership
+// (mounted via router.param('chatid', ...)) by the time this runs, so
+// there's no 404 branch here and only the relevant one of the two
+// fetchers below gets called.
+export async function getChatRoomById(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id;
+    const { chatId, roomType, role } = req.chatMembership!;
+ 
+    const [room] =
+      roomType === 'direct'
+        ? await getDirectChatRoomsForUser(userId, chatId)
+        : await getGroupChatRoomsForUser(userId, chatId);
+ 
+    res.json({ chatRoom: { ...room, role } });
+  } catch (err) {
+    next(err);
+  }
+}
