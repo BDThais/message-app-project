@@ -76,7 +76,7 @@ req.user shape = {
   tel: string;
 }
 A direct room has no name/avatar to edit, it's members also can't add or remove the other member from the room, all of it's members are admins.
-Endpoints that required authorization to access have to be routed after the auth middlewares in /middlewares
+Endpoints that required authorization to access have to be routed after the auth middlewares
 
 POST /chatrooms (implemented | untested)
 - create a new chat room
@@ -90,7 +90,7 @@ GET /chatrooms (implemented | untested)
   as the room's avatar url
 - the success response return the chat rooms sorted by how recent is the last message, the rooms that doesn't have last message is sorted by time created
 
-GET /chatrooms/:chatid
+GET /chatrooms/:chatid (implemented | untested)
 - retrieve data about a specific room
 
 PATCH /chatrooms/:chatid
@@ -158,40 +158,48 @@ DELETE /friend/requests/:id
 - delete the request from the database
 
 ## Project Structure
-The repository is organized so that generated Prisma artifacts are not treated as source code and are excluded from the documented structure.
+The repository currently contains an empty frontend workspace and a TypeScript/Express server with Prisma persistence, authentication, and initial chat-room support.
+Generated files created by tools such as Prisma are omitted from this structure, while source-controlled Prisma schema remain documented.
 
 message-app/
-├── frontend/                   // React frontend workspace (currently empty / planned)
+├── frontend/                   // Empty frontend workspace
 ├── server/
-│   ├── package.json            // Server dependencies and scripts
-│   ├── tsconfig.json           // TypeScript configuration
-│   ├── prisma.config.ts        // Prisma client configuration
-│   ├── .env                    // Local environment variables
+│   ├── package.json
+│   ├── prisma.config.ts
+│   ├── tsconfig.json
 │   ├── prisma/
-│   │   └── schema.prisma       // Prisma schema definition
+│   │   ├── schema.prisma
+│   │   └── migrations/
 │   ├── src/
-│   │   ├── app.ts              // Express app setup and route registration
-│   │   ├── server.ts           // App bootstrap and server startup
+│   │   ├── app.ts
+│   │   ├── server.ts
 │   │   ├── config/
-│   │   │   └── config.ts       // Env configuration loader
+│   │   │   └── config.ts
 │   │   ├── controllers/
 │   │   │   ├── AccountControllers.ts
+│   │   │   ├── ChatRoomControllers.ts
+│   │   │   ├── ChatRoomValidators.ts
 │   │   │   ├── LoginValidator.ts
 │   │   │   └── SignUpFormValidators.ts
 │   │   ├── lib/
 │   │   │   ├── passwordHash.ts
 │   │   │   ├── prisma.ts
 │   │   │   └── session.ts
+│   │   ├── middlewares/
+│   │   │   ├── ChatRoomAuth.ts
+│   │   │   ├── ErrorHandler.ts
+│   │   │   ├── RateLimiter.ts
+│   │   │   └── UserSessionAuth.ts
 │   │   ├── routes/
 │   │   │   ├── AccountRoutes.ts
 │   │   │   └── ChatRoomRoutes.ts
-│   │   └── generated/         // Reserved for generated Prisma artifacts, not tracked as source code
+│   │   └── services/
+│   │       └── ChatRoomServices.ts
 │   └── test/
 │       ├── account-login-me-logout.http
 │       ├── account-signup.http
 │       ├── AccountSessionController.test.ts
 │       └── AccountSignupController.test.ts
-├── .gitignore
 ├── project-planning-doc.md
 └── README.md
 

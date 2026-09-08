@@ -1,5 +1,5 @@
 import Router from 'express';
-import { requireAuth } from '../middlewares/AuthMiddleware';
+import { requireAuth } from '../middlewares/UserSessionAuth';
 import { createChatRoom, getChatRooms, getChatRoomById } from '../controllers/ChatRoomControllers';
 import { loadChatMembership } from '../middlewares/ChatRoomAuth';
 
@@ -21,6 +21,6 @@ chatRoomRouter.get('/:chatid', getChatRoomById);
 // chatRoomRouter.get('/:chatid/messages', getChatRoomMessages);   // membership alone is enough
 // chatRoomRouter.post('/:chatid/messages', sendChatRoomMessage);  // membership alone is enough
 
-// chatRoomRouter.delete('/:chatid/members/:userid', removeChatRoomMember); // no blanket guard - see below
+// chatRoomRouter.delete('/:chatid/members/:userid', removeChatRoomMember); // no blanket guard
 
 export default chatRoomRouter;

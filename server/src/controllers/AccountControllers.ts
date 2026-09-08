@@ -7,7 +7,7 @@ import { validateLogin } from './LoginValidator';
 import { createSession, getSessionUser, clearSessionCookie } from '../lib/session';
 import config from '../config/config';
 
-export async function createAccount(req: Request, res: Response, next: NextFunction) {
+export async function signup(req: Request, res: Response, next: NextFunction) {
     try {
         const { name, email, tel, password } = req.body as AccountBody;
             
