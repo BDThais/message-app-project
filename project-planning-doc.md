@@ -89,9 +89,34 @@ GET /chatrooms (implemented | untested)
   The function responsible for retrieving direct chat room return the other user'name as the room's name and use their avatar url (if it's not null) 
   as the room's avatar url
 - the success response return the chat rooms sorted by how recent is the last message, the rooms that doesn't have last message is sorted by time created
+- return body shape:
+  {
+    "chatRooms": [
+      {
+        id: number;
+        type: 'direct' | 'group';
+        name: string | null;
+        avatarUrl: string | null;
+        createdAt: Date;
+        lastMessage: { content: string; createdAt: Date } | null;
+      }
+    ]
+  }
 
 GET /chatrooms/:chatid (implemented | untested)
 - retrieve data about a specific room
+- return body shape:
+  {
+    "chatRoom": {
+      id: number;
+      type: 'direct' | 'group';
+      name: string | null;
+      avatarUrl: string | null;
+      createdAt: Date;
+      lastMessage: { content: string; createdAt: Date } | null;
+      role: "admin" | "member";
+    }
+  }
 
 PATCH /chatrooms/:chatid
 - update the room's name and/or avatar_url
