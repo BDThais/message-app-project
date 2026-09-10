@@ -77,3 +77,47 @@ export function validateCreateChatRoomInput(
         ...(avatar_url !== undefined ? { avatarUrl: avatar_url } : {}),
     };
 }
+
+
+type UpdateChatRoomValidation =
+  | { valid: true; data: { name?: string; avatarUrl?: string | null } }
+  | { valid: false; message: string };
+
+export function validateUpdateChatRoomBody(body: any): UpdateChatRoomValidation {
+  if (body.name === undefined && body.avatar_url === undefined) {
+    return { valid: false, message: "At least either Name or Avatar must be provided" };
+  }
+
+  const data: { name?: string; avatarUrl?: string | null } = {};
+
+  if (body.name !== undefined) {
+    if (typeof body.name !== 'string' || body.name.trim().length === 0) {
+      return { valid: false, message: "'name' must be a non-empty string" };
+    }
+    if (body.name.trim().length > 100) {
+      return { valid: false, message: "'name' must be 100 characters or fewer" };
+    }
+    data.name = body.name.trim();
+  }
+
+  if (body.avatar_url !== undefined) {
+    if (body.avatar_url !== null && typeof body.avatar_url !== 'string') {
+      return { valid: false, message: "'avatar_url' must be a string or null" };
+    }
+    if (typeof body.avatar_url === 'string' && !isValidHttpUrl(body.avatar_url)) {
+      return { valid: false, message: "'avatar_url' must be a valid URL" };
+    }
+    data.avatarUrl = body.avatar_url;
+  }
+
+  return { valid: true, data };
+}
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}

@@ -174,3 +174,13 @@ export async function getGroupChatRoomsForUser(
 export function activityTimestamp(room: ChatRoomSummary): number {
   return (room.lastMessage?.createdAt ?? room.createdAt).getTime();
 }
+
+export async function updateChatRoomById(
+  chatId: number,
+  data: { name?: string; avatarUrl?: string | null }
+) {
+  return prisma.chatRoom.update({
+    where: { id: chatId },
+    data,
+  });
+}

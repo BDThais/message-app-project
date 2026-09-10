@@ -1,7 +1,8 @@
 import Router from 'express';
 import { requireAuth } from '../middlewares/UserSessionAuth';
-import { createChatRoom, getChatRooms, getChatRoomById } from '../controllers/ChatRoomControllers';
+import { createChatRoom, getChatRooms, getChatRoomById, updateChatRoom } from '../controllers/ChatRoomControllers';
 import { loadChatMembership } from '../middlewares/ChatRoomAuth';
+import { requireGroupRoom, requireChatAdmin } from '../middlewares/ChatRoomAuth';
 
 const chatRoomRouter = Router();
 
@@ -13,7 +14,7 @@ chatRoomRouter.post('/', createChatRoom);
 chatRoomRouter.get('/', getChatRooms);
 chatRoomRouter.get('/:chatid', getChatRoomById);
 
-// chatRoomRouter.patch('/:chatid', requireGroupRoom, requireChatAdmin, updateChatRoom);
+chatRoomRouter.patch('/:chatid', requireGroupRoom, requireChatAdmin, updateChatRoom);
 // chatRoomRouter.delete('/:chatid', requireGroupRoom, requireChatAdmin, deleteChatRoom);
 // chatRoomRouter.post('/:chatid/members', requireGroupRoom, requireChatAdmin, addChatRoomMembers);
 // chatRoomRouter.patch('/:chatid/members/:userid', requireChatAdmin, changeMemberRole);

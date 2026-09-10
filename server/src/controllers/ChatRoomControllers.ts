@@ -2,8 +2,8 @@ import type { Request, Response, NextFunction } from 'express';
 import { Prisma } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 
-import { validateCreateChatRoomInput } from './ChatRoomValidators';
-import { createDirectChatRoom, createGroupChatRoom } from '../services/ChatRoomServices';
+import { validateCreateChatRoomInput, validateUpdateChatRoomBody } from './ChatRoomValidators';
+import { createDirectChatRoom, createGroupChatRoom, updateChatRoomById } from '../services/ChatRoomServices';
 import { getDirectChatRoomsForUser, getGroupChatRoomsForUser, activityTimestamp } from '../services/ChatRoomServices';
 
 export async function createChatRoom(req: Request, res: Response) {
@@ -71,6 +71,29 @@ export async function getChatRoomById(req: Request, res: Response, next: NextFun
         : await getGroupChatRoomsForUser(userId, chatId);
  
     res.json({ chatRoom: { ...room, role } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateChatRoom(req: Request, res: Response, next: NextFunction) {
+  const validation = validateUpdateChatRoomBody(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ message: validation.message });
+  }
+
+  try {
+    const chatRoom = await updateChatRoomById(req.chatMembership!.chatId, validation.data);
+
+    res.status(200).json({
+      chatRoom: {
+        id: chatRoom.id,
+        type: chatRoom.type,
+        name: chatRoom.name,
+        avatarUrl: chatRoom.avatarUrl,
+        createdAt: chatRoom.createdAt,
+      },
+    });
   } catch (err) {
     next(err);
   }

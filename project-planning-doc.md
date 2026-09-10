@@ -80,7 +80,8 @@ Endpoints that required authorization to access have to be routed after the auth
 
 POST /chatrooms (implemented | untested)
 - create a new chat room
-- body: type, member_ids, name?, avatar_url?
+- incoming body: type, member_ids, name?, avatar_url?
+- use empty array for member_ids if there are no member to add
 
 GET /chatrooms (implemented | untested)
 - retrieve a list of all the chat rooms that have this user as its member
@@ -89,7 +90,7 @@ GET /chatrooms (implemented | untested)
   The function responsible for retrieving direct chat room return the other user'name as the room's name and use their avatar url (if it's not null) 
   as the room's avatar url
 - the success response return the chat rooms sorted by how recent is the last message, the rooms that doesn't have last message is sorted by time created
-- return body shape:
+- return body:
   {
     "chatRooms": [
       {
@@ -105,7 +106,7 @@ GET /chatrooms (implemented | untested)
 
 GET /chatrooms/:chatid (implemented | untested)
 - retrieve data about a specific room
-- return body shape:
+- return body:
   {
     "chatRoom": {
       id: number;
@@ -122,7 +123,17 @@ PATCH /chatrooms/:chatid
 - update the room's name and/or avatar_url
 - only valid for type: group rooms
 - requires the requester to hold admin in this room
-- body: { name?, avatar_url? }
+- incoming body: { name?, avatar_url? }
+- return body: 
+  {
+    "chatRoom": {
+      id: number;
+      type: 'direct' | 'group';
+      name: string | null;
+      avatarUrl: string | null;
+      createdAt: Date;
+    }
+  }
 
 DELETE /chatrooms/:chatid
 - delete the room; cascades to its messages and memberships automatically
@@ -137,11 +148,11 @@ POST /chatrooms/:chatid/members
 - new members are inserted with role: member
 
 DELETE /chatrooms/:chatid/members/:userid
-- remove a member from the room
+- remove a member from the room (delete their ChatMember record)
 - a user can always remove themself (leave); removing someone else requires admin
 - if the chat room is of type "direct", don't let them remove any member other than themself even if they're admin
-- reject with 409 if the target is the room's only remaining admin and other members are still present, otherwise the room becomes unmanageable
-- if there are less than 1 member in the room after a removal, delete the chat room
+- reject with 409 if the target is the room's only remaining admin and other members are still present (basically speaking, the group room admin can't remove themself if they're the only admin in the group room). This rule doesn't apply to direct room since direct room only have 2 members and both are admins
+- if there are less than 1 member in the room after a removal (usually mean that the last member is an admin and they remove themself), then that mean there are no longer any ChatMember record that linked to this ChatRoom record and the ChatRoom record will be deleted after a set period of time along with it's messages.  
 
 PATCH /chatrooms/:chatid/members/:userid
 - change a member's role
