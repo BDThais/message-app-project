@@ -76,7 +76,7 @@ req.user shape = {
   tel: string;
 }
 A direct room has no name/avatar to edit, it's members also can't add or remove the other member from the room, all of it's members are admins.
-Endpoints that required authorization to access have to be routed after the auth middlewares
+Endpoints that required authorization to access have to be routed after the auth middlewares.
 
 POST /chatrooms (implemented | untested)
 - create a new chat room
@@ -119,7 +119,7 @@ GET /chatrooms/:chatid (implemented | untested)
     }
   }
 
-PATCH /chatrooms/:chatid
+PATCH /chatrooms/:chatid (implemented | untested)
 - update the room's name and/or avatar_url
 - only valid for type: group rooms
 - requires the requester to hold admin in this room

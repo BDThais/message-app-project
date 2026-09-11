@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { getSessionUser } from '../lib/session';
+import { getSessionUser } from '../services/SessionServices';
 
 // Derived from getSessionUser's own return type rather than importing Prisma's User
 // type directly, so this stays correct even if getSessionUser returns a trimmed-down
@@ -14,7 +14,7 @@ declare global {
   }
 }
 
-export async function requireAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireUserAuth(req: Request, res: Response, next: NextFunction) {
   try {
     const user = await getSessionUser(req, res);
 
@@ -25,7 +25,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     req.user = user;
     next();
   } catch (error) {
-    console.error('Error in requireAuth middleware:', error);
+    console.error('Error in requireUserAuth middleware:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

@@ -1,4 +1,4 @@
-import { addChatRoomMembers } from '../lib/chatMembers';
+import { addChatRoomMembers } from './ChatMemberServices';
 import { prisma } from '../lib/prisma';
 import { Prisma, ChatRoomType, ChatMemberRole } from '../generated/prisma/client';
 
@@ -182,5 +182,11 @@ export async function updateChatRoomById(
   return prisma.chatRoom.update({
     where: { id: chatId },
     data,
+  });
+}
+
+export async function deleteChatRoomById(chatId: number) {
+  return prisma.chatRoom.delete({
+    where: { id: chatId },
   });
 }

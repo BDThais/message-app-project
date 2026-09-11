@@ -4,7 +4,7 @@ import { hashPassword } from '../lib/passwordHash';
 import { validateAccountBody, checkDuplication } from './SignUpFormValidators';
 import type { AccountBody } from './SignUpFormValidators';
 import { validateLogin } from './LoginValidator';
-import { createSession, getSessionUser, clearSessionCookie } from '../lib/session';
+import { createSession, getSessionUser, clearSessionCookie } from '../services/SessionServices';
 import config from '../config/config';
 
 export async function signup(req: Request, res: Response, next: NextFunction) {
