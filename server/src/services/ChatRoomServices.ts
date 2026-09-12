@@ -10,6 +10,31 @@ const memberInclude = {
 
 type ChatRoomWithMembers = Prisma.ChatRoomGetPayload<{ include: typeof memberInclude }>;
 
+export async function createChatRoom(
+  type: ChatRoomType,
+  requesterId: number,
+  memberIds: number[],
+  name: string | undefined,
+  avatarUrl: string | undefined
+): Promise<{ room: ChatRoomWithMembers; created: boolean }> {
+  return prisma.$transaction((tx) =>
+    type === ChatRoomType.direct
+      ? createDirectChatRoom(tx, requesterId, memberIds[0]!)
+      : createGroupChatRoom(tx, requesterId, memberIds, name, avatarUrl)
+  );
+}
+
+export async function getChatMembership(memberId: number, chatId: number) {
+  return prisma.chatMember.findUnique({
+    where: { memberId_chatId: { memberId, chatId } },
+    select: { role: true, chatRoom: { select: { type: true } } },
+  });
+}
+
+export function isForeignKeyConstraintError(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003';
+}
+
 /**
  * Creates (or reuses) a direct room between the requester and one other
  * user. Both members are admins - a direct room has no name/avatar to

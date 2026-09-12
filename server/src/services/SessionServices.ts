@@ -26,6 +26,10 @@ export async function createSession(res: Response, userId: number): Promise<void
   });
 }
 
+export function deleteSession(sessionId: string) {
+  return prisma.session.deleteMany({ where: { id: sessionId } });
+}
+
 /**
  * Reads the session cookie off the request and resolves it to a user.
  * Returns null if there's no cookie, no matching session, or the session has expired.

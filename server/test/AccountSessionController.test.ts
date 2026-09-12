@@ -3,33 +3,23 @@ import request from 'supertest';
 import app from '../src/app';
 
 import { validateLogin } from '../src/controllers/LoginValidator';
-import { createSession, getSessionUser, clearSessionCookie } from '../src/lib/session';
-import { prisma } from '../src/lib/prisma';
+import { createSession, getSessionUser, deleteSession, clearSessionCookie } from '../src/services/SessionServices';
 import config from '../src/config/config';
 
 const loginRoute = '/account/login';
 const meRoute = '/account/me';
 const logoutRoute = '/account/logout';
 
-// Everything these controllers talk to gets mocked: LoginValidator and the
-// session helpers are collaborators with their own tests, and prisma is a
-// real database client we don't want to hit here.
+// Controller collaborators are mocked so these tests do not hit the database.
 vi.mock('../src/controllers/LoginValidator', () => ({
   validateLogin: vi.fn(),
 }));
 
-vi.mock('../src/lib/session', () => ({
+vi.mock('../src/services/SessionServices', () => ({
   createSession: vi.fn(),
   getSessionUser: vi.fn(),
+  deleteSession: vi.fn(),
   clearSessionCookie: vi.fn(),
-}));
-
-vi.mock('../src/lib/prisma', () => ({
-  prisma: {
-    session: {
-      deleteMany: vi.fn(),
-    },
-  },
 }));
 
 // Mocked (rather than imported for real) so the suite doesn't depend on
@@ -52,6 +42,7 @@ describe(`POST ${loginRoute}`, () => {
     email: 'alice@example.com',
     tel: '5551234567',
     passwordHash: 'should-never-reach-the-response',
+    avatarUrl: null,
   };
 
   it.each([
@@ -136,7 +127,7 @@ describe(`GET ${meRoute}`, () => {
 
 describe(`POST ${logoutRoute}`, () => {
   it('deletes the session and clears the cookie when a session cookie is present', async () => {
-    vi.mocked(prisma.session.deleteMany).mockResolvedValue({ count: 1 });
+    vi.mocked(deleteSession).mockResolvedValue({ count: 1 });
 
     const res = await request(app)
       .post(logoutRoute)
@@ -144,7 +135,7 @@ describe(`POST ${logoutRoute}`, () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ user: null });
-    expect(vi.mocked(prisma.session.deleteMany)).toHaveBeenCalledWith({ where: { id: 'abc123' } });
+    expect(vi.mocked(deleteSession)).toHaveBeenCalledWith('abc123');
     expect(vi.mocked(clearSessionCookie)).toHaveBeenCalled();
   });
 
@@ -153,12 +144,12 @@ describe(`POST ${logoutRoute}`, () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ user: null });
-    expect(vi.mocked(prisma.session.deleteMany)).not.toHaveBeenCalled();
+    expect(vi.mocked(deleteSession)).not.toHaveBeenCalled();
     expect(vi.mocked(clearSessionCookie)).toHaveBeenCalled();
   });
 
   it('returns 500 when something unexpected throws', async () => {
-    vi.mocked(prisma.session.deleteMany).mockRejectedValue(new Error('db is down'));
+    vi.mocked(deleteSession).mockRejectedValue(new Error('db is down'));
 
     const res = await request(app)
       .post(logoutRoute)

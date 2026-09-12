@@ -1,12 +1,9 @@
 import type { Request, Response, NextFunction } from 'express';
-import { Prisma } from '../generated/prisma/client';
-import { prisma } from '../lib/prisma';
-
 import { validateCreateChatRoomInput, validateUpdateChatRoomBody } from './ChatRoomValidators';
 import {
-  createDirectChatRoom, createGroupChatRoom, updateChatRoomById,
+  createChatRoom as createChatRoomService, updateChatRoomById,
   getDirectChatRoomsForUser, getGroupChatRoomsForUser, activityTimestamp,
-  deleteChatRoomById
+  deleteChatRoomById, isForeignKeyConstraintError
 } from '../services/ChatRoomServices';
 
 export async function createChatRoom(req: Request, res: Response) {
@@ -22,15 +19,17 @@ export async function createChatRoom(req: Request, res: Response) {
   const { type, memberIds, name, avatarUrl } = validation;
 
   try {
-    const { room, created } = await prisma.$transaction((tx) =>
-      type === 'direct'
-        ? createDirectChatRoom(tx, requesterId, memberIds[0]!)
-        : createGroupChatRoom(tx, requesterId, memberIds, name, avatarUrl)
+    const { room, created } = await createChatRoomService(
+      type,
+      requesterId,
+      memberIds,
+      name,
+      avatarUrl
     );
 
     return res.status(created ? 201 : 200).json(room);
   } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003') {
+    if (isForeignKeyConstraintError(err)) {
       // One of the member_ids doesn't refer to a real user.
       return res
         .status(400)

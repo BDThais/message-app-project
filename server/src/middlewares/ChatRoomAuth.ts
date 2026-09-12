@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { prisma } from '../lib/prisma.js';
+import { getChatMembership } from '../services/ChatRoomServices.js';
 
 // Attached by loadChatMembership below on any route with a ':chatid'
 // param. Every handler downstream can trust this is populated - if it
@@ -37,10 +37,7 @@ export async function loadChatMembership(
   }
 
   try {
-    const membership = await prisma.chatMember.findUnique({
-      where: { memberId_chatId: { memberId: req.user!.id, chatId } },
-      select: { role: true, chatRoom: { select: { type: true } } },
-    });
+    const membership = await getChatMembership(req.user!.id, chatId);
 
     if (!membership) {
       return res.status(404).json({ message: 'Chat room not found' });

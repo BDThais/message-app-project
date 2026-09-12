@@ -1,10 +1,10 @@
-import { prisma } from '../lib/prisma';
 import type { Request, Response, NextFunction } from 'express';
 import { hashPassword } from '../lib/passwordHash';
 import { validateAccountBody, checkDuplication } from './SignUpFormValidators';
 import type { AccountBody } from './SignUpFormValidators';
 import { validateLogin } from './LoginValidator';
-import { createSession, getSessionUser, clearSessionCookie } from '../services/SessionServices';
+import { createUser } from '../services/AccountServices';
+import { createSession, getSessionUser, deleteSession, clearSessionCookie } from '../services/SessionServices';
 import config from '../config/config';
 
 export async function signup(req: Request, res: Response, next: NextFunction) {
@@ -23,13 +23,11 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
     
         const passwordHash = await hashPassword(password);
     
-        await prisma.user.create({
-          data: {
-            name,
-            email,
-            tel,
-            passwordHash
-          }
+        await createUser({
+          name,
+          email,
+          tel,
+          passwordHash
         });
     
         res.status(201).json({ message: 'Account created successfully'});
@@ -86,7 +84,7 @@ export async function logout(req: Request, res: Response, next: NextFunction) {
     const sessionId = req.cookies?.[config.SESSION_COOKIE];
   
     if (sessionId) {
-      await prisma.session.deleteMany({ where: { id: sessionId } });
+      await deleteSession(sessionId);
     }
   
     clearSessionCookie(res);

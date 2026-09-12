@@ -1,6 +1,6 @@
 import validator from 'validator';
 import { isValidPhoneNumber } from 'libphonenumber-js';
-import { prisma } from '../lib/prisma';
+import { findExistingUser } from '../services/AccountServices';
 
 export type AccountBody = {
   name: string;
@@ -68,11 +68,7 @@ export function validateAccountBody(body: AccountBody): string | null {
 
 export async function checkDuplication(email: string, tel: string): Promise<string | null> {
     // Check for duplication in email or phone number
-    const existingUser = await prisma.user.findFirst({
-        where: {
-            OR: [{ email }, { tel }]
-        }
-    });
+    const existingUser = await findExistingUser(email, tel);
 
     if (existingUser) {
         const field = existingUser.email === email ? 'Email' : 'Phone number';

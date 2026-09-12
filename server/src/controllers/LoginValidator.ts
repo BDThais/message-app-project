@@ -1,5 +1,5 @@
-import { prisma } from '../lib/prisma';
 import { verifyPassword } from '../lib/passwordHash';
+import { findUserByEmail } from '../services/AccountServices';
 
 /**
  * Checks an email/password pair against the database.
@@ -9,7 +9,7 @@ import { verifyPassword } from '../lib/passwordHash';
  * failure message either way, per the spec.
  */
 export async function validateLogin(email: string, password: string) {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await findUserByEmail(email);
   if (!user) return null;
 
   const passwordMatches = await verifyPassword(user.passwordHash, password);

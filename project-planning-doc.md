@@ -135,7 +135,7 @@ PATCH /chatrooms/:chatid (implemented | untested)
     }
   }
 
-DELETE /chatrooms/:chatid
+DELETE /chatrooms/:chatid (implemented | untested)
 - delete the room; cascades to its messages and memberships automatically
 - only valid for type: group rooms
 - requires admin
