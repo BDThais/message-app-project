@@ -196,6 +196,7 @@ DELETE /friend/requests/:id
 ## Project Structure
 The repository currently contains an empty frontend workspace and a TypeScript/Express server with Prisma persistence, authentication, and initial chat-room support.
 Generated files created by tools such as Prisma are omitted from this structure, while source-controlled Prisma schema remain documented.
+All db operations is kept in /services folder
 
 message-app/
 ├── frontend/                   // Empty frontend workspace
@@ -205,7 +206,7 @@ message-app/
 │   ├── tsconfig.json
 │   ├── prisma/
 │   │   ├── schema.prisma
-│   │   └── migrations/
+│   │   └── migrations/         // Database migration history
 │   ├── src/
 │   │   ├── app.ts
 │   │   ├── server.ts
@@ -219,8 +220,7 @@ message-app/
 │   │   │   └── SignUpFormValidators.ts
 │   │   ├── lib/
 │   │   │   ├── passwordHash.ts
-│   │   │   ├── prisma.ts
-│   │   │   └── session.ts
+│   │   │   └── prisma.ts
 │   │   ├── middlewares/
 │   │   │   ├── ChatRoomAuth.ts
 │   │   │   ├── ErrorHandler.ts
@@ -230,7 +230,10 @@ message-app/
 │   │   │   ├── AccountRoutes.ts
 │   │   │   └── ChatRoomRoutes.ts
 │   │   └── services/
-│   │       └── ChatRoomServices.ts
+│   │       ├── AccountServices.ts
+│   │       ├── ChatMemberServices.ts
+│   │       ├── ChatRoomServices.ts
+│   │       └── SessionServices.ts
 │   └── test/
 │       ├── account-login-me-logout.http
 │       ├── account-signup.http
