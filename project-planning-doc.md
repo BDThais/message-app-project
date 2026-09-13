@@ -52,20 +52,71 @@ POST /account/signup
 - Validates name, email, tel, and password
 - Checks for duplicate email or phone number
 - Hashes the password before saving
+- incoming body:
+  ```json
+  {
+    "name": "JohnDoe",
+    "email": "john@example.com",
+    "tel": "+1234567890",
+    "password": "Str0ng!Pass"
+  }
+  ```
+- return body:
+  ```json
+  {
+    "message": "Account created successfully"
+  }
+  ```
 
 POST /account/login
 - Validates the supplied email/password
 - Returns a generic invalid credentials message for both failed user and password checks
 - Destroys any stale session for the same user
 - Creates a new session and sets the session cookie
+- incoming body:
+  ```json
+  {
+    "email": "john@example.com",
+    "password": "Str0ng!Pass"
+  }
+  ```
+- return body:
+  ```json
+  {
+    "user": {
+      "id": 1,
+      "name": "JohnDoe",
+      "email": "john@example.com",
+      "tel": "+1234567890"
+    }
+  }
+  ```
 
 GET /account/me
 - Returns the current authenticated user or null if there is no session
+- return body:
+  ```json
+  {
+    "user": {
+      "id": 1,
+      "name": "JohnDoe",
+      "email": "john@example.com",
+      "tel": "+1234567890"
+    }
+  }
+  ```
+  When there is no valid session, `user` is `null`.
 
 POST /account/logout
 - Invalidates the current session if it exists
 - Clears the session cookie
 - Returns the user as null
+- return body:
+  ```json
+  {
+    "user": null
+  }
+  ```
 
 ### Planned future endpoints 
 All of these endpoints are routed after auth middleware so they can access user's data with req.user.
@@ -81,7 +132,53 @@ Endpoints that required authorization to access have to be routed after the auth
 POST /chatrooms (implemented | untested)
 - create a new chat room
 - incoming body: type, member_ids, name?, avatar_url?
-- use empty array for member_ids if there are no member to add
+- for direct rooms, `member_ids` must contain exactly one other integer user ID; direct rooms cannot include `name` or `avatar_url`
+- for group rooms, `member_ids` may be omitted or be an empty array; the requester is always added as an admin
+- group rooms may include `name` and `avatar_url`
+- incoming body:
+  ```json
+  {
+    "type": "group",
+    "member_ids": [],
+    "name": "Project chat",
+    "avatar_url": "https://example.com/project-chat.png"
+  }
+  ```
+- a group room can also be created without `member_ids` or with additional member IDs, for example `"member_ids": [2, 3]`
+- return body:
+  ```json
+  {
+    "id": 1,
+    "type": "group",
+    "name": "Project chat",
+    "avatarUrl": "https://example.com/project-chat.png",
+    "createdAt": "2026-09-13T12:00:00.000Z",
+    "members": [
+      {
+        "memberId": 1,
+        "chatId": 1,
+        "role": "admin",
+        "lastReadMessageId": null,
+        "member": {
+          "id": 1,
+          "name": "JohnDoe",
+          "avatarUrl": null
+        }
+      },
+      {
+        "memberId": 2,
+        "chatId": 1,
+        "role": "member",
+        "lastReadMessageId": null,
+        "member": {
+          "id": 2,
+          "name": "JaneDoe",
+          "avatarUrl": null
+        }
+      }
+    ]
+  }
+  ```
 
 GET /chatrooms (implemented | untested)
 - retrieve a list of all the chat rooms that have this user as its member
@@ -91,54 +188,74 @@ GET /chatrooms (implemented | untested)
   as the room's avatar url
 - the success response return the chat rooms sorted by how recent is the last message, the rooms that doesn't have last message is sorted by time created
 - return body:
+  ```json
   {
     "chatRooms": [
       {
-        id: number;
-        type: 'direct' | 'group';
-        name: string | null;
-        avatarUrl: string | null;
-        createdAt: Date;
-        lastMessage: { content: string; createdAt: Date } | null;
+        "id": 1,
+        "type": "group",
+        "name": "Project chat",
+        "avatarUrl": "https://example.com/project-chat.png",
+        "createdAt": "2026-09-13T12:00:00.000Z",
+        "lastMessage": {
+          "content": "Hello",
+          "createdAt": "2026-09-13T12:05:00.000Z"
+        }
       }
     ]
   }
+  ```
 
 GET /chatrooms/:chatid (implemented | untested)
 - retrieve data about a specific room
 - return body:
+  ```json
   {
     "chatRoom": {
-      id: number;
-      type: 'direct' | 'group';
-      name: string | null;
-      avatarUrl: string | null;
-      createdAt: Date;
-      lastMessage: { content: string; createdAt: Date } | null;
-      role: "admin" | "member";
+      "id": 1,
+      "type": "group",
+      "name": "Project chat",
+      "avatarUrl": "https://example.com/project-chat.png",
+      "createdAt": "2026-09-13T12:00:00.000Z",
+      "lastMessage": {
+        "content": "Hello",
+        "createdAt": "2026-09-13T12:05:00.000Z"
+      },
+      "role": "admin"
     }
   }
+  ```
 
 PATCH /chatrooms/:chatid (implemented | untested)
 - update the room's name and/or avatar_url
 - only valid for type: group rooms
 - requires the requester to hold admin in this room
 - incoming body: { name?, avatar_url? }
+- incoming body:
+  ```json
+  {
+    "name": "Updated project chat",
+    "avatar_url": null
+  }
+  ```
 - return body: 
+  ```json
   {
     "chatRoom": {
-      id: number;
-      type: 'direct' | 'group';
-      name: string | null;
-      avatarUrl: string | null;
-      createdAt: Date;
+      "id": 1,
+      "type": "group",
+      "name": "Updated project chat",
+      "avatarUrl": null,
+      "createdAt": "2026-09-13T12:00:00.000Z"
     }
   }
+  ```
 
 DELETE /chatrooms/:chatid (implemented | untested)
 - delete the room; cascades to its messages and memberships automatically
 - only valid for type: group rooms
 - requires admin
+- no response body (`204 No Content`)
 
 POST /chatrooms/:chatid/members
 - add one or many existing user to the room

@@ -1,11 +1,11 @@
-interface CreateChatRoomBody {
-    type?: unknown;
-    member_ids?: unknown;
-    name?: unknown;
-    avatar_url?: unknown;
-}
-
 type ValidRoomType = 'direct' | 'group';
+
+type CreateChatRoomBody = Partial<{
+  type: ValidRoomType;
+  member_ids: number[];
+  name: string;
+  avatar_url: string;
+}>;
 
 type ValidationResult =
     | {
@@ -27,30 +27,33 @@ type ValidationResult =
  *   Prisma field names.
  */
 export function validateCreateChatRoomInput(
-    body: CreateChatRoomBody,
-    requesterId: number
+  body: CreateChatRoomBody,
+  requesterId: number
+): ValidationResult;
+export function validateCreateChatRoomInput(
+  body: unknown,
+  requesterId: number
+): ValidationResult;
+export function validateCreateChatRoomInput(
+  body: unknown,
+  requesterId: number
 ): ValidationResult {
-    const { type, member_ids, name, avatar_url } = body;
+  const { type, member_ids, name, avatar_url } = isRecord(body) ? body : {};
 
     if (type !== 'direct' && type !== 'group') {
         return { valid: false, error: 'type must be "direct" or "group"' };
     }
 
-    if (
-        !Array.isArray(member_ids) ||
-        member_ids.length === 0 ||
-        member_ids.some((id) => !Number.isInteger(id))
-    ) {
-        return { valid: false, error: 'member_ids must be a non-empty array of user IDs' };
+    if (member_ids !== undefined && (
+      !Array.isArray(member_ids) ||
+      member_ids.some((id) => !Number.isInteger(id))
+    )) {
+      return { valid: false, error: 'member_ids must be an array of user IDs' };
     }
 
-    const memberIds = Array.from(new Set(member_ids as number[])).filter(
+    const memberIds = Array.from(new Set((member_ids ?? []) as number[])).filter(
         (id) => id !== requesterId
     );
-
-    if (memberIds.length === 0) {
-        return { valid: false, error: 'member_ids must include at least one other user' };
-    }
 
     if (type === 'direct') {
         if (memberIds.length !== 1) {
@@ -120,4 +123,8 @@ function isValidHttpUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
