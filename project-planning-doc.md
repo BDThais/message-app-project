@@ -372,6 +372,56 @@ Example frontend fetch:
 fetch('http://localhost:3000/account/me', { credentials: 'include' });
 ```
 
+## Backend Data Flow
+
+The backend follows a layered request flow:
+
+1. **Request parsing and routing**
+  - Express receives the request and parses JSON bodies with `express.json()`.
+  - `cookie-parser` makes the session cookie available through `req.cookies`.
+  - The request is sent to the matching route under `/account` or `/chatrooms`.
+
+2. **Authentication**
+  - Account signup and login validate the incoming body in their controllers before calling the account services.
+  - Login verifies the password, removes any stale session for the user, creates a new session, and sends the session cookie in the response.
+  - Protected chat-room routes run `requireUserAuth`, which reads the session cookie, loads the user through `SessionServices`, and attaches the authenticated user to `req.user`.
+  - `/account/me` uses the same session lookup but returns `user: null` when no valid session exists. Logout deletes the session when present and clears the cookie.
+
+3. **Route-level authorization**
+  - For routes containing `:chatid`, `loadChatMembership` checks the authenticated user's membership and the room type in one Prisma query.
+  - A valid membership is attached to `req.chatMembership` with the room ID, role, and room type.
+  - `requireGroupRoom` restricts group-only actions, while `requireChatAdmin` restricts administrative actions. Requests that fail these checks end before reaching the controller.
+
+4. **Validation and controller handling**
+  - Controllers validate request bodies and URL parameters, then pass normalized values to the relevant service.
+  - Controllers coordinate the HTTP response: they choose the status code, select the response shape, and pass unexpected errors to the shared error handler.
+
+5. **Service and database flow**
+  - Services contain all database operations and use the shared Prisma client from `src/lib/prisma`.
+  - Account services create and find users. Session services create, read, and delete sessions.
+  - Chat-room services create rooms and memberships in a Prisma transaction, load direct and group rooms, retrieve the latest message for room summaries, and update or delete rooms.
+  - Direct-room responses derive the room name and avatar from the other member; group-room responses use the room's own name and avatar fields.
+
+6. **Response and error flow**
+  - Successful service results are mapped to JSON responses by the controller and returned to the client.
+  - Validation and authorization failures return directly from the relevant controller or middleware with an appropriate `4xx` status.
+  - Unexpected service or Prisma errors are forwarded with `next(error)` and handled by the application's final error-handler middleware.
+
+For a typical protected request, the flow is:
+
+```text
+HTTP request
+  -> Express JSON/cookie parsing
+  -> route matching
+  -> session lookup and req.user
+  -> chat membership lookup and req.chatMembership
+  -> role/type guards
+  -> controller validation
+  -> service
+  -> Prisma/PostgreSQL
+  -> controller response
+```
+
 ## Roadmap
 1. Complete chat room and message APIs
 2. Add friend list and request flows
