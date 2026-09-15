@@ -1,60 +1,61 @@
-# Message App
+﻿# Message App
 
-A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a planned React frontend. The current codebase is focused on the backend account/session foundation, with chat and friendship features still to be implemented.
+A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a planned React frontend. The backend has moved beyond the initial auth baseline and now includes the core chat-room foundation, while friend requests and real-time messaging remain next on the roadmap.
 
 ## Project Status
 
-The project is in active backend development. The implemented foundation includes:
+The application is currently in an active backend MVP phase. Implemented features include:
 
-- User signup with validation
-- Duplicate email and phone detection
-- Password hashing
-- Login with credential validation
-- Session creation and cookie-based authentication
-- Fetching the current authenticated user via session cookie
-- Logout and session cleanup
-- Protected route middleware scaffolding for future chat APIs
-- Prisma schema for users, sessions, chat rooms, messages, friend requests, and friend lists
-- API tests covering the account/session flow
+- User signup with validation and duplicate checks
+- Password hashing and credential verification
+- Login, logout, and session cookie handling
+- Authenticated user lookup via session middleware
+- Protected route middleware for chat access
+- Direct and group chat room creation, listing, update, and deletion
+- Chat membership and role checks with admin-only protections
+- Room summary and latest-message aggregation
+- Prisma models for users, sessions, chat rooms, messages, and friendship flows
+- Vitest integration tests for the account/session flow
 
-Not implemented yet:
+Next priorities:
 
-- Real chat room creation and listing
-- Message sending and retrieval APIs
-- Friend search and request handling
-- Real-time messaging with Socket.io
-- Frontend application and auth-aware UI
-- Production deployment hardening
+- Friend search, requests, and friendship management
+- Direct and group messaging APIs and pagination
+- Real-time communication with Socket.io
+- Frontend screens and auth-aware user flows
+- Production deployment and environment hardening
 
 ## Tech Stack
 
 - Backend: Express.js + TypeScript
 - Database: PostgreSQL + Prisma ORM
-- Authentication: server-side session cookies
+- Authentication: session cookies with protected middleware
 - Testing: Vitest + Supertest
 - Frontend: React planned
 - Data fetching: TanStack Query planned
 - Real-time communication: Socket.io planned
 
-## Backend Structure
+## Repository Layout
 
-The server package contains the current implementation:
-
+- Root project files: project-planning-doc.md, README.md
+- Frontend workspace: frontend/
+- Backend server: server/
 - App entry point: server/src/app.ts
-- Account routes: server/src/routes/AccountRoutes.ts
-- Chat route skeleton: server/src/routes/ChatRoomRoutes.ts
-- Controllers: server/src/controllers/
-- Middleware: server/src/middlewares/
-- Prisma schema and client: server/prisma/
+- Route definitions: server/src/routes/
+- Controllers and validators: server/src/controllers/
+- Middleware and services: server/src/middlewares/ and server/src/services/
+- Prisma schema and migrations: server/prisma/
 
 ## API
 
 ### Account endpoints
 
 #### POST /account/signup
+
 Creates a new user account.
 
 Request body:
+
 ```json
 {
   "name": "John Doe",
@@ -65,6 +66,7 @@ Request body:
 ```
 
 Response:
+
 ```json
 {
   "message": "Account created successfully"
@@ -72,63 +74,30 @@ Response:
 ```
 
 #### POST /account/login
+
 Authenticates a user and sets a session cookie.
 
-Request body:
-```json
-{
-  "email": "john@example.com",
-  "password": "Str0ng!Pass"
-}
-```
-
-Response:
-```json
-{
-  "user": {
-    "id": 1,
-    "name": "John Doe",
-    "email": "john@example.com",
-    "tel": "+1234567890"
-  }
-}
-```
-
 #### GET /account/me
+
 Returns the current authenticated user or null when no valid session exists.
 
-Response:
-```json
-{
-  "user": {
-    "id": 1,
-    "name": "John Doe",
-    "email": "john@example.com",
-    "tel": "+1234567890"
-  }
-}
-```
-
 #### POST /account/logout
+
 Deletes the active session and clears the auth cookie.
 
-Response:
-```json
-{
-  "user": null
-}
-```
+### Chatroom endpoints
 
-### Chat route skeleton
+The protected chat routes are implemented on the server and include:
 
-The chat routes are mounted under /chatrooms and protected by auth middleware, but the actual chat functionality is still a placeholder:
+- POST /chatrooms
+- GET /chatrooms
+- GET /chatrooms/:chatid
+- PATCH /chatrooms/:chatid
+- DELETE /chatrooms/:chatid
+- Room membership logic for direct and group rooms
+- Admin-only room management controls
 
-- GET /chatrooms/
-- POST /chatrooms/
-- GET /chatrooms/:chatid/messages
-- POST /chatrooms/:chatid/messages
-
-These endpoints currently exist as route stubs and are not yet implemented.
+The remaining work is focused on friend flows and realtime messaging rather than the core room infrastructure itself.
 
 ## Database Model
 
@@ -142,55 +111,31 @@ The Prisma schema includes the core relational models needed for a messaging app
 - PendingFriendRequest
 - FriendListMember
 
-The schema is in place, but the business logic for chat and friendship flows still needs to be built on top of it.
-
 ## Testing
 
-The backend has Vitest + Supertest coverage for the auth/user flow, including:
+The backend uses Vitest + Supertest with an isolated PostgreSQL database managed by Docker Compose for integration tests.
 
-- successful signup
-- invalid input validation
-- duplicate email/phone checks
-- login success and failure
-- session retrieval and logout behavior
-- unexpected error handling
-
-### Test database
-
-The Prisma schema requires PostgreSQL. Integration tests use an isolated PostgreSQL
-database managed by Docker Compose, so they never use the development database.
-
-Prerequisites:
-
-- Docker Desktop with the Linux engine running
-- Node.js and npm dependencies installed in `server/`
-
-From `server/`, create the local test environment once:
+From the server folder, create the local test environment once:
 
 ```powershell
 Copy-Item .env.test.example .env.test
 ```
 
-Run the integration tests:
+Run the tests:
 
 ```powershell
 npm test
 ```
 
-This starts the `chatapp_test` container, applies the existing Prisma migrations,
-and runs Vitest with database cleanup between tests. The database can be reset
-manually with `npm run db:test:reset` or stopped with `npm run db:test:down`.
-Test commands refuse to run destructive Prisma operations unless `DATABASE_URL`
-points to the isolated `chatapp_test` database.
+The test setup brings up the `chatapp_test` container, applies Prisma migrations, and clears records between runs.
 
 ## Roadmap
 
-- Build chat room creation and membership APIs
-- Implement direct and group message flows
-- Add friend lookup and pending request handling
-- Add real-time communication with Socket.io
-- Create the React frontend and protected auth pages
-- Add deployment/environment configuration for production
+- Finish friend lookup and pending request flows
+- Implement message creation and retrieval APIs
+- Add Socket.io for realtime messaging
+- Build the React frontend and protected auth screens
+- Add deployment and environment configuration for production
 
 ## License
 
