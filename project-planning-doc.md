@@ -138,7 +138,7 @@ req.user shape = {
 A direct room has no name/avatar to edit, it's members also can't add or remove the other member from the room, all of it's members are admins.
 Endpoints that required authorization to access have to be routed after the auth middlewares.
 
-POST /chatrooms (implemented | untested)
+POST /chatrooms (implemented)
 - create a new chat room
 - incoming body: type, member_ids, name?, avatar_url?
 - for direct rooms, `member_ids` must contain exactly one other integer user ID; direct rooms cannot include `name` or `avatar_url`
@@ -189,7 +189,7 @@ POST /chatrooms (implemented | untested)
   }
   ```
 
-GET /chatrooms (implemented | untested)
+GET /chatrooms (implemented)
 - retrieve a list of all the chat rooms that have this user as its member
 - have separate functions for retrieving direct and group chat room, the functions return all direct/group chat rooms that has req.user 
   as member (with datas of the last message in that room like it's content, time created) when it's not supplied with a specific chatid. 
@@ -215,7 +215,7 @@ GET /chatrooms (implemented | untested)
   }
   ```
 
-GET /chatrooms/:chatid (implemented | untested)
+GET /chatrooms/:chatid (implemented)
 - retrieve data about a specific room
 - return body:
   ```json
@@ -235,7 +235,7 @@ GET /chatrooms/:chatid (implemented | untested)
   }
   ```
 
-PATCH /chatrooms/:chatid (implemented | untested)
+PATCH /chatrooms/:chatid (implemented)
 - update the room's name and/or avatar_url
 - only valid for type: group rooms
 - requires the requester to hold admin in this room
@@ -260,7 +260,7 @@ PATCH /chatrooms/:chatid (implemented | untested)
   }
   ```
 
-DELETE /chatrooms/:chatid (implemented | untested)
+DELETE /chatrooms/:chatid (implemented)
 - delete the room; cascades to its messages and memberships automatically
 - only valid for type: group rooms
 - requires admin
