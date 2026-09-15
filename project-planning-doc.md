@@ -14,6 +14,15 @@ The backend is currently in a working MVP state for account authentication and s
 - Socket.io
 - TanStack Router
 
+## Test database setup
+
+Backend integration tests use a separate PostgreSQL database provided by
+`server/docker-compose.test.yml`. Copy `server/.env.test.example` to
+`server/.env.test` once, then run `npm test` from `server/`. The test command
+starts the container, deploys the existing Prisma migrations, and cleans test
+records between cases. It does not use the development database configured in
+`server/.env`.
+
 ## Current Implementation Status
 The project is not yet at full messaging feature parity. The backend currently includes the core account lifecycle endpoints that are required for authentication and session handling:
 

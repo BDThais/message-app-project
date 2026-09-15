@@ -8,7 +8,12 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "vitest run"
+    "test": "npm run db:test:up && npm run db:test:deploy && vitest run",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "db:test:up": "node scripts/test-db.mjs up",
+    "db:test:down": "node scripts/test-db.mjs down",
+    "db:test:deploy": "node scripts/test-db.mjs deploy",
+    "db:test:reset": "node scripts/test-db.mjs reset"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",

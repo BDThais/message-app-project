@@ -44,5 +44,5 @@
     "esModuleInterop": true,
     "ignoreDeprecations": "6.0"
   },
-  "exclude": ["prisma.config.ts", "test"]
+  "exclude": ["prisma.config.ts", "test", "vitest.config.ts", "vitest.unit.config.ts"]
 }

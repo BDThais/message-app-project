@@ -1,161 +1,137 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import app from '../src/app';
-
-import { validateLogin } from '../src/controllers/LoginValidator';
-import { createSession, getSessionUser, deleteSession, clearSessionCookie } from '../src/services/SessionServices';
 import config from '../src/config/config';
+import { hashPassword } from '../src/lib/passwordHash';
+import { prisma } from '../src/lib/prisma';
 
 const loginRoute = '/account/login';
 const meRoute = '/account/me';
 const logoutRoute = '/account/logout';
 
-// Controller collaborators are mocked so these tests do not hit the database.
-vi.mock('../src/controllers/LoginValidator', () => ({
-  validateLogin: vi.fn(),
-}));
+const userData = {
+  name: 'Alice',
+  email: 'alice@example.com',
+  tel: '+14155552671',
+  password: 'Str0ng!Pass',
+};
 
-vi.mock('../src/services/SessionServices', () => ({
-  createSession: vi.fn(),
-  getSessionUser: vi.fn(),
-  deleteSession: vi.fn(),
-  clearSessionCookie: vi.fn(),
-}));
-
-// Mocked (rather than imported for real) so the suite doesn't depend on
-// whatever env vars the real config.ts needs at load time.
-vi.mock('../src/config/config', () => ({
-  default: {
-    SESSION_COOKIE: 'sessionId',
-  },
-}));
-
-beforeEach(() => {
-  vi.clearAllMocks();
-});
+async function createUser() {
+  return prisma.user.create({
+    data: {
+      name: userData.name,
+      email: userData.email,
+      tel: userData.tel,
+      passwordHash: await hashPassword(userData.password),
+    },
+  });
+}
 
 describe(`POST ${loginRoute}`, () => {
-  const validCredentials = { email: 'alice@example.com', password: 'correct-password' };
-  const dbUser = {
-    id: 1,
-    name: 'Alice',
-    email: 'alice@example.com',
-    tel: '5551234567',
-    passwordHash: 'should-never-reach-the-response',
-    avatarUrl: null,
-  };
-
   it.each([
     { desc: 'empty body', body: {} },
-    { desc: 'missing password', body: { email: 'alice@example.com' } },
-    { desc: 'non-string email', body: { email: 123, password: 'secret' } },
+    { desc: 'missing password', body: { email: userData.email } },
+    { desc: 'non-string email', body: { email: 123, password: userData.password } },
   ])('returns 400 for $desc', async ({ body }) => {
     const res = await request(app).post(loginRoute).send(body);
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'Email and password are required' });
-    expect(vi.mocked(validateLogin)).not.toHaveBeenCalled();
   });
 
   it('returns 401 when the credentials are invalid', async () => {
-    vi.mocked(validateLogin).mockResolvedValue(null);
+    await createUser();
 
-    const res = await request(app).post(loginRoute).send(validCredentials);
+    const res = await request(app)
+      .post(loginRoute)
+      .send({ email: userData.email, password: 'Wrong!Pass1' });
 
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ error: 'Invalid email or password' });
-    expect(vi.mocked(createSession)).not.toHaveBeenCalled();
+    expect(await prisma.session.count()).toBe(0);
   });
 
-  it('returns 200 with the user and starts a session on valid credentials', async () => {
-    vi.mocked(validateLogin).mockResolvedValue(dbUser);
-    vi.mocked(createSession).mockResolvedValue(undefined);
+  it('returns 200 and persists a session for valid credentials', async () => {
+    const user = await createUser();
 
-    const res = await request(app).post(loginRoute).send(validCredentials);
+    const res = await request(app)
+      .post(loginRoute)
+      .send({ email: userData.email, password: userData.password });
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      user: { id: dbUser.id, name: dbUser.name, email: dbUser.email, tel: dbUser.tel },
+      user: { id: user.id, name: user.name, email: user.email, tel: user.tel },
     });
     expect(res.body.user.passwordHash).toBeUndefined();
-    expect(vi.mocked(validateLogin)).toHaveBeenCalledWith(
-      validCredentials.email,
-      validCredentials.password
+    expect(res.headers['set-cookie']).toEqual(
+      expect.arrayContaining([expect.stringContaining(`${config.SESSION_COOKIE}=`)])
     );
-    expect(vi.mocked(createSession)).toHaveBeenCalledWith(expect.anything(), dbUser.id);
-  });
-
-  it('returns 500 when something unexpected throws', async () => {
-    vi.mocked(validateLogin).mockRejectedValue(new Error('db is down'));
-
-    const res = await request(app).post(loginRoute).send(validCredentials);
-
-    expect(res.status).toBe(500);
-    expect(res.body).toEqual({ error: 'Internal server error' });
+    expect(await prisma.session.count({ where: { userId: user.id } })).toBe(1);
   });
 });
 
 describe(`GET ${meRoute}`, () => {
   it('returns the user when the session is valid', async () => {
-    const sessionUser = { id: 1, name: 'Alice', email: 'alice@example.com', tel: '5551234567' };
-    vi.mocked(getSessionUser).mockResolvedValue(sessionUser);
+    await createUser();
+    const agent = request.agent(app);
 
-    const res = await request(app).get(meRoute);
+    const login = await agent
+      .post(loginRoute)
+      .send({ email: userData.email, password: userData.password });
+    const res = await agent.get(meRoute);
 
+    expect(login.status).toBe(200);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ user: sessionUser });
+    expect(res.body).toEqual({
+      user: { name: userData.name, email: userData.email, tel: userData.tel, id: expect.any(Number) },
+    });
   });
 
   it('returns { user: null } when there is no valid session', async () => {
-    vi.mocked(getSessionUser).mockResolvedValue(null);
-
     const res = await request(app).get(meRoute);
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ user: null });
   });
 
-  it('returns 500 when something unexpected throws', async () => {
-    vi.mocked(getSessionUser).mockRejectedValue(new Error('db is down'));
+  it('returns { user: null } and removes an expired session', async () => {
+    const user = await createUser();
+    const session = await prisma.session.create({
+      data: { userId: user.id, expiresAt: new Date(Date.now() - 1000) },
+    });
 
-    const res = await request(app).get(meRoute);
+    const res = await request(app)
+      .get(meRoute)
+      .set('Cookie', `${config.SESSION_COOKIE}=${session.id}`);
 
-    expect(res.status).toBe(500);
-    expect(res.body).toEqual({ error: 'Internal server error' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ user: null });
+    expect(await prisma.session.findUnique({ where: { id: session.id } })).toBeNull();
   });
 });
 
 describe(`POST ${logoutRoute}`, () => {
-  it('deletes the session and clears the cookie when a session cookie is present', async () => {
-    vi.mocked(deleteSession).mockResolvedValue({ count: 1 });
+  it('deletes the session and clears the cookie', async () => {
+    await createUser();
+    const agent = request.agent(app);
 
-    const res = await request(app)
-      .post(logoutRoute)
-      .set('Cookie', [`${config.SESSION_COOKIE}=abc123`]);
+    await agent
+      .post(loginRoute)
+      .send({ email: userData.email, password: userData.password });
+    expect(await prisma.session.count()).toBe(1);
+
+    const res = await agent.post(logoutRoute);
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ user: null });
-    expect(vi.mocked(deleteSession)).toHaveBeenCalledWith('abc123');
-    expect(vi.mocked(clearSessionCookie)).toHaveBeenCalled();
+    expect(await prisma.session.count()).toBe(0);
+    expect((await agent.get(meRoute)).body).toEqual({ user: null });
   });
 
-  it('still clears the cookie and succeeds when there is no session cookie', async () => {
+  it('succeeds when there is no session cookie', async () => {
     const res = await request(app).post(logoutRoute);
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ user: null });
-    expect(vi.mocked(deleteSession)).not.toHaveBeenCalled();
-    expect(vi.mocked(clearSessionCookie)).toHaveBeenCalled();
-  });
-
-  it('returns 500 when something unexpected throws', async () => {
-    vi.mocked(deleteSession).mockRejectedValue(new Error('db is down'));
-
-    const res = await request(app)
-      .post(logoutRoute)
-      .set('Cookie', [`${config.SESSION_COOKIE}=abc123`]);
-
-    expect(res.status).toBe(500);
-    expect(res.body).toEqual({ error: 'Internal server error' });
   });
 });

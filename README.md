@@ -155,6 +155,34 @@ The backend has Vitest + Supertest coverage for the auth/user flow, including:
 - session retrieval and logout behavior
 - unexpected error handling
 
+### Test database
+
+The Prisma schema requires PostgreSQL. Integration tests use an isolated PostgreSQL
+database managed by Docker Compose, so they never use the development database.
+
+Prerequisites:
+
+- Docker Desktop with the Linux engine running
+- Node.js and npm dependencies installed in `server/`
+
+From `server/`, create the local test environment once:
+
+```powershell
+Copy-Item .env.test.example .env.test
+```
+
+Run the integration tests:
+
+```powershell
+npm test
+```
+
+This starts the `chatapp_test` container, applies the existing Prisma migrations,
+and runs Vitest with database cleanup between tests. The database can be reset
+manually with `npm run db:test:reset` or stopped with `npm run db:test:down`.
+Test commands refuse to run destructive Prisma operations unless `DATABASE_URL`
+points to the isolated `chatapp_test` database.
+
 ## Roadmap
 
 - Build chat room creation and membership APIs
