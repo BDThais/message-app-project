@@ -1,8 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import app from '../src/app';
 import { hashPassword } from '../src/lib/passwordHash';
 import { prisma } from '../src/lib/prisma';
+
+// loginAs() logs in through the real /account/login route, whose limiter allows
+// only 10 attempts per 15 minutes per IP (in memory, shared by the whole file).
+// This file logs in once per test, so it would start getting 429s after ~10
+// tests. The limiter isn't what these tests are about, so replace it with a
+// pass-through here.
+vi.mock('../src/middlewares/RateLimiter', () => ({
+  loginLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
 
 type TestUser = Awaited<ReturnType<typeof createUser>>;
 
@@ -187,5 +196,191 @@ describe('chat room endpoints', () => {
     expect(deleted.status).toBe(204);
     expect(await prisma.chatRoom.findUnique({ where: { id: room.id } })).toBeNull();
     expect(await prisma.chatMember.count({ where: { chatId: room.id } })).toBe(0);
+  });
+});
+
+describe('POST /chatrooms/:chatid/members', () => {
+  it('lets an admin add several users as regular members', async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const carol = await createUser('Carol', 'carol@example.com', '+14155552673');
+    const room = await createGroupRoom(admin.id);
+    const agent = await loginAs(admin);
+
+    const res = await agent
+      .post(`/chatrooms/${room.id}/members`)
+      .send({ member_ids: [bob.id, carol.id] });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({
+      addedMembers: [
+        {
+          memberId: bob.id,
+          chatId: room.id,
+          role: 'member',
+          lastReadMessageId: null,
+          member: { id: bob.id, name: 'Bob', avatarUrl: null },
+        },
+        {
+          memberId: carol.id,
+          chatId: room.id,
+          role: 'member',
+          lastReadMessageId: null,
+          member: { id: carol.id, name: 'Carol', avatarUrl: null },
+        },
+      ],
+      alreadyMemberIds: [],
+    });
+    expect(await prisma.chatMember.count({ where: { chatId: room.id } })).toBe(3);
+  });
+
+  it('skips existing members without changing their role and ignores duplicate ids', async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const carol = await createUser('Carol', 'carol@example.com', '+14155552673');
+    const room = await createGroupRoom(admin.id, [bob.id]);
+    const agent = await loginAs(admin);
+
+    const res = await agent
+      .post(`/chatrooms/${room.id}/members`)
+      .send({ member_ids: [admin.id, bob.id, carol.id, carol.id] });
+
+    expect(res.status).toBe(201);
+    expect(res.body.addedMembers.map((m: { memberId: number }) => m.memberId)).toEqual([carol.id]);
+    expect(res.body.alreadyMemberIds).toEqual([admin.id, bob.id]);
+
+    const roles = await prisma.chatMember.findMany({
+      where: { chatId: room.id },
+      orderBy: { memberId: 'asc' },
+      select: { memberId: true, role: true },
+    });
+    expect(roles).toEqual([
+      { memberId: admin.id, role: 'admin' },
+      { memberId: bob.id, role: 'member' },
+      { memberId: carol.id, role: 'member' },
+    ]);
+  });
+
+  it('returns 200 with nothing added when everyone is already a member', async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const room = await createGroupRoom(admin.id, [bob.id]);
+    const agent = await loginAs(admin);
+
+    const res = await agent.post(`/chatrooms/${room.id}/members`).send({ member_ids: [bob.id] });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ addedMembers: [], alreadyMemberIds: [bob.id] });
+    expect(await prisma.chatMember.count({ where: { chatId: room.id } })).toBe(2);
+  });
+
+  it('rejects a regular member and adds nobody', async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const member = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const outsider = await createUser('Carol', 'carol@example.com', '+14155552673');
+    const room = await createGroupRoom(admin.id, [member.id]);
+    const agent = await loginAs(member);
+
+    const res = await agent
+      .post(`/chatrooms/${room.id}/members`)
+      .send({ member_ids: [outsider.id] });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ message: 'Admin role required for this action' });
+    expect(await prisma.chatMember.count({ where: { chatId: room.id } })).toBe(2);
+  });
+
+  it('rejects adding members to a direct room even though both users are admins', async () => {
+    const alice = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const carol = await createUser('Carol', 'carol@example.com', '+14155552673');
+    const directRoom = await prisma.chatRoom.create({
+      data: {
+        type: 'direct',
+        members: {
+          create: [
+            { memberId: alice.id, role: 'admin' },
+            { memberId: bob.id, role: 'admin' },
+          ],
+        },
+      },
+    });
+    const agent = await loginAs(alice);
+
+    const res = await agent
+      .post(`/chatrooms/${directRoom.id}/members`)
+      .send({ member_ids: [carol.id] });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ message: 'Not available for direct chat rooms' });
+    expect(await prisma.chatMember.count({ where: { chatId: directRoom.id } })).toBe(2);
+  });
+
+  it("returns 404 when the requester isn't a member of the room", async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const stranger = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const room = await createGroupRoom(admin.id);
+    const agent = await loginAs(stranger);
+
+    const res = await agent
+      .post(`/chatrooms/${room.id}/members`)
+      .send({ member_ids: [stranger.id] });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ message: 'Chat room not found' });
+    expect(await prisma.chatMember.count({ where: { chatId: room.id } })).toBe(1);
+  });
+
+  it('rejects an unauthenticated request', async () => {
+    const res = await request(app).post('/chatrooms/1/members').send({ member_ids: [2] });
+
+    expect(res.status).toBe(401);
+  });
+
+  it.each([
+    ['a missing member_ids', {}],
+    ['an empty member_ids array', { member_ids: [] }],
+    ['a non-array member_ids', { member_ids: 2 }],
+    ['a non-integer id', { member_ids: [1.5] }],
+    ['a string id', { member_ids: ['2'] }],
+    ['a zero id', { member_ids: [0] }],
+    ['a negative id', { member_ids: [-3] }],
+    ['an id larger than a Postgres integer', { member_ids: [2_147_483_648] }],
+  ])('rejects %s with 400', async (_label, body) => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const room = await createGroupRoom(admin.id);
+    const agent = await loginAs(admin);
+
+    const res = await agent.post(`/chatrooms/${room.id}/members`).send(body);
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ message: "'member_ids' must be a non-empty array of user IDs" });
+  });
+
+  it('rejects a request with no body', async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const room = await createGroupRoom(admin.id);
+    const agent = await loginAs(admin);
+
+    const res = await agent.post(`/chatrooms/${room.id}/members`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects unknown user ids and does not add the valid ones from the same request', async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const room = await createGroupRoom(admin.id);
+    const agent = await loginAs(admin);
+
+    const res = await agent
+      .post(`/chatrooms/${room.id}/members`)
+      .send({ member_ids: [bob.id, 999_999] });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      message: 'one or more member_ids do not refer to an existing user',
+    });
+    expect(await prisma.chatMember.count({ where: { chatId: room.id } })).toBe(1);
   });
 });
