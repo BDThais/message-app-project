@@ -116,6 +116,34 @@ export function validateUpdateChatRoomBody(body: any): UpdateChatRoomValidation 
   return { valid: true, data };
 }
 
+// Largest value of the Postgres INTEGER column behind User.id. Anything above
+// it can't be a real user ID and would make the query itself fail (500)
+// instead of being rejected as a bad request.
+const MAX_USER_ID = 2_147_483_647;
+
+type AddMembersValidation =
+  | { valid: true; data: { memberIds: number[] } }
+  | { valid: false; message: string };
+
+/**
+ * Validates the body of POST /chatrooms/:chatid/members. Unlike room
+ * creation, member_ids is required here (adding nobody is a client bug, not
+ * a no-op). Returns the IDs deduplicated and camelCased for the service.
+ */
+export function validateAddMembersBody(body: unknown): AddMembersValidation {
+  const { member_ids } = isRecord(body) ? body : {};
+
+  if (
+    !Array.isArray(member_ids) ||
+    member_ids.length === 0 ||
+    member_ids.some((id) => !Number.isInteger(id) || id < 1 || id > MAX_USER_ID)
+  ) {
+    return { valid: false, message: "'member_ids' must be a non-empty array of user IDs" };
+  }
+
+  return { valid: true, data: { memberIds: Array.from(new Set(member_ids as number[])) } };
+}
+
 function isValidHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);

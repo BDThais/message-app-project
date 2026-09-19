@@ -1,5 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
-import { validateCreateChatRoomInput, validateUpdateChatRoomBody } from './ChatRoomValidators';
+import {
+  validateCreateChatRoomInput, validateUpdateChatRoomBody, validateAddMembersBody
+} from './ChatRoomValidators';
+import { addMembersToExistingChatRoom } from '../services/ChatMemberServices';
 import {
   createChatRoom as createChatRoomService, updateChatRoomById,
   getDirectChatRoomsForUser, getGroupChatRoomsForUser, activityTimestamp,
@@ -106,6 +109,37 @@ export async function deleteChatRoom(req: Request, res: Response, next: NextFunc
     await deleteChatRoomById(req.chatMembership!.chatId);
     res.status(204).json({ message: 'Chat room deleted' });
   } catch (err) {
+    next(err);
+  }
+}
+
+// Route chain (see ChatRoomRoutes.ts): loadChatMembership -> requireGroupRoom
+// -> requireChatAdmin, so by the time this runs the room exists, is a group
+// room, and the requester is one of its admins.
+export async function addChatRoomMembers(req: Request, res: Response, next: NextFunction) {
+  const validation = validateAddMembersBody(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ message: validation.message });
+  }
+
+  try {
+    const { addedMembers, alreadyMemberIds } = await addMembersToExistingChatRoom(
+      req.chatMembership!.chatId,
+      validation.data.memberIds
+    );
+
+    // Same convention as POST /chatrooms: 201 when something was created,
+    // 200 when the request changed nothing (everyone was already a member).
+    return res
+      .status(addedMembers.length > 0 ? 201 : 200)
+      .json({ addedMembers, alreadyMemberIds });
+  } catch (err) {
+    if (isForeignKeyConstraintError(err)) {
+      // One of the member_ids doesn't refer to a real user; nobody was added.
+      return res
+        .status(400)
+        .json({ message: 'one or more member_ids do not refer to an existing user' });
+    }
     next(err);
   }
 }
