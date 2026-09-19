@@ -40,6 +40,7 @@ Completed:
 - GET /chatrooms/:chatid
 - PATCH /chatrooms/:chatid
 - DELETE /chatrooms/:chatid
+- POST /chatrooms/:chatid/members
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Basic room summaries with latest-message metadata
@@ -309,13 +310,45 @@ DELETE /chatrooms/:chatid (implemented)
 - requires admin
 - no response body (`204 No Content`)
 
-POST /chatrooms/:chatid/members
+POST /chatrooms/:chatid/members (implemented)
 
 - add one or many existing user to the room
 - only valid for type: group rooms
 - requires admin
-- body: { member_ids }
+- incoming body: { member_ids }
 - new members are inserted with role: member
+- `member_ids` is required: a non-empty array of positive integer user IDs (duplicates are ignored)
+- users who are already members (including the requester) are skipped and left unchanged, so an existing admin is never demoted; their IDs are returned in `alreadyMemberIds`
+- if any ID does not refer to an existing user, respond `400` and add nobody from that request
+- responds `201` when at least one member was added, `200` when everyone was already a member
+- incoming body:
+
+  ```json
+  {
+    "member_ids": [2, 3]
+  }
+  ```
+
+- return body:
+
+  ```json
+  {
+    "addedMembers": [
+      {
+        "memberId": 3,
+        "chatId": 1,
+        "role": "member",
+        "lastReadMessageId": null,
+        "member": {
+          "id": 3,
+          "name": "Carol",
+          "avatarUrl": null
+        }
+      }
+    ],
+    "alreadyMemberIds": [2]
+  }
+  ```
 
 DELETE /chatrooms/:chatid/members/:userid
 
@@ -327,7 +360,7 @@ DELETE /chatrooms/:chatid/members/:userid
 
 PATCH /chatrooms/:chatid/members/:userid
 
-- change a member's role
+- change a member's role in the given room
 - requires admin
 - body: { role: 'admin' | 'member' }
 
