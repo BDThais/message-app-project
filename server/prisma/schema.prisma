@@ -53,10 +53,14 @@ model ChatRoom {
   type ChatRoomType
   avatarUrl String?      @map("avatar_url")
   createdAt DateTime     @default(now()) @map("created_at")
+  // Set when the last member leaves; the cleanup job deletes the room (and,
+  // by cascade, its messages) once it has stayed empty for the retention period.
+  emptiedAt DateTime?    @map("emptied_at")
 
   members  ChatMember[]
   messages Message[]
 
+  @@index([emptiedAt])
   @@map("chat_rooms")
 }
 
