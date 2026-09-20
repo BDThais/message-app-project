@@ -3,6 +3,7 @@ import request from 'supertest';
 import app from '../src/app';
 import { hashPassword } from '../src/lib/passwordHash';
 import { prisma } from '../src/lib/prisma';
+import { purgeExpiredEmptyChatRooms } from '../src/services/ChatRoomCleanupServices';
 
 // loginAs() logs in through the real /account/login route, whose limiter allows
 // only 10 attempts per 15 minutes per IP (in memory, shared by the whole file).
@@ -382,5 +383,312 @@ describe('POST /chatrooms/:chatid/members', () => {
       message: 'one or more member_ids do not refer to an existing user',
     });
     expect(await prisma.chatMember.count({ where: { chatId: room.id } })).toBe(1);
+  });
+});
+
+async function createDirectRoom(userAId: number, userBId: number) {
+  return prisma.chatRoom.create({
+    data: {
+      type: 'direct',
+      members: {
+        create: [
+          { memberId: userAId, role: 'admin' },
+          { memberId: userBId, role: 'admin' },
+        ],
+      },
+    },
+  });
+}
+
+async function promoteToAdmin(chatId: number, memberId: number) {
+  await prisma.chatMember.update({
+    where: { memberId_chatId: { memberId, chatId } },
+    data: { role: 'admin' },
+  });
+}
+
+async function memberIdsOf(chatId: number) {
+  const rows = await prisma.chatMember.findMany({
+    where: { chatId },
+    orderBy: { memberId: 'asc' },
+    select: { memberId: true },
+  });
+  return rows.map((row) => row.memberId);
+}
+
+describe('DELETE /chatrooms/:chatid/members/:userid', () => {
+  it('lets an admin remove a regular member', async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const carol = await createUser('Carol', 'carol@example.com', '+14155552673');
+    const room = await createGroupRoom(admin.id, [bob.id, carol.id]);
+    const agent = await loginAs(admin);
+
+    const res = await agent.delete(`/chatrooms/${room.id}/members/${bob.id}`);
+
+    expect(res.status).toBe(204);
+    expect(res.text).toBe('');
+    expect(await memberIdsOf(room.id)).toEqual([admin.id, carol.id]);
+  });
+
+  it('lets a regular member leave the room', async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const room = await createGroupRoom(admin.id, [bob.id]);
+    const agent = await loginAs(bob);
+
+    const res = await agent.delete(`/chatrooms/${room.id}/members/${bob.id}`);
+
+    expect(res.status).toBe(204);
+    expect(await memberIdsOf(room.id)).toEqual([admin.id]);
+    expect((await prisma.chatRoom.findUniqueOrThrow({ where: { id: room.id } })).emptiedAt).toBeNull();
+  });
+
+  it('rejects a regular member removing someone else and removes nobody', async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const carol = await createUser('Carol', 'carol@example.com', '+14155552673');
+    const room = await createGroupRoom(admin.id, [bob.id, carol.id]);
+    const agent = await loginAs(bob);
+
+    const removeMember = await agent.delete(`/chatrooms/${room.id}/members/${carol.id}`);
+    const removeAdmin = await agent.delete(`/chatrooms/${room.id}/members/${admin.id}`);
+
+    for (const res of [removeMember, removeAdmin]) {
+      expect(res.status).toBe(403);
+      expect(res.body).toEqual({ message: 'Admin role required for this action' });
+    }
+    expect(await memberIdsOf(room.id)).toEqual([admin.id, bob.id, carol.id]);
+  });
+
+  it('lets an admin remove another admin while a second admin remains', async () => {
+    const alice = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const room = await createGroupRoom(alice.id, [bob.id]);
+    await promoteToAdmin(room.id, bob.id);
+    const agent = await loginAs(alice);
+
+    const res = await agent.delete(`/chatrooms/${room.id}/members/${bob.id}`);
+
+    expect(res.status).toBe(204);
+    expect(await memberIdsOf(room.id)).toEqual([alice.id]);
+  });
+
+  it('lets one of several admins leave', async () => {
+    const alice = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const carol = await createUser('Carol', 'carol@example.com', '+14155552673');
+    const room = await createGroupRoom(alice.id, [bob.id, carol.id]);
+    await promoteToAdmin(room.id, bob.id);
+    const agent = await loginAs(alice);
+
+    const res = await agent.delete(`/chatrooms/${room.id}/members/${alice.id}`);
+
+    expect(res.status).toBe(204);
+    expect(await memberIdsOf(room.id)).toEqual([bob.id, carol.id]);
+  });
+
+  it('rejects the only admin leaving while other members remain', async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const room = await createGroupRoom(admin.id, [bob.id]);
+    const agent = await loginAs(admin);
+
+    const res = await agent.delete(`/chatrooms/${room.id}/members/${admin.id}`);
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({
+      message:
+        'The only admin cannot be removed while other members remain; promote another member to admin first',
+    });
+    expect(await memberIdsOf(room.id)).toEqual([admin.id, bob.id]);
+  });
+
+  it('blocks the last admin from leaving after the other admin has left', async () => {
+    const alice = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const carol = await createUser('Carol', 'carol@example.com', '+14155552673');
+    const room = await createGroupRoom(alice.id, [bob.id, carol.id]);
+    await promoteToAdmin(room.id, bob.id);
+    const aliceAgent = await loginAs(alice);
+    const bobAgent = await loginAs(bob);
+
+    const aliceLeaves = await aliceAgent.delete(`/chatrooms/${room.id}/members/${alice.id}`);
+    const bobLeaves = await bobAgent.delete(`/chatrooms/${room.id}/members/${bob.id}`);
+
+    expect(aliceLeaves.status).toBe(204);
+    expect(bobLeaves.status).toBe(409);
+    expect(await memberIdsOf(room.id)).toEqual([bob.id, carol.id]);
+  });
+
+  it('lets the only admin leave once they have removed every other member', async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const carol = await createUser('Carol', 'carol@example.com', '+14155552673');
+    const room = await createGroupRoom(admin.id, [bob.id, carol.id]);
+    const agent = await loginAs(admin);
+
+    expect((await agent.delete(`/chatrooms/${room.id}/members/${admin.id}`)).status).toBe(409);
+    expect((await agent.delete(`/chatrooms/${room.id}/members/${bob.id}`)).status).toBe(204);
+    expect((await agent.delete(`/chatrooms/${room.id}/members/${carol.id}`)).status).toBe(204);
+
+    const leaves = await agent.delete(`/chatrooms/${room.id}/members/${admin.id}`);
+
+    expect(leaves.status).toBe(204);
+    expect(await memberIdsOf(room.id)).toEqual([]);
+  });
+
+  it('lets the last member leave, keeping the empty room and its messages for later cleanup', async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const room = await createGroupRoom(admin.id);
+    await prisma.message.create({
+      data: { chatId: room.id, senderId: admin.id, content: 'Hello' },
+    });
+    const agent = await loginAs(admin);
+
+    const res = await agent.delete(`/chatrooms/${room.id}/members/${admin.id}`);
+
+    expect(res.status).toBe(204);
+    expect(await memberIdsOf(room.id)).toEqual([]);
+    expect(await prisma.chatRoom.findUnique({ where: { id: room.id } })).not.toBeNull();
+    expect(await prisma.message.count({ where: { chatId: room.id } })).toBe(1);
+  });
+
+  it('marks the room as empty when the last member leaves, and the cleanup deletes it after the retention period', async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const room = await createGroupRoom(admin.id);
+    await prisma.message.create({
+      data: { chatId: room.id, senderId: admin.id, content: 'Hello' },
+    });
+    const agent = await loginAs(admin);
+    const retentionMs = 7 * 24 * 60 * 60 * 1000;
+    const leftAt = Date.now();
+
+    expect((await agent.delete(`/chatrooms/${room.id}/members/${admin.id}`)).status).toBe(204);
+
+    const emptied = await prisma.chatRoom.findUniqueOrThrow({ where: { id: room.id } });
+    expect(emptied.emptiedAt).not.toBeNull();
+    expect(emptied.emptiedAt!.getTime()).toBeGreaterThanOrEqual(leftAt - 1000);
+
+    // Just before the retention period is over: still there.
+    const early = await purgeExpiredEmptyChatRooms(retentionMs, new Date(leftAt + retentionMs - 60_000));
+    expect(early.deleted).toBe(0);
+    expect(await prisma.chatRoom.findUnique({ where: { id: room.id } })).not.toBeNull();
+
+    // After it: the room and its messages are gone.
+    const late = await purgeExpiredEmptyChatRooms(retentionMs, new Date(leftAt + retentionMs + 60_000));
+    expect(late.deleted).toBe(1);
+    expect(await prisma.chatRoom.findUnique({ where: { id: room.id } })).toBeNull();
+    expect(await prisma.message.count({ where: { chatId: room.id } })).toBe(0);
+  });
+
+  it('never lets two simultaneous exits leave a room with members but no admin', async () => {
+    const alice = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const carol = await createUser('Carol', 'carol@example.com', '+14155552673');
+    const room = await createGroupRoom(alice.id, [bob.id, carol.id]);
+    await promoteToAdmin(room.id, bob.id);
+    const [aliceAgent, bobAgent] = await Promise.all([loginAs(alice), loginAs(bob)]);
+
+    const [aliceLeaves, bobLeaves] = await Promise.all([
+      aliceAgent.delete(`/chatrooms/${room.id}/members/${alice.id}`),
+      bobAgent.delete(`/chatrooms/${room.id}/members/${bob.id}`),
+    ]);
+
+    expect([aliceLeaves.status, bobLeaves.status].sort()).toEqual([204, 409]);
+    expect(await prisma.chatMember.count({ where: { chatId: room.id } })).toBe(2);
+    expect(await prisma.chatMember.count({ where: { chatId: room.id, role: 'admin' } })).toBe(1);
+  });
+
+  it('returns 404 when the target is not a member of the room', async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const outsider = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const room = await createGroupRoom(admin.id);
+    const agent = await loginAs(admin);
+
+    const notAMember = await agent.delete(`/chatrooms/${room.id}/members/${outsider.id}`);
+    const noSuchUser = await agent.delete(`/chatrooms/${room.id}/members/999999`);
+
+    for (const res of [notAMember, noSuchUser]) {
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ message: 'Member not found in this chat room' });
+    }
+    expect(await memberIdsOf(room.id)).toEqual([admin.id]);
+  });
+
+  it("returns 404 when the requester isn't a member of the room", async () => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const stranger = await createUser('Bob', 'bob@example.com', '+14155552672');
+    const room = await createGroupRoom(admin.id);
+    const agent = await loginAs(stranger);
+
+    const res = await agent.delete(`/chatrooms/${room.id}/members/${admin.id}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ message: 'Chat room not found' });
+    expect(await memberIdsOf(room.id)).toEqual([admin.id]);
+  });
+
+  it('rejects an unauthenticated request', async () => {
+    const res = await request(app).delete('/chatrooms/1/members/2');
+
+    expect(res.status).toBe(401);
+  });
+
+  it.each([
+    ['a non-numeric id', 'abc'],
+    ['a decimal id', '1.5'],
+    ['a zero id', '0'],
+    ['a negative id', '-3'],
+    ['an id in scientific notation', '1e3'],
+    ['an id larger than a Postgres integer', '2147483648'],
+  ])('rejects %s with 400', async (_label, userId) => {
+    const admin = await createUser('Alice', 'alice@example.com', '+14155552671');
+    const room = await createGroupRoom(admin.id);
+    const agent = await loginAs(admin);
+
+    const res = await agent.delete(`/chatrooms/${room.id}/members/${userId}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ message: 'Invalid user id' });
+    expect(await memberIdsOf(room.id)).toEqual([admin.id]);
+  });
+
+  describe('in a direct room', () => {
+    it("rejects removing the other member, even though both users are admins", async () => {
+      const alice = await createUser('Alice', 'alice@example.com', '+14155552671');
+      const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+      const room = await createDirectRoom(alice.id, bob.id);
+      const agent = await loginAs(alice);
+
+      const res = await agent.delete(`/chatrooms/${room.id}/members/${bob.id}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body).toEqual({
+        message: 'You can only remove yourself from a direct chat room',
+      });
+      expect(await memberIdsOf(room.id)).toEqual([alice.id, bob.id]);
+    });
+
+    it('lets a member leave without the last-admin rule getting in the way', async () => {
+      const alice = await createUser('Alice', 'alice@example.com', '+14155552671');
+      const bob = await createUser('Bob', 'bob@example.com', '+14155552672');
+      const room = await createDirectRoom(alice.id, bob.id);
+      const aliceAgent = await loginAs(alice);
+      const bobAgent = await loginAs(bob);
+
+      const aliceLeaves = await aliceAgent.delete(`/chatrooms/${room.id}/members/${alice.id}`);
+      expect(aliceLeaves.status).toBe(204);
+      expect(await memberIdsOf(room.id)).toEqual([bob.id]);
+      expect((await prisma.chatRoom.findUniqueOrThrow({ where: { id: room.id } })).emptiedAt).toBeNull();
+
+      // Bob is now the only member (and the only admin), so nobody else is
+      // left for the last-admin rule to protect.
+      const bobLeaves = await bobAgent.delete(`/chatrooms/${room.id}/members/${bob.id}`);
+      expect(bobLeaves.status).toBe(204);
+      expect(await memberIdsOf(room.id)).toEqual([]);
+      expect(await prisma.chatRoom.findUnique({ where: { id: room.id } })).not.toBeNull();
+      expect((await prisma.chatRoom.findUniqueOrThrow({ where: { id: room.id } })).emptiedAt).not.toBeNull();
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { ChatMemberRole } from '../generated/prisma/client';
+import { ChatMemberRole, ChatRoomType } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 
 /**
@@ -73,4 +73,79 @@ export async function addMembersToExistingChatRoom(chatId: number, memberIds: nu
   });
 
   return { addedMembers, alreadyMemberIds };
+}
+
+export type RemoveChatMemberResult =
+  | 'removed'
+  // The target isn't in this room (or the room itself no longer exists).
+  | 'not_a_member'
+  // Refused: the target is the room's only admin and other members remain.
+  | 'only_admin';
+
+/**
+ * Removes one member from a room (DELETE /chatrooms/:chatid/members/:userid).
+ * Used both for "leave" (target is the requester) and for an admin removing
+ * someone else - who is allowed to do which is decided by the controller.
+ *
+ * Business rule enforced here: a group room that still has members must
+ * always keep at least one admin, so the only admin can't be removed while
+ * anyone else remains. Direct rooms are exempt (both members are admins).
+ * The room row itself is never deleted here: when the last member leaves,
+ * the room is stamped with `emptiedAt` and stays (with no members) until the
+ * cleanup job deletes it after the retention period
+ * (see ChatRoomCleanupServices.ts).
+ *
+ * Why the room row is locked (SELECT ... FOR UPDATE): the rule above is
+ * "check the admin count, then delete". Without a lock, two admins leaving
+ * at the same moment can both pass the check (each still sees the other as
+ * an admin) and both get deleted, leaving members and no admin. Locking the
+ * room row makes concurrent removals in the same room run one at a time, so
+ * the second one re-reads the counts after the first has finished.
+ */
+export async function removeMemberFromChatRoom(
+  chatId: number,
+  targetId: number,
+  roomType: ChatRoomType
+): Promise<RemoveChatMemberResult> {
+  return prisma.$transaction(async (tx) => {
+    const lockedRooms = await tx.$queryRaw<{ id: number }[]>`
+      SELECT id FROM chat_rooms WHERE id = ${chatId} FOR UPDATE
+    `;
+    if (lockedRooms.length === 0) {
+      return 'not_a_member';
+    }
+
+    const target = await tx.chatMember.findUnique({
+      where: { memberId_chatId: { memberId: targetId, chatId } },
+      select: { role: true },
+    });
+    if (!target) {
+      return 'not_a_member';
+    }
+
+    if (roomType === ChatRoomType.group && target.role === ChatMemberRole.admin) {
+      const adminCount = await tx.chatMember.count({
+        where: { chatId, role: ChatMemberRole.admin },
+      });
+      const memberCount = await tx.chatMember.count({ where: { chatId } });
+
+      if (adminCount === 1 && memberCount > 1) {
+        return 'only_admin';
+      }
+    }
+
+    const { count } = await tx.chatMember.deleteMany({
+      where: { chatId, memberId: targetId },
+    });
+    if (count === 0) {
+      return 'not_a_member';
+    }
+
+    // The last member just left: start the clock for the delayed cleanup.
+    // Done in this transaction so the room is never empty without a stamp.
+    if ((await tx.chatMember.count({ where: { chatId } })) === 0) {
+      await tx.chatRoom.update({ where: { id: chatId }, data: { emptiedAt: new Date() } });
+    }
+    return 'removed';
+  });
 }

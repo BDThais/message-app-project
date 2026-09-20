@@ -144,6 +144,27 @@ export function validateAddMembersBody(body: unknown): AddMembersValidation {
   return { valid: true, data: { memberIds: Array.from(new Set(member_ids as number[])) } };
 }
 
+type UserIdParamValidation =
+  | { valid: true; data: { userId: number } }
+  | { valid: false; message: string };
+
+/**
+ * Validates the ':userid' URL param of /chatrooms/:chatid/members/:userid.
+ * Only plain digit strings are accepted, so forms Number() would happily
+ * coerce - '1e3', ' 5 ', '0x10', '' - are rejected instead of silently
+ * pointing at some other user.
+ */
+export function validateUserIdParam(rawUserId: unknown): UserIdParamValidation {
+  const userId =
+    typeof rawUserId === 'string' && /^\d+$/.test(rawUserId) ? Number(rawUserId) : NaN;
+
+  if (!Number.isInteger(userId) || userId < 1 || userId > MAX_USER_ID) {
+    return { valid: false, message: 'Invalid user id' };
+  }
+
+  return { valid: true, data: { userId } };
+}
+
 function isValidHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);
