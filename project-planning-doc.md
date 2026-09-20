@@ -41,6 +41,7 @@ Completed:
 - PATCH /chatrooms/:chatid
 - DELETE /chatrooms/:chatid
 - POST /chatrooms/:chatid/members
+- DELETE /chatrooms/:chatid/members/:userid
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Basic room summaries with latest-message metadata
@@ -350,13 +351,20 @@ POST /chatrooms/:chatid/members (implemented)
   }
   ```
 
-DELETE /chatrooms/:chatid/members/:userid
+DELETE /chatrooms/:chatid/members/:userid (implemented)
 
 - remove a member from the room (delete their ChatMember record)
 - a user can always remove themself (leave); removing someone else requires admin
 - if the chat room is of type "direct", don't let them remove any member other than themself even if they're admin
 - reject with 409 if the target is the room's only remaining admin and other members are still present (basically speaking, the group room admin can't remove themself if they're the only admin in the group room). This rule doesn't apply to direct room since direct room only have 2 members and both are admins
 - if there are less than 1 member in the room after a removal (usually mean that the last member is an admin and they remove themself), then that mean there are no longer any ChatMember record that linked to this ChatRoom record and the ChatRoom record will be deleted after a set period of time along with it's messages.  
+- `:userid` must be a positive integer user ID, otherwise `400`
+- responds `204 No Content` (no response body) when the member was removed
+- responds `403` when a non-admin tries to remove someone else, or when anyone tries to remove the other member of a direct room
+- responds `404` when the target user is not a member of this room (a requester who is not in the room gets the usual `404` from the membership check)
+- responds `409` when the target is the room's only admin and other members are still present
+- this endpoint never deletes the ChatRoom record itself: when the last member leaves, it stamps the room's `emptied_at` in the same transaction, and the room is deleted later by the cleanup job (see "Empty chat room cleanup")
+- the room row is locked (`SELECT ... FOR UPDATE`) while the removal runs, so two admins leaving at the same moment cannot both pass the only-admin check and leave a room with members but no admin
 
 PATCH /chatrooms/:chatid/members/:userid
 
@@ -433,6 +441,8 @@ message-app/
 │   │   │   ├── ChatRoomValidators.ts
 │   │   │   ├── LoginValidator.ts
 │   │   │   └── SignUpFormValidators.ts
+│   │   ├── jobs/
+│   │   │   └── EmptyChatRoomCleanup.ts
 │   │   ├── lib/
 │   │   │   ├── passwordHash.ts
 │   │   │   └── prisma.ts
@@ -447,6 +457,7 @@ message-app/
 │   │   └── services/
 │   │       ├── AccountServices.ts
 │   │       ├── ChatMemberServices.ts
+│   │       ├── ChatRoomCleanupServices.ts
 │   │       ├── ChatRoomServices.ts
 │   │       └── SessionServices.ts
 │   └── test/
@@ -456,6 +467,17 @@ message-app/
 │       └── AccountSignupController.test.ts
 ├── project-planning-doc.md
 └── README.md
+
+## Empty chat room cleanup
+
+A room whose last member has left is not deleted on the spot. `DELETE /chatrooms/:chatid/members/:userid` stamps the room's `emptied_at` column in the same transaction as the removal, and a job running inside the API process deletes the room once it has stayed empty for the retention period. Deleting the room cascades to its messages.
+
+- `EMPTY_ROOM_RETENTION_MS`: how long a room stays empty before it is deleted (default 7 days)
+- `EMPTY_ROOM_CLEANUP_INTERVAL_MS`: how often the job looks for expired rooms (default 1 hour); it also sweeps once when the server starts
+- each sweep first stamps any empty room that has no `emptied_at` yet (for example when every member's account was deleted), so its retention clock starts then, and then deletes rooms whose stamp is older than the retention period
+- a room that has members is never deleted, whatever its `emptied_at` says
+- the job is started from `server.ts`, not `app.ts`, so tests that import the app do not start a timer
+- a room with no members cannot be reached through the API (every `/chatrooms/:chatid` route requires membership), so nothing can add members back to a room that is waiting for cleanup
 
 ## Cookie / CORS Notes
 
