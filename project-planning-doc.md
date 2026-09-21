@@ -33,10 +33,10 @@ Scripts (run from `server/`):
 - `npm run db:test:up` / `npm run db:test:down`: start or stop the test database container
 - `npm run db:test:deploy`: apply the Prisma migrations to the test database
 - `npm run db:test:reset`: reset the test database and re-apply all migrations
-- `npm run test:unit`: run Vitest with `vitest.unit.config.ts`, which has no database setup file
+- `npm run test:unit`: run only the database-free tests (files named `*.unit.test.ts`, see `vitest.unit.config.ts`); no database needed
 
-Note: `test:unit` has no file filter, so it also picks up the integration test files and runs them without the safety
-checks in `test/setup.ts`. Only `EmptyChatRoomCleanupJob.test.ts` is database-free.
+Name any new database-free test `*.unit.test.ts` so `test:unit` picks it up. Every other test file is an integration
+test and needs the test database.
 
 ## Current Implementation Status
 
@@ -461,11 +461,12 @@ message-app/
     ├── prisma.config.ts
     ├── tsconfig.json
     ├── vitest.config.ts             // integration tests (uses test/setup.ts)
-    ├── vitest.unit.config.ts        // Vitest without the database setup file
+    ├── vitest.unit.config.ts        // runs only test/**/*.unit.test.ts (no database)
     ├── prisma/
     │   ├── schema.prisma
     │   └── migrations/              // Database migration history
     ├── scripts/
+    │   ├── fix-esm-imports.mjs      // after tsc: adds .js to the relative imports in dist/
     │   └── test-db.mjs              // up | down | deploy | reset for the test database
     ├── src/
     │   ├── app.ts
@@ -503,7 +504,7 @@ message-app/
         ├── AccountSignupController.test.ts
         ├── ChatRoomController.test.ts
         ├── EmptyChatRoomCleanup.test.ts
-        └── EmptyChatRoomCleanupJob.test.ts
+        └── EmptyChatRoomCleanupJob.unit.test.ts
 ```
 
 Conventions:
@@ -516,6 +517,7 @@ Conventions:
 - Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.
 - Background jobs live in the folder of the feature they belong to and are started from `server.ts`, never from `app.ts`, so tests that import the app do not start timers.
 - Tests live in `server/test/` and import from `../src/...`.
+- `npm run build` runs `tsc` and then `scripts/fix-esm-imports.mjs`. The source keeps extensionless imports, but Node's ESM loader needs real file names, so the script rewrites the relative imports in `dist/` (`./app` becomes `./app.js`, a folder import becomes `./dir/index.js`) and fails the build if an import points at nothing. `npm start` runs `node dist/server.js`.
 
 ## Empty chat room cleanup
 
@@ -609,7 +611,7 @@ HTTP request
 3. Implement real-time communication with Socket.io
 4. Build the React frontend and integrate with TanStack Query
 5. Add authentication-aware UI states and protected routes
-6. Add deployment configuration and production hardening (note: the `npm run build` output currently cannot be started with `npm start`, because Node's ESM loader rejects the extensionless relative imports in `dist/`)
+6. Add deployment configuration and production hardening
 
 ## Notes
 
