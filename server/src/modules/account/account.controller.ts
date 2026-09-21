@@ -1,11 +1,12 @@
 import type { Request, Response, NextFunction } from 'express';
-import { hashPassword } from '../lib/passwordHash';
-import { validateAccountBody, checkDuplication } from './SignUpFormValidators';
-import type { AccountBody } from './SignUpFormValidators';
-import { validateLogin } from './LoginValidator';
-import { createUser } from '../services/AccountServices';
-import { createSession, getSessionUser, deleteSession, clearSessionCookie } from '../services/SessionServices';
-import config from '../config/config';
+import { hashPassword } from '../../lib/passwordHash';
+import { validateAccountBody, checkDuplication } from './signup.validator';
+import type { AccountBody } from './signup.validator';
+import { validateLogin } from './login.validator';
+import { createUser } from './account.service';
+import { createSession, deleteSession } from './session.service';
+import { getSessionUser, setSessionCookie, clearSessionCookie } from '../../middlewares/SessionCookie';
+import config from '../../config/config';
 
 export async function signup(req: Request, res: Response, next: NextFunction) {
     try {
@@ -58,7 +59,8 @@ export async function login(req: Request, res: Response, next: NextFunction) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
   
-    await createSession(res, user.id);
+    const session = await createSession(user.id);
+    setSessionCookie(res, session);
   
     res.status(200).json({
       user: { id: user.id, name: user.name, email: user.email, tel: user.tel },

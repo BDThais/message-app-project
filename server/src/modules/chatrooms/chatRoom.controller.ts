@@ -2,13 +2,13 @@ import type { Request, Response, NextFunction } from 'express';
 import {
   validateCreateChatRoomInput, validateUpdateChatRoomBody, validateAddMembersBody,
   validateUserIdParam
-} from './ChatRoomValidators';
-import { addMembersToExistingChatRoom, removeMemberFromChatRoom } from '../services/ChatMemberServices';
+} from './chatRoom.validator';
+import { addMembersToExistingChatRoom, removeMemberFromChatRoom } from './chatMember.service';
 import {
   createChatRoom as createChatRoomService, updateChatRoomById,
   getDirectChatRoomsForUser, getGroupChatRoomsForUser, activityTimestamp,
   deleteChatRoomById, isForeignKeyConstraintError
-} from '../services/ChatRoomServices';
+} from './chatRoom.service';
 
 export async function createChatRoom(req: Request, res: Response) {
   if (!req.user) {

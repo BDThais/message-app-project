@@ -1,4 +1,4 @@
-import { purgeExpiredEmptyChatRooms } from '../services/ChatRoomCleanupServices';
+import { purgeExpiredEmptyChatRooms } from './chatRoomCleanup.service';
 
 // setInterval silently turns any delay above this (about 24.8 days) into 1 ms.
 const MAX_TIMER_DELAY_MS = 2_147_483_647;

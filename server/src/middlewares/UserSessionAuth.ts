@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { getSessionUser } from '../services/SessionServices';
+import { getSessionUser } from './SessionCookie';
 
 // Derived from getSessionUser's own return type rather than importing Prisma's User
 // type directly, so this stays correct even if getSessionUser returns a trimmed-down

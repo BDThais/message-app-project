@@ -1,7 +1,7 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
-import accountRoutes from './routes/AccountRoutes';
-import chatroomRoutes from './routes/ChatRoomRoutes';
+import accountRoutes from './modules/account/account.routes';
+import chatroomRoutes from './modules/chatrooms/chatRoom.routes';
 import { errorHandler } from './middlewares/ErrorHandler';
 
 const app = express();

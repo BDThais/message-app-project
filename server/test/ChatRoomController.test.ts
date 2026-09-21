@@ -3,7 +3,7 @@ import request from 'supertest';
 import app from '../src/app';
 import { hashPassword } from '../src/lib/passwordHash';
 import { prisma } from '../src/lib/prisma';
-import { purgeExpiredEmptyChatRooms } from '../src/services/ChatRoomCleanupServices';
+import { purgeExpiredEmptyChatRooms } from '../src/modules/chatrooms/chatRoomCleanup.service';
 
 // loginAs() logs in through the real /account/login route, whose limiter allows
 // only 10 attempts per 15 minutes per IP (in memory, shared by the whole file).

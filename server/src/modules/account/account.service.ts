@@ -1,4 +1,4 @@
-import { prisma } from '../lib/prisma';
+import { prisma } from '../../lib/prisma';
 
 export function findExistingUser(email: string, tel: string) {
 	return prisma.user.findFirst({

@@ -41,9 +41,8 @@ Next priorities:
 - Frontend workspace: frontend/
 - Backend server: server/
 - App entry point: server/src/app.ts
-- Route definitions: server/src/routes/
-- Controllers and validators: server/src/controllers/
-- Middleware and services: server/src/middlewares/ and server/src/services/
+- Feature modules (routes, controllers, services, validators per feature): server/src/modules/
+- Middleware shared by several features: server/src/middlewares/
 - Prisma schema and migrations: server/prisma/
 
 ## API

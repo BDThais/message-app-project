@@ -15,15 +15,28 @@ The backend has grown beyond the original account/session MVP and now includes a
 - TanStack Query
 - Socket.io
 - TanStack Router
+- Argon2 (password hashing), cookie-parser, express-rate-limit
+- Vitest + Supertest (tests), Docker Compose (test database)
 
 ## Test database setup
 
-Backend integration tests use a separate PostgreSQL database provided by
-`server/docker-compose.test.yml`. Copy `server/.env.test.example` to
+Backend tests are integration tests (Vitest + Supertest) that run against a separate PostgreSQL database provided by
+`server/docker-compose.test.yml` (`chatapp_test`, port 55432). Copy `server/.env.test.example` to
 `server/.env.test` once, then run `npm test` from `server/`. The test command
-starts the container, deploys the existing Prisma migrations, and cleans test
-records between cases. It does not use the development database configured in
-`server/.env`.
+starts the container, deploys the existing Prisma migrations, and runs Vitest.
+`test/setup.ts` refuses to run unless `NODE_ENV=test` and the database is `chatapp_test`, and it empties every table
+before each test. It does not use the development database configured in `server/.env`.
+
+Scripts (run from `server/`):
+
+- `npm test`: start the test database, apply migrations, run every test file (one at a time)
+- `npm run db:test:up` / `npm run db:test:down`: start or stop the test database container
+- `npm run db:test:deploy`: apply the Prisma migrations to the test database
+- `npm run db:test:reset`: reset the test database and re-apply all migrations
+- `npm run test:unit`: run Vitest with `vitest.unit.config.ts`, which has no database setup file
+
+Note: `test:unit` has no file filter, so it also picks up the integration test files and runs them without the safety
+checks in `test/setup.ts`. Only `EmptyChatRoomCleanupJob.test.ts` is database-free.
 
 ## Current Implementation Status
 
@@ -45,6 +58,8 @@ Completed:
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Basic room summaries with latest-message metadata
+- Automatic cleanup of chat rooms that stay empty (see "Empty chat room cleanup")
+- Integration tests for the account endpoints, the chat-room endpoints and the empty-room cleanup
 
 Still planned or not yet implemented:
 
@@ -61,14 +76,18 @@ Note: In the database, the mutual friendship model stores two rows per friendshi
 
 ## Permission model
 
-Action                     admin  member
-Send / read messages         ✅     ✅
-Update room name/avatar      ✅     ❌
-Delete room                  ✅     ❌
-Add members                  ✅     ❌
-Remove other members         ✅     ❌
-Leave the room               ✅     ✅
-Promote/demote a member      ✅     ❌
+| Action                  | admin | member |
+| ----------------------- | :---: | :----: |
+| Send / read messages    |  ✅   |   ✅   |
+| Update room name/avatar |  ✅   |   ❌   |
+| Delete room             |  ✅   |   ❌   |
+| Add members             |  ✅   |   ❌   |
+| Remove other members    |  ✅   |   ❌   |
+| Leave the room          |  ✅   |   ✅   |
+| Promote/demote a member |  ✅   |   ❌   |
+
+Implemented so far: update, delete, add members, remove members and leave. Sending/reading messages and promoting/demoting
+members are planned (their route lines in `chatRoom.routes.ts` are still commented out).
 
 ## API Status
 
@@ -91,7 +110,7 @@ POST /account/signup
   }
   ```
 
-- return body:
+- return body (`201`):
 
   ```json
   {
@@ -99,12 +118,16 @@ POST /account/signup
   }
   ```
 
+- responds `400` with `{ "error": ... }` when validation fails and `409` when the email or phone number is already taken
+
 POST /account/login
 
 - Validates the supplied email/password
 - Returns a generic invalid credentials message for both failed user and password checks
-- Destroys any stale session for the same user
+- Deletes any expired session already stored for the same user
 - Creates a new session and sets the session cookie
+- Rate limited to 10 attempts per 15 minutes per IP (`429` afterwards)
+- responds `400` when email or password is missing or not a string, and `401` for invalid credentials
 - incoming body:
 
   ```json
@@ -189,6 +212,8 @@ POST /chatrooms (implemented)
   ```
 
 - a group room can also be created without `member_ids` or with additional member IDs, for example `"member_ids": [2, 3]`
+- responds `201` when a new room is created and `200` when an existing direct room between the same two users is reused
+- responds `400` on validation errors or when a `member_ids` entry does not refer to an existing user
 - return body:
 
   ```json
@@ -417,60 +442,85 @@ DELETE /friend/requests/:id
 
 ## Project Structure
 
-The repository contains a frontend workspace and a TypeScript/Express server with Prisma persistence, authentication, and the current chat-room backend implementation.
-Generated files created by tools such as Prisma are omitted from this structure, while the source-controlled Prisma schema remains documented.
-All database operations are kept in the `/services` folder.
+The repository contains a TypeScript/Express server with Prisma persistence, authentication, and the current chat-room backend implementation. The React frontend has not been created yet.
+Generated files created by tools such as Prisma (`server/src/generated/`) are omitted from this structure, while the source-controlled Prisma schema remains documented.
 
+The server is organized by feature: each folder under `src/modules/` holds everything for one feature (routes, controller, validators, services, feature-specific middleware and jobs). Only code shared by several features lives in `src/middlewares/` and `src/lib/`.
+
+```text
 message-app/
-├── frontend/                   // Empty frontend workspace
-├── server/
-│   ├── package.json
-│   ├── prisma.config.ts
-│   ├── tsconfig.json
-│   ├── prisma/
-│   │   ├── schema.prisma
-│   │   └── migrations/         // Database migration history
-│   ├── src/
-│   │   ├── app.ts
-│   │   ├── server.ts
-│   │   ├── config/
-│   │   │   └── config.ts
-│   │   ├── controllers/
-│   │   │   ├── AccountControllers.ts
-│   │   │   ├── ChatRoomControllers.ts
-│   │   │   ├── ChatRoomValidators.ts
-│   │   │   ├── LoginValidator.ts
-│   │   │   └── SignUpFormValidators.ts
-│   │   ├── jobs/
-│   │   │   └── EmptyChatRoomCleanup.ts
-│   │   ├── lib/
-│   │   │   ├── passwordHash.ts
-│   │   │   └── prisma.ts
-│   │   ├── middlewares/
-│   │   │   ├── ChatRoomAuth.ts
-│   │   │   ├── ErrorHandler.ts
-│   │   │   ├── RateLimiter.ts
-│   │   │   └── UserSessionAuth.ts
-│   │   ├── routes/
-│   │   │   ├── AccountRoutes.ts
-│   │   │   └── ChatRoomRoutes.ts
-│   │   └── services/
-│   │       ├── AccountServices.ts
-│   │       ├── ChatMemberServices.ts
-│   │       ├── ChatRoomCleanupServices.ts
-│   │       ├── ChatRoomServices.ts
-│   │       └── SessionServices.ts
-│   └── test/
-│       ├── account-login-me-logout.http
-│       ├── account-signup.http
-│       ├── AccountSessionController.test.ts
-│       └── AccountSignupController.test.ts
+├── .dockerignore
+├── .gitignore
 ├── project-planning-doc.md
-└── README.md
+├── README.md
+├── frontend/                        // planned, not created yet
+└── server/
+    ├── .env.test.example            // template for .env.test (test database settings)
+    ├── docker-compose.test.yml      // throwaway PostgreSQL used by the tests
+    ├── package.json
+    ├── prisma.config.ts
+    ├── tsconfig.json
+    ├── vitest.config.ts             // integration tests (uses test/setup.ts)
+    ├── vitest.unit.config.ts        // Vitest without the database setup file
+    ├── prisma/
+    │   ├── schema.prisma
+    │   └── migrations/              // Database migration history
+    ├── scripts/
+    │   └── test-db.mjs              // up | down | deploy | reset for the test database
+    ├── src/
+    │   ├── app.ts
+    │   ├── server.ts
+    │   ├── config/
+    │   │   └── config.ts
+    │   ├── lib/
+    │   │   ├── passwordHash.ts
+    │   │   └── prisma.ts
+    │   ├── middlewares/             // shared by several features
+    │   │   ├── ErrorHandler.ts
+    │   │   ├── RateLimiter.ts
+    │   │   ├── SessionCookie.ts     // set/clear/read the session cookie
+    │   │   └── UserSessionAuth.ts   // requireUserAuth
+    │   └── modules/
+    │       ├── account/
+    │       │   ├── account.routes.ts
+    │       │   ├── account.controller.ts
+    │       │   ├── account.service.ts
+    │       │   ├── session.service.ts   // session database operations
+    │       │   ├── login.validator.ts
+    │       │   └── signup.validator.ts
+    │       └── chatrooms/
+    │           ├── chatRoom.routes.ts
+    │           ├── chatRoom.controller.ts
+    │           ├── chatRoom.validator.ts
+    │           ├── chatRoomAuth.middleware.ts   // loadChatMembership, requireGroupRoom, requireChatAdmin
+    │           ├── chatRoom.service.ts
+    │           ├── chatMember.service.ts
+    │           ├── chatRoomCleanup.service.ts
+    │           └── chatRoomCleanup.job.ts
+    └── test/
+        ├── setup.ts
+        ├── AccountSessionController.test.ts
+        ├── AccountSignupController.test.ts
+        ├── ChatRoomController.test.ts
+        ├── EmptyChatRoomCleanup.test.ts
+        └── EmptyChatRoomCleanupJob.test.ts
+```
+
+Conventions:
+
+- File names follow `<subject>.<role>.ts`, for example `chatRoom.service.ts` or `login.validator.ts`.
+- A new feature gets its own folder under `src/modules/` with its routes, controller, validator(s) and service(s); its router is mounted in `app.ts`.
+- All database operations are kept in the `*.service.ts` files and go through the shared Prisma client from `src/lib/prisma.ts`. There is no separate repositories layer, so a transaction (room creation, member removal) stays inside one service function.
+- Services never import Express (no `req`, `res` or cookies). HTTP concerns live in controllers and middleware, so other entry points, such as the future Socket.io handlers, can call the same services.
+- Middleware used by a single feature lives in that feature's folder (for example `chatRoomAuth.middleware.ts`); `src/middlewares/` only holds middleware shared across features.
+- Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.
+- Background jobs live in the folder of the feature they belong to and are started from `server.ts`, never from `app.ts`, so tests that import the app do not start timers.
+- Tests live in `server/test/` and import from `../src/...`.
 
 ## Empty chat room cleanup
 
 A room whose last member has left is not deleted on the spot. `DELETE /chatrooms/:chatid/members/:userid` stamps the room's `emptied_at` column in the same transaction as the removal, and a job running inside the API process deletes the room once it has stayed empty for the retention period. Deleting the room cascades to its messages.
+The job is `modules/chatrooms/chatRoomCleanup.job.ts` (timer, validation of the two settings below) and the database work is `chatRoomCleanup.service.ts` (`purgeExpiredEmptyChatRooms`).
 
 - `EMPTY_ROOM_RETENTION_MS`: how long a room stays empty before it is deleted (default 7 days)
 - `EMPTY_ROOM_CLEANUP_INTERVAL_MS`: how often the job looks for expired rooms (default 1 hour); it also sweeps once when the server starts
@@ -482,6 +532,7 @@ A room whose last member has left is not deleted on the spot. `DELETE /chatrooms
 ## Cookie / CORS Notes
 
 When sending cookies from a frontend, the server must allow credentials and the frontend origin must be explicitly allowed.
+Not set up yet: `cors` is not a dependency and `app.ts` does not use it. Add it before the frontend starts calling the API from `http://localhost:5173`.
 
 Example Express setup:
 
@@ -508,9 +559,9 @@ The backend follows a layered request flow:
 2.**Authentication**
 
 - Account signup and login validate the incoming body in their controllers before calling the account services.
-- Login verifies the password, removes any stale session for the user, creates a new session, and sends the session cookie in the response.
-- Protected chat-room routes run `requireUserAuth`, which reads the session cookie, loads the user through `SessionServices`, and attaches the authenticated user to `req.user`.
-- `/account/me` uses the same session lookup but returns `user: null` when no valid session exists. Logout deletes the session when present and clears the cookie.
+- Login verifies the password, then `createSession` (`session.service.ts`) deletes the user's expired sessions and stores a new one, and `setSessionCookie` (`middlewares/SessionCookie.ts`) sends the session cookie in the response.
+- Protected chat-room routes run `requireUserAuth`, which calls `getSessionUser` in `middlewares/SessionCookie.ts`: it reads the session cookie, resolves it through `findSessionUser` in `session.service.ts`, clears the cookie when the session has expired, and returns the user, which `requireUserAuth` attaches to `req.user`.
+- `/account/me` uses the same `getSessionUser` lookup but returns `user: null` when no valid session exists. Logout deletes the session when present and clears the cookie.
 
 3.**Route-level authorization**
 
@@ -525,8 +576,8 @@ The backend follows a layered request flow:
 
 5.**Service and database flow**
 
-- Services contain all database operations and use the shared Prisma client from `src/lib/prisma`.
-- Account services create and find users. Session services create, read, and delete sessions.
+- Services contain all database operations and use the shared Prisma client from `src/lib/prisma`. They do not import Express.
+- Account services create and find users. The session service creates, reads, and deletes sessions (rows only; cookies are handled in `middlewares/SessionCookie.ts`).
 - Chat-room services create rooms and memberships in a Prisma transaction, load direct and group rooms, retrieve the latest message for room summaries, and update or delete rooms.
 - Direct-room responses derive the room name and avatar from the other member; group-room responses use the room's own name and avatar fields.
 
@@ -558,7 +609,7 @@ HTTP request
 3. Implement real-time communication with Socket.io
 4. Build the React frontend and integrate with TanStack Query
 5. Add authentication-aware UI states and protected routes
-6. Add deployment configuration and production hardening
+6. Add deployment configuration and production hardening (note: the `npm run build` output currently cannot be started with `npm start`, because Node's ESM loader rejects the extensionless relative imports in `dist/`)
 
 ## Notes
 

@@ -1,6 +1,6 @@
 import validator from 'validator';
 import { isValidPhoneNumber } from 'libphonenumber-js';
-import { findExistingUser } from '../services/AccountServices';
+import { findExistingUser } from './account.service';
 
 export type AccountBody = {
   name: string;

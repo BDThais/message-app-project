@@ -1,6 +1,6 @@
-import { addChatRoomMembers } from './ChatMemberServices';
-import { prisma } from '../lib/prisma';
-import { Prisma, ChatRoomType, ChatMemberRole } from '../generated/prisma/client';
+import { addChatRoomMembers } from './chatMember.service';
+import { prisma } from '../../lib/prisma';
+import { Prisma, ChatRoomType, ChatMemberRole } from '../../generated/prisma/client';
 
 const memberInclude = {
   members: {

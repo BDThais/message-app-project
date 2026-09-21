@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { prisma } from '../src/lib/prisma';
-import { purgeExpiredEmptyChatRooms } from '../src/services/ChatRoomCleanupServices';
+import { purgeExpiredEmptyChatRooms } from '../src/modules/chatrooms/chatRoomCleanup.service';
 
 const retentionMs = 7 * 24 * 60 * 60 * 1000;
 const now = new Date('2026-09-20T12:00:00.000Z');

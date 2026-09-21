@@ -1,5 +1,5 @@
-import { verifyPassword } from '../lib/passwordHash';
-import { findUserByEmail } from '../services/AccountServices';
+import { verifyPassword } from '../../lib/passwordHash';
+import { findUserByEmail } from './account.service';
 
 /**
  * Checks an email/password pair against the database.

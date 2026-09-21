@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { getChatMembership } from '../services/ChatRoomServices.js';
+import { getChatMembership } from './chatRoom.service';
 
 // Attached by loadChatMembership below on any route with a ':chatid'
 // param. Every handler downstream can trust this is populated - if it

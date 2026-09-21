@@ -1,9 +1,9 @@
-import { prisma } from '../lib/prisma';
+import { prisma } from '../../lib/prisma';
 
 /**
  * Deletes chat rooms that have stayed empty for longer than the retention
  * period. Deleting a room cascades to its messages (onDelete: Cascade in the
- * schema). Called on a timer by jobs/EmptyChatRoomCleanup.ts.
+ * schema). Called on a timer by chatRoomCleanup.job.ts.
  *
  * Two steps, so the cleanup doesn't depend on every code path remembering to
  * stamp a room when it empties:

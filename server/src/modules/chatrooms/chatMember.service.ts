@@ -1,5 +1,5 @@
-import { ChatMemberRole, ChatRoomType } from '../generated/prisma/client';
-import { prisma } from '../lib/prisma';
+import { ChatMemberRole, ChatRoomType } from '../../generated/prisma/client';
+import { prisma } from '../../lib/prisma';
 
 /**
  * Minimal shape needed to write chat_members rows. Both the main `prisma`
@@ -93,7 +93,7 @@ export type RemoveChatMemberResult =
  * The room row itself is never deleted here: when the last member leaves,
  * the room is stamped with `emptiedAt` and stays (with no members) until the
  * cleanup job deletes it after the retention period
- * (see ChatRoomCleanupServices.ts).
+ * (see chatRoomCleanup.service.ts).
  *
  * Why the room row is locked (SELECT ... FOR UPDATE): the rule above is
  * "check the admin count, then delete". Without a lock, two admins leaving

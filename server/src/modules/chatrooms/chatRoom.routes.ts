@@ -1,8 +1,8 @@
 import Router from 'express';
-import { requireUserAuth } from '../middlewares/UserSessionAuth';
-import { createChatRoom, getChatRooms, getChatRoomById, updateChatRoom, deleteChatRoom, addChatRoomMembers, removeChatRoomMember } from '../controllers/ChatRoomControllers';
-import { loadChatMembership } from '../middlewares/ChatRoomAuth';
-import { requireGroupRoom, requireChatAdmin } from '../middlewares/ChatRoomAuth';
+import { requireUserAuth } from '../../middlewares/UserSessionAuth';
+import { createChatRoom, getChatRooms, getChatRoomById, updateChatRoom, deleteChatRoom, addChatRoomMembers, removeChatRoomMember } from './chatRoom.controller';
+import { loadChatMembership } from './chatRoomAuth.middleware';
+import { requireGroupRoom, requireChatAdmin } from './chatRoomAuth.middleware';
 
 const chatRoomRouter = Router();
 
