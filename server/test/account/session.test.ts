@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
-import app from '../src/app';
-import config from '../src/config/config';
-import { hashPassword } from '../src/lib/passwordHash';
-import { prisma } from '../src/lib/prisma';
+import app from '../../src/app';
+import config from '../../src/config/config';
+import { hashPassword } from '../../src/lib/passwordHash';
+import { prisma } from '../../src/lib/prisma';
 
 const loginRoute = '/account/login';
 const meRoute = '/account/me';

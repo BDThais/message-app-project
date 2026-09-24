@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
-import app from '../src/app';
-import { prisma } from '../src/lib/prisma';
-import { verifyPassword } from '../src/lib/passwordHash';
+import app from '../../src/app';
+import { prisma } from '../../src/lib/prisma';
+import { verifyPassword } from '../../src/lib/passwordHash';
 
 const signUpRoute = '/account/signup';
 

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { startEmptyChatRoomCleanup } from '../src/modules/chatrooms/chatRoomCleanup.job';
-import { purgeExpiredEmptyChatRooms } from '../src/modules/chatrooms/chatRoomCleanup.service';
+import { startEmptyChatRoomCleanup } from '../../src/modules/chatrooms/chatRoomCleanup.job';
+import { purgeExpiredEmptyChatRooms } from '../../src/modules/chatrooms/chatRoomCleanup.service';
 
-vi.mock('../src/modules/chatrooms/chatRoomCleanup.service', () => ({
+vi.mock('../../src/modules/chatrooms/chatRoomCleanup.service', () => ({
   purgeExpiredEmptyChatRooms: vi.fn(),
 }));
 

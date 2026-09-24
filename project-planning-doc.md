@@ -500,11 +500,20 @@ message-app/
     │           └── chatRoomCleanup.job.ts
     └── test/
         ├── setup.ts
-        ├── AccountSessionController.test.ts
-        ├── AccountSignupController.test.ts
-        ├── ChatRoomController.test.ts
-        ├── EmptyChatRoomCleanup.test.ts
-        └── EmptyChatRoomCleanupJob.unit.test.ts
+        ├── helpers/                          // shared fixtures, not test files
+        │   ├── users.ts                      // createUser, loginAs (session cookie without going through /account/login)
+        │   └── chatRooms.ts                  // createGroupRoom, createDirectRoom, promoteToAdmin, memberIdsOf
+        ├── account/
+        │   ├── session.test.ts               // login, me, logout
+        │   └── signup.test.ts
+        └── chatrooms/
+            ├── chatRoom.test.ts              // create, list, get, update and delete a room
+            ├── chatRoom.permissions.test.ts  // sign-in, membership, group-only and admin-only guards, per route
+            ├── chatRoomMembers.add.test.ts
+            ├── chatRoomMembers.remove.test.ts
+            ├── chatRoom.validator.unit.test.ts
+            ├── chatRoomCleanup.service.test.ts
+            └── chatRoomCleanup.job.unit.test.ts
 ```
 
 Conventions:
@@ -516,7 +525,8 @@ Conventions:
 - Middleware used by a single feature lives in that feature's folder (for example `chatRoomAuth.middleware.ts`); `src/middlewares/` only holds middleware shared across features.
 - Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.
 - Background jobs live in the folder of the feature they belong to and are started from `server.ts`, never from `app.ts`, so tests that import the app do not start timers.
-- Tests live in `server/test/` and import from `../src/...`.
+- Tests live in `server/test/`, in a folder per feature that mirrors `src/modules/` (`test/account/`, `test/chatrooms/`), and import from `../../src/...`. Shared fixtures live in `test/helpers/`. `loginAs(user)` creates the session row and sends its cookie directly, so no test outside `test/account/` depends on `/account/login` or its rate limiter.
+- Each test file covers what its part of the code owns: an endpoint file covers that endpoint's business rules plus one bad-input case to prove the validator is wired in; the full list of bad inputs is a table in `chatRoom.validator.unit.test.ts` (no database); `chatRoom.permissions.test.ts` covers the shared guards once per route, so a new route should be added to its lists. Keep a new test only if it guards a rule that is not already covered by another one.
 - `npm run build` runs `tsc` and then `scripts/fix-esm-imports.mjs`. The source keeps extensionless imports, but Node's ESM loader needs real file names, so the script rewrites the relative imports in `dist/` (`./app` becomes `./app.js`, a folder import becomes `./dir/index.js`) and fails the build if an import points at nothing. `npm start` runs `node dist/server.js`.
 
 ## Empty chat room cleanup
