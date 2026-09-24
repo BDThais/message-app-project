@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   validateAddMembersBody,
+  validateChatIdParam,
   validateCreateChatRoomInput,
   validateUpdateChatRoomBody,
   validateUserIdParam,
@@ -65,6 +66,7 @@ describe('validateUpdateChatRoomBody', () => {
   });
 
   it.each([
+    ['no body at all', undefined, 'At least either Name or Avatar must be provided'],
     ['an empty body', {}, 'At least either Name or Avatar must be provided'],
     ['a blank name', { name: '   ' }, "'name' must be a non-empty string"],
     ['a name that is not a string', { name: 5 }, "'name' must be a non-empty string"],
@@ -100,6 +102,23 @@ describe('validateAddMembersBody', () => {
       valid: false,
       message: "'member_ids' must be a non-empty array of user IDs",
     });
+  });
+});
+
+describe('validateChatIdParam', () => {
+  it('accepts a plain positive integer', () => {
+    expect(validateChatIdParam('42')).toEqual({ valid: true, data: { chatId: 42 } });
+  });
+
+  it.each([
+    ['a non-numeric id', 'abc'],
+    ['a decimal id', '1.5'],
+    ['a zero id', '0'],
+    ['a negative id', '-3'],
+    ['an id in scientific notation', '1e3'],
+    ['an id larger than a Postgres integer', '2147483648'],
+  ])('rejects %s', (_label, rawChatId) => {
+    expect(validateChatIdParam(rawChatId)).toEqual({ valid: false, message: 'Invalid chat room id' });
   });
 });
 

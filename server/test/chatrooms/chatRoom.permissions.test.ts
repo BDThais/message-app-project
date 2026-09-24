@@ -45,14 +45,17 @@ describe('every chat-room route', () => {
     }
   });
 
-  it('rejects a chat room id that is not an integer with 400', async () => {
+  it('rejects a chat room id that is not a valid integer with 400, not a 500', async () => {
     const user = await createUser('Alice');
     const agent = await loginAs(user);
 
-    const res = await agent.get('/chatrooms/abc');
+    // The second one is a real integer but too big for the database column.
+    for (const chatId of ['abc', '2147483648']) {
+      const res = await agent.get(`/chatrooms/${chatId}`);
 
-    expect(res.status).toBe(400);
-    expect(res.body).toEqual({ message: 'Invalid chat room id' });
+      expect(res.status, chatId).toBe(400);
+      expect(res.body).toEqual({ message: 'Invalid chat room id' });
+    }
   });
 });
 

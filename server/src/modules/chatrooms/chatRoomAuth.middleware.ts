@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { getChatMembership } from './chatRoom.service';
+import { validateChatIdParam } from './chatRoom.validator';
 
 // Attached by loadChatMembership below on any route with a ':chatid'
 // param. Every handler downstream can trust this is populated - if it
@@ -30,11 +31,11 @@ export async function loadChatMembership(
   next: NextFunction,
   rawChatId: string
 ) {
-  const chatId = Number(rawChatId);
-
-  if (!Number.isInteger(chatId)) {
-    return res.status(400).json({ message: 'Invalid chat room id' });
+  const validation = validateChatIdParam(rawChatId);
+  if (!validation.valid) {
+    return res.status(400).json({ message: validation.message });
   }
+  const { chatId } = validation.data;
 
   try {
     const membership = await getChatMembership(req.user!.id, chatId);
