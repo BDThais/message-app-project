@@ -1,6 +1,9 @@
 import Router from 'express';
 import { requireUserAuth } from '../../middlewares/UserSessionAuth';
-import { createChatRoom, getChatRooms, getChatRoomById, updateChatRoom, deleteChatRoom, addChatRoomMembers, removeChatRoomMember, changeChatRoomMemberRole, sendChatRoomMessage } from './chatRoom.controller';
+import {
+    createChatRoom, getChatRooms, getChatRoomById, updateChatRoom, deleteChatRoom, addChatRoomMembers,
+    removeChatRoomMember, changeChatRoomMemberRole, sendChatRoomMessage
+} from './chatRoom.controller';
 import { loadChatMembership } from './chatRoomAuth.middleware';
 import { requireGroupRoom, requireChatAdmin } from './chatRoomAuth.middleware';
 
@@ -21,6 +24,6 @@ chatRoomRouter.delete('/:chatid/members/:userid', removeChatRoomMember); // No b
 chatRoomRouter.patch('/:chatid/members/:userid', requireGroupRoom, requireChatAdmin, changeChatRoomMemberRole);
 
 chatRoomRouter.post('/:chatid/messages', sendChatRoomMessage); // membership alone is enough
-// chatRoomRouter.get('/:chatid/messages', getChatRoomMessages);   // membership alone is enough
+// chatRoomRouter.get('/:chatid/messages', getChatRoomMessages);
 
 export default chatRoomRouter;
