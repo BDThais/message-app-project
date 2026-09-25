@@ -1,9 +1,11 @@
 import type { Request, Response, NextFunction } from 'express';
 import {
   validateCreateChatRoomInput, validateUpdateChatRoomBody, validateAddMembersBody,
-  validateUserIdParam
+  validateUserIdParam, validateChangeMemberRoleBody
 } from './chatRoom.validator';
-import { addMembersToExistingChatRoom, removeMemberFromChatRoom } from './chatMember.service';
+import {
+  addMembersToExistingChatRoom, removeMemberFromChatRoom, changeMemberRoleInChatRoom
+} from './chatMember.service';
 import {
   createChatRoom as createChatRoomService, updateChatRoomById,
   getDirectChatRoomsForUser, getGroupChatRoomsForUser, activityTimestamp,
@@ -185,6 +187,41 @@ export async function removeChatRoomMember(req: Request, res: Response, next: Ne
         return res.status(409).json({
           message:
             'The only admin cannot be removed while other members remain; promote another member to admin first',
+        });
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Route chain (see chatRoom.routes.ts): loadChatMembership -> requireGroupRoom
+// -> requireChatAdmin, so by the time this runs the room exists, is a group
+// room, and the requester is one of its admins.
+export async function changeChatRoomMemberRole(req: Request, res: Response, next: NextFunction) {
+  const idValidation = validateUserIdParam(req.params.userid);
+  if (!idValidation.valid) {
+    return res.status(400).json({ message: idValidation.message });
+  }
+  const bodyValidation = validateChangeMemberRoleBody(req.body);
+  if (!bodyValidation.valid) {
+    return res.status(400).json({ message: bodyValidation.message });
+  }
+
+  const targetId = idValidation.data.userId;
+  const { role } = bodyValidation.data;
+
+  try {
+    const result = await changeMemberRoleInChatRoom(req.chatMembership!.chatId, targetId, role);
+
+    switch (result.outcome) {
+      case 'updated':
+        return res.status(200).json({ member: result.member });
+      case 'not_a_member':
+        return res.status(404).json({ message: 'Member not found in this chat room' });
+      case 'only_admin':
+        return res.status(409).json({
+          message:
+            'The only admin cannot be demoted while other members remain; promote another member to admin first',
         });
     }
   } catch (err) {

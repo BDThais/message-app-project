@@ -1,3 +1,5 @@
+import { MAX_INT32 as MAX_ID } from '../../lib/constants';
+
 type ValidRoomType = 'direct' | 'group';
 
 type CreateChatRoomBody = Partial<{
@@ -121,11 +123,6 @@ export function validateUpdateChatRoomBody(body: unknown): UpdateChatRoomValidat
   return { valid: true, data };
 }
 
-// Largest value of a Postgres INTEGER column (User.id, ChatRoom.id). Anything
-// above it can't be a real ID and would make the query itself fail (500)
-// instead of being rejected as a bad request.
-const MAX_ID = 2_147_483_647;
-
 type AddMembersValidation =
   | { valid: true; data: { memberIds: number[] } }
   | { valid: false; message: string };
@@ -147,6 +144,21 @@ export function validateAddMembersBody(body: unknown): AddMembersValidation {
   }
 
   return { valid: true, data: { memberIds: Array.from(new Set(member_ids as number[])) } };
+}
+
+type ChangeMemberRoleValidation =
+  | { valid: true; data: { role: 'admin' | 'member' } }
+  | { valid: false; message: string };
+
+/** Validates the body of PATCH /chatrooms/:chatid/members/:userid. */
+export function validateChangeMemberRoleBody(body: unknown): ChangeMemberRoleValidation {
+  const { role } = isRecord(body) ? body : {};
+
+  if (role !== 'admin' && role !== 'member') {
+    return { valid: false, message: "'role' must be 'admin' or 'member'" };
+  }
+
+  return { valid: true, data: { role } };
 }
 
 /**

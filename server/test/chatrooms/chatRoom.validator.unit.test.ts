@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   validateAddMembersBody,
+  validateChangeMemberRoleBody,
   validateChatIdParam,
   validateCreateChatRoomInput,
   validateUpdateChatRoomBody,
@@ -101,6 +102,30 @@ describe('validateAddMembersBody', () => {
     expect(validateAddMembersBody(body)).toEqual({
       valid: false,
       message: "'member_ids' must be a non-empty array of user IDs",
+    });
+  });
+});
+
+describe('validateChangeMemberRoleBody', () => {
+  it.each([
+    ['admin', { role: 'admin' }],
+    ['member', { role: 'member' }],
+  ])('accepts role: %s', (_label, body) => {
+    expect(validateChangeMemberRoleBody(body)).toEqual({
+      valid: true,
+      data: { role: body.role },
+    });
+  });
+
+  it.each([
+    ['no body', undefined],
+    ['a missing role', {}],
+    ['an unknown role', { role: 'owner' }],
+    ['a non-string role', { role: 1 }],
+  ])('rejects %s', (_label, body) => {
+    expect(validateChangeMemberRoleBody(body)).toEqual({
+      valid: false,
+      message: "'role' must be 'admin' or 'member'",
     });
   });
 });

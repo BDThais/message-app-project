@@ -55,6 +55,7 @@ Completed:
 - DELETE /chatrooms/:chatid
 - POST /chatrooms/:chatid/members
 - DELETE /chatrooms/:chatid/members/:userid
+- PATCH /chatrooms/:chatid/members/:userid
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Basic room summaries with latest-message metadata
@@ -86,8 +87,8 @@ Note: In the database, the mutual friendship model stores two rows per friendshi
 | Leave the room          |  ✅   |   ✅   |
 | Promote/demote a member |  ✅   |   ❌   |
 
-Implemented so far: update, delete, add members, remove members and leave. Sending/reading messages and promoting/demoting
-members are planned (their route lines in `chatRoom.routes.ts` are still commented out).
+Implemented so far: update, delete, add members, remove members, leave and promote/demote. Sending/reading messages
+are planned (their route line in `chatRoom.routes.ts` is still commented out).
 
 ## API Status
 
@@ -391,11 +392,41 @@ DELETE /chatrooms/:chatid/members/:userid (implemented)
 - this endpoint never deletes the ChatRoom record itself: when the last member leaves, it stamps the room's `emptied_at` in the same transaction, and the room is deleted later by the cleanup job (see "Empty chat room cleanup")
 - the room row is locked (`SELECT ... FOR UPDATE`) while the removal runs, so two admins leaving at the same moment cannot both pass the only-admin check and leave a room with members but no admin
 
-PATCH /chatrooms/:chatid/members/:userid
+PATCH /chatrooms/:chatid/members/:userid (implemented)
 
 - change a member's role in the given room
+- only valid for type: group rooms
 - requires admin
-- body: { role: 'admin' | 'member' }
+- incoming body: { role: 'admin' | 'member' }
+- setting a member's role to the one they already hold is allowed and simply confirms it
+- reject with 409 if the target is the room's only remaining admin, the new role is 'member', and other members are still present (the same only-admin invariant `DELETE /chatrooms/:chatid/members/:userid` enforces on removal); this rule doesn't apply when the target is the room's only member
+- `:userid` must be a positive integer user ID, otherwise `400`
+- responds `404` when the target user is not a member of this room
+- incoming body:
+
+  ```json
+  {
+    "role": "admin"
+  }
+  ```
+
+- return body (`200`):
+
+  ```json
+  {
+    "member": {
+      "memberId": 2,
+      "chatId": 1,
+      "role": "admin",
+      "lastReadMessageId": null,
+      "member": {
+        "id": 2,
+        "name": "Bob",
+        "avatarUrl": null
+      }
+    }
+  }
+  ```
 
 GET /chatrooms/:chatid/messages?before=<message_id>&limit=50
 
@@ -474,6 +505,7 @@ message-app/
     │   ├── config/
     │   │   └── config.ts
     │   ├── lib/
+    │   │   ├── constants.ts
     │   │   ├── passwordHash.ts
     │   │   └── prisma.ts
     │   ├── middlewares/             // shared by several features
@@ -521,6 +553,7 @@ Conventions:
 - File names follow `<subject>.<role>.ts`, for example `chatRoom.service.ts` or `login.validator.ts`.
 - A new feature gets its own folder under `src/modules/` with its routes, controller, validator(s) and service(s); its router is mounted in `app.ts`.
 - All database operations are kept in the `*.service.ts` files and go through the shared Prisma client from `src/lib/prisma.ts`. There is no separate repositories layer, so a transaction (room creation, member removal) stays inside one service function.
+- A fixed technical limit shared by more than one module (for example the Postgres INTEGER max, reused as both an ID ceiling and a `setInterval`/`setTimeout` delay ceiling) is declared once in `src/lib/constants.ts` and imported everywhere it's needed, instead of being redeclared per file.
 - Services never import Express (no `req`, `res` or cookies). HTTP concerns live in controllers and middleware, so other entry points, such as the future Socket.io handlers, can call the same services.
 - Middleware used by a single feature lives in that feature's folder (for example `chatRoomAuth.middleware.ts`); `src/middlewares/` only holds middleware shared across features.
 - Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.

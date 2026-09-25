@@ -1,4 +1,4 @@
-import { ChatMemberRole, ChatRoomType } from '../../generated/prisma/client';
+import { ChatMemberRole, ChatRoomType, Prisma } from '../../generated/prisma/client';
 import { prisma } from '../../lib/prisma';
 
 /**
@@ -147,5 +147,75 @@ export async function removeMemberFromChatRoom(
       await tx.chatRoom.update({ where: { id: chatId }, data: { emptiedAt: new Date() } });
     }
     return 'removed';
+  });
+}
+
+type ChatMemberWithUser = Prisma.ChatMemberGetPayload<{
+  include: { member: { select: { id: true; name: true; avatarUrl: true } } };
+}>;
+
+export type ChangeMemberRoleResult =
+  | { outcome: 'updated'; member: ChatMemberWithUser }
+  // The target isn't in this room.
+  | { outcome: 'not_a_member' }
+  // Refused: demoting the target would leave the room with no admin at all.
+  | { outcome: 'only_admin' };
+
+/**
+ * Changes a member's role (PATCH /chatrooms/:chatid/members/:userid). Only
+ * reachable for group rooms - a direct room's two members are both admins by
+ * design (see createDirectChatRoom), and the route guards against direct
+ * rooms with requireGroupRoom before this ever runs.
+ *
+ * Business rule enforced here: a group room that still has members must
+ * always keep at least one admin, so its only admin can't be demoted to
+ * 'member' while anyone else remains - the same invariant
+ * removeMemberFromChatRoom enforces for leaving/removal. Promoting a member
+ * to admin, or setting a role a member already has, is always allowed.
+ *
+ * The room row is locked (SELECT ... FOR UPDATE) for the same reason as in
+ * removeMemberFromChatRoom: without it, two concurrent demotions could each
+ * still see the other admin in place and both succeed, leaving members with
+ * no admin at all.
+ */
+export async function changeMemberRoleInChatRoom(
+  chatId: number,
+  targetId: number,
+  role: ChatMemberRole
+): Promise<ChangeMemberRoleResult> {
+  return prisma.$transaction(async (tx) => {
+    const lockedRooms = await tx.$queryRaw<{ id: number }[]>`
+      SELECT id FROM chat_rooms WHERE id = ${chatId} FOR UPDATE
+    `;
+    if (lockedRooms.length === 0) {
+      return { outcome: 'not_a_member' };
+    }
+
+    const target = await tx.chatMember.findUnique({
+      where: { memberId_chatId: { memberId: targetId, chatId } },
+      select: { role: true },
+    });
+    if (!target) {
+      return { outcome: 'not_a_member' };
+    }
+
+    if (target.role === ChatMemberRole.admin && role === ChatMemberRole.member) {
+      const adminCount = await tx.chatMember.count({
+        where: { chatId, role: ChatMemberRole.admin },
+      });
+      const memberCount = await tx.chatMember.count({ where: { chatId } });
+
+      if (adminCount === 1 && memberCount > 1) {
+        return { outcome: 'only_admin' };
+      }
+    }
+
+    const member = await tx.chatMember.update({
+      where: { memberId_chatId: { memberId: targetId, chatId } },
+      data: { role },
+      include: { member: { select: { id: true, name: true, avatarUrl: true } } },
+    });
+
+    return { outcome: 'updated', member };
   });
 }

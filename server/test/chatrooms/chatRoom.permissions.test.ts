@@ -19,6 +19,7 @@ const allRoutes = [
   ['delete', '/chatrooms/1'],
   ['post', '/chatrooms/1/members'],
   ['delete', '/chatrooms/1/members/2'],
+  ['patch', '/chatrooms/1/members/2'],
 ] as const;
 
 describe('every chat-room route', () => {
@@ -75,6 +76,11 @@ const adminOnlyRoutes = [
     name: 'POST /chatrooms/:chatid/members',
     call: (agent: TestAgent, chatId: number) =>
       agent.post(`/chatrooms/${chatId}/members`).send({ member_ids: [999_999] }),
+  },
+  {
+    name: 'PATCH /chatrooms/:chatid/members/:userid',
+    call: (agent: TestAgent, chatId: number) =>
+      agent.patch(`/chatrooms/${chatId}/members/999999`).send({ role: 'admin' }),
   },
 ];
 

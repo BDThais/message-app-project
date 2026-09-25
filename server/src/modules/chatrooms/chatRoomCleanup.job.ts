@@ -1,7 +1,6 @@
 import { purgeExpiredEmptyChatRooms } from './chatRoomCleanup.service';
-
 // setInterval silently turns any delay above this (about 24.8 days) into 1 ms.
-const MAX_TIMER_DELAY_MS = 2_147_483_647;
+import { MAX_INT32 as MAX_TIMER_DELAY_MS } from '../../lib/constants';
 
 export interface EmptyChatRoomCleanupOptions {
   /** How long a room must have stayed empty before it is deleted. */
