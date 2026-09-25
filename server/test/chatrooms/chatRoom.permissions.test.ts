@@ -20,6 +20,7 @@ const allRoutes = [
   ['post', '/chatrooms/1/members'],
   ['delete', '/chatrooms/1/members/2'],
   ['patch', '/chatrooms/1/members/2'],
+  ['post', '/chatrooms/1/messages'],
 ] as const;
 
 describe('every chat-room route', () => {

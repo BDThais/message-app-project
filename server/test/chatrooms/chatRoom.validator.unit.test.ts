@@ -4,6 +4,7 @@ import {
   validateChangeMemberRoleBody,
   validateChatIdParam,
   validateCreateChatRoomInput,
+  validateSendMessageBody,
   validateUpdateChatRoomBody,
   validateUserIdParam,
 } from '../../src/modules/chatrooms/chatRoom.validator';
@@ -127,6 +128,34 @@ describe('validateChangeMemberRoleBody', () => {
       valid: false,
       message: "'role' must be 'admin' or 'member'",
     });
+  });
+});
+
+describe('validateSendMessageBody', () => {
+  it('trims surrounding whitespace from content', () => {
+    expect(validateSendMessageBody({ content: '  Hello  ' })).toEqual({
+      valid: true,
+      data: { content: 'Hello' },
+    });
+  });
+
+  it('accepts content right at the length limit', () => {
+    const content = 'a'.repeat(4000);
+    expect(validateSendMessageBody({ content })).toEqual({ valid: true, data: { content } });
+  });
+
+  it.each([
+    ['no body', undefined, "'content' must be a non-empty string"],
+    ['a missing content', {}, "'content' must be a non-empty string"],
+    ['a non-string content', { content: 5 }, "'content' must be a non-empty string"],
+    ['a blank content', { content: '   ' }, "'content' must be a non-empty string"],
+    [
+      'content over the length limit',
+      { content: 'a'.repeat(4001) },
+      "'content' must be 4000 characters or fewer",
+    ],
+  ])('rejects %s', (_label, body, message) => {
+    expect(validateSendMessageBody(body)).toEqual({ valid: false, message });
   });
 });
 

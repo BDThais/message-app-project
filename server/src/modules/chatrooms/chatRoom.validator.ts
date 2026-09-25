@@ -161,6 +161,30 @@ export function validateChangeMemberRoleBody(body: unknown): ChangeMemberRoleVal
   return { valid: true, data: { role } };
 }
 
+type SendMessageValidation =
+  | { valid: true; data: { content: string } }
+  | { valid: false; message: string };
+
+const MAX_MESSAGE_LENGTH = 4000;
+
+/** Validates the body of POST /chatrooms/:chatid/messages. */
+export function validateSendMessageBody(body: unknown): SendMessageValidation {
+  const { content } = isRecord(body) ? body : {};
+
+  if (typeof content !== 'string' || content.trim().length === 0) {
+    return { valid: false, message: "'content' must be a non-empty string" };
+  }
+
+  if (content.trim().length > MAX_MESSAGE_LENGTH) {
+    return {
+      valid: false,
+      message: `'content' must be ${MAX_MESSAGE_LENGTH} characters or fewer`,
+    };
+  }
+
+  return { valid: true, data: { content: content.trim() } };
+}
+
 /**
  * Turns a numeric URL param into an ID, or null if it isn't one. Only plain
  * digit strings between 1 and MAX_ID are accepted, so forms Number() would

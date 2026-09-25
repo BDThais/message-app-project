@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import {
   validateCreateChatRoomInput, validateUpdateChatRoomBody, validateAddMembersBody,
-  validateUserIdParam, validateChangeMemberRoleBody
+  validateUserIdParam, validateChangeMemberRoleBody, validateSendMessageBody
 } from './chatRoom.validator';
 import {
   addMembersToExistingChatRoom, removeMemberFromChatRoom, changeMemberRoleInChatRoom
@@ -11,6 +11,7 @@ import {
   getDirectChatRoomsForUser, getGroupChatRoomsForUser, activityTimestamp,
   deleteChatRoomById, isForeignKeyConstraintError
 } from './chatRoom.service';
+import { createMessage } from './message.service';
 
 export async function createChatRoom(req: Request, res: Response) {
   if (!req.user) {
@@ -224,6 +225,30 @@ export async function changeChatRoomMemberRole(req: Request, res: Response, next
             'The only admin cannot be demoted while other members remain; promote another member to admin first',
         });
     }
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Route chain (see chatRoom.routes.ts): loadChatMembership only - both admins
+// and regular members may send messages, in direct or group rooms alike (see
+// the permission model in project-planning-doc.md), so there's no
+// requireGroupRoom / requireChatAdmin guard on this route. By the time this
+// runs the room exists and the requester is a member of it.
+export async function sendChatRoomMessage(req: Request, res: Response, next: NextFunction) {
+  const validation = validateSendMessageBody(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ message: validation.message });
+  }
+
+  try {
+    const message = await createMessage(
+      req.chatMembership!.chatId,
+      req.user!.id,
+      validation.data.content
+    );
+
+    return res.status(201).json({ message });
   } catch (err) {
     next(err);
   }
