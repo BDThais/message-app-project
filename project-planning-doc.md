@@ -56,6 +56,7 @@ Completed:
 - POST /chatrooms/:chatid/members
 - DELETE /chatrooms/:chatid/members/:userid
 - PATCH /chatrooms/:chatid/members/:userid
+- POST /chatrooms/:chatid/messages
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Basic room summaries with latest-message metadata
@@ -64,7 +65,7 @@ Completed:
 
 Still planned or not yet implemented:
 
-- Message sending and reading APIs for chat rooms
+- Message reading, editing and deletion APIs for chat rooms
 - Friend search and friend request flows
 - Friendship management and acceptance/rejection
 - Real-time socket communication
@@ -87,8 +88,8 @@ Note: In the database, the mutual friendship model stores two rows per friendshi
 | Leave the room          |  ✅   |   ✅   |
 | Promote/demote a member |  ✅   |   ❌   |
 
-Implemented so far: update, delete, add members, remove members, leave and promote/demote. Sending/reading messages
-are planned (their route line in `chatRoom.routes.ts` is still commented out).
+Implemented so far: update, delete, add members, remove members, leave, promote/demote and sending messages.
+Reading messages is still planned (its route line in `chatRoom.routes.ts` is still commented out).
 
 ## API Status
 
@@ -428,10 +429,39 @@ PATCH /chatrooms/:chatid/members/:userid (implemented)
   }
   ```
 
-POST /chatrooms/:chatid/messages
+POST /chatrooms/:chatid/messages (implemented)
 
-- post a new message to the database
-- validate that the user is a member of the chat room before sending
+- post a new message to the chat room
+- both admins and regular members may send, in direct or group rooms alike; membership alone is required (no group-only or admin-only guard on this route)
+- incoming body: `{ content }`, a non-empty string (whitespace-only is rejected) trimmed and capped at 4000 characters
+- incoming body:
+
+  ```json
+  {
+    "content": "Hello!"
+  }
+  ```
+
+- return body (`201`):
+
+  ```json
+  {
+    "message": {
+      "id": 1,
+      "chatId": 1,
+      "senderId": 1,
+      "content": "Hello!",
+      "createdAt": "2026-09-25T12:00:00.000Z",
+      "sender": {
+        "id": 1,
+        "name": "JohnDoe",
+        "avatarUrl": null
+      }
+    }
+  }
+  ```
+
+- responds `400` when `content` is missing, blank, not a string, or over the length limit
 
 GET /chatrooms/:chatid/messages?before=<message_id>&limit=50
 
@@ -537,6 +567,7 @@ message-app/
     │           ├── chatRoomAuth.middleware.ts   // loadChatMembership, requireGroupRoom, requireChatAdmin
     │           ├── chatRoom.service.ts
     │           ├── chatMember.service.ts
+    │           ├── message.service.ts
     │           ├── chatRoomCleanup.service.ts
     │           └── chatRoomCleanup.job.ts
     └── test/
@@ -552,6 +583,7 @@ message-app/
             ├── chatRoom.permissions.test.ts  // sign-in, membership, group-only and admin-only guards, per route
             ├── chatRoomMembers.add.test.ts
             ├── chatRoomMembers.remove.test.ts
+            ├── chatRoomMessages.send.test.ts
             ├── chatRoom.validator.unit.test.ts
             ├── chatRoomCleanup.service.test.ts
             └── chatRoomCleanup.job.unit.test.ts
@@ -658,7 +690,7 @@ HTTP request
 
 ## Roadmap
 
-1. Complete message creation and retrieval APIs for direct and group rooms
+1. Complete message retrieval, editing and deletion APIs for direct and group rooms
 2. Add friend list and request flows with membership enforcement
 3. Implement real-time communication with Socket.io
 4. Build the React frontend and integrate with TanStack Query
