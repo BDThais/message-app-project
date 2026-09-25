@@ -428,19 +428,28 @@ PATCH /chatrooms/:chatid/members/:userid (implemented)
   }
   ```
 
-GET /chatrooms/:chatid/messages?before=<message_id>&limit=50
-
-- retrieve all messages of that chat room
-- support pagination by loading messages before a given message ID
-
 POST /chatrooms/:chatid/messages
 
 - post a new message to the database
 - validate that the user is a member of the chat room before sending
 
+GET /chatrooms/:chatid/messages?before=<message_id>&limit=50
+
+- retrieve recent messages of that chat room
+- support pagination by loading messages before a given message ID
+
+PATCH /chatrooms/:chatid/messages?at=<message_id>
+
+- edit a message's content
+
+DELETE /chatrooms/:chatid/messages?at=<message_id>
+
+- delete a message from the chat room, after the deletion future queries about that message will shown that it's deleted (this might need a db migration to add some kind of "deleted" field to the message model in order to implement this behavior)
+- the default behavior is to delete the message for everyone in the room
+
 GET /friend/search/:tel
 
-- search users by phone number to find someone to send a friend request to
+- search users by phone number
 
 GET /friend
 
