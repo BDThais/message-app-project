@@ -4,6 +4,7 @@ import {
   validateChangeMemberRoleBody,
   validateChatIdParam,
   validateCreateChatRoomInput,
+  validateGetMessagesQuery,
   validateSendMessageBody,
   validateUpdateChatRoomBody,
   validateUserIdParam,
@@ -156,6 +157,38 @@ describe('validateSendMessageBody', () => {
     ],
   ])('rejects %s', (_label, body, message) => {
     expect(validateSendMessageBody(body)).toEqual({ valid: false, message });
+  });
+});
+
+describe('validateGetMessagesQuery', () => {
+  it('defaults to a limit of 50 with no before cursor', () => {
+    expect(validateGetMessagesQuery({})).toEqual({ valid: true, data: { limit: 50 } });
+  });
+
+  it('accepts a before cursor and a custom limit', () => {
+    expect(validateGetMessagesQuery({ before: '10', limit: '5' })).toEqual({
+      valid: true,
+      data: { limit: 5, before: 10 },
+    });
+  });
+
+  it.each([
+    ['a non-numeric before', { before: 'abc' }, "'before' must be a positive integer message id"],
+    ['a decimal before', { before: '1.5' }, "'before' must be a positive integer message id"],
+    ['a zero before', { before: '0' }, "'before' must be a positive integer message id"],
+    ['a negative before', { before: '-3' }, "'before' must be a positive integer message id"],
+    [
+      'a before larger than a Postgres integer',
+      { before: '2147483648' },
+      "'before' must be a positive integer message id",
+    ],
+    ['a non-numeric limit', { limit: 'abc' }, "'limit' must be an integer between 1 and 100"],
+    ['a decimal limit', { limit: '1.5' }, "'limit' must be an integer between 1 and 100"],
+    ['a zero limit', { limit: '0' }, "'limit' must be an integer between 1 and 100"],
+    ['a negative limit', { limit: '-5' }, "'limit' must be an integer between 1 and 100"],
+    ['a limit over the max', { limit: '101' }, "'limit' must be an integer between 1 and 100"],
+  ])('rejects %s', (_label, query, message) => {
+    expect(validateGetMessagesQuery(query)).toEqual({ valid: false, message });
   });
 });
 

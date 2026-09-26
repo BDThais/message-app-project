@@ -185,6 +185,50 @@ export function validateSendMessageBody(body: unknown): SendMessageValidation {
   return { valid: true, data: { content: content.trim() } };
 }
 
+type GetMessagesQueryValidation =
+  | { valid: true; data: { limit: number; before?: number } }
+  | { valid: false; message: string };
+
+const DEFAULT_MESSAGE_PAGE_SIZE = 50;
+const MAX_MESSAGE_PAGE_SIZE = 100;
+
+/**
+ * Validates the query string of GET /chatrooms/:chatid/messages.
+ * `before` (a message id) is optional and, when present, is validated with
+ * the same rule as `:chatid`/`:userid` (positive integer, within the
+ * Postgres integer range) since message ids come from the same kind of
+ * column. `limit` is optional and defaults to 50, capped at 100.
+ */
+export function validateGetMessagesQuery(query: unknown): GetMessagesQueryValidation {
+  const { before, limit } = isRecord(query) ? query : {};
+
+  let parsedBefore: number | undefined;
+  if (before !== undefined) {
+    const beforeId = parseIdParam(before);
+    if (beforeId === null) {
+      return { valid: false, message: "'before' must be a positive integer message id" };
+    }
+    parsedBefore = beforeId;
+  }
+
+  let parsedLimit = DEFAULT_MESSAGE_PAGE_SIZE;
+  if (limit !== undefined) {
+    const rawLimit = typeof limit === 'string' && /^\d+$/.test(limit) ? Number(limit) : NaN;
+    if (!Number.isInteger(rawLimit) || rawLimit < 1 || rawLimit > MAX_MESSAGE_PAGE_SIZE) {
+      return {
+        valid: false,
+        message: `'limit' must be an integer between 1 and ${MAX_MESSAGE_PAGE_SIZE}`,
+      };
+    }
+    parsedLimit = rawLimit;
+  }
+
+  return {
+    valid: true,
+    data: { limit: parsedLimit, ...(parsedBefore !== undefined ? { before: parsedBefore } : {}) },
+  };
+}
+
 /**
  * Turns a numeric URL param into an ID, or null if it isn't one. Only plain
  * digit strings between 1 and MAX_ID are accepted, so forms Number() would

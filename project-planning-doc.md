@@ -57,6 +57,7 @@ Completed:
 - DELETE /chatrooms/:chatid/members/:userid
 - PATCH /chatrooms/:chatid/members/:userid
 - POST /chatrooms/:chatid/messages
+- GET /chatrooms/:chatid/messages
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Basic room summaries with latest-message metadata
@@ -65,7 +66,7 @@ Completed:
 
 Still planned or not yet implemented:
 
-- Message reading, editing and deletion APIs for chat rooms
+- Message editing and deletion APIs for chat rooms
 - Friend search and friend request flows
 - Friendship management and acceptance/rejection
 - Real-time socket communication
@@ -88,8 +89,7 @@ Note: In the database, the mutual friendship model stores two rows per friendshi
 | Leave the room          |  ✅   |   ✅   |
 | Promote/demote a member |  ✅   |   ❌   |
 
-Implemented so far: update, delete, add members, remove members, leave, promote/demote and sending messages.
-Reading messages is still planned (its route line in `chatRoom.routes.ts` is still commented out).
+Implemented so far: update, delete, add members, remove members, leave, promote/demote, sending messages and reading messages.
 
 ## API Status
 
@@ -463,16 +463,42 @@ POST /chatrooms/:chatid/messages (implemented)
 
 - responds `400` when `content` is missing, blank, not a string, or over the length limit
 
-GET /chatrooms/:chatid/messages?before=<message_id>&limit=50
+GET /chatrooms/:chatid/messages?before=<message_id>&limit=50 (implemented)
 
-- retrieve recent messages of that chat room
-- support pagination by loading messages before a given message ID
+- retrieve messages in the room, newest first
+- both admins and regular members may read, in direct or group rooms alike; membership alone is required (no group-only or admin-only guard on this route), same as sending
+- `before` is optional; when given, only messages with a smaller id are returned, so paging further back means passing the id of the oldest message already loaded. Validated the same way `:chatid`/`:userid` are (positive integer, within the Postgres integer range)
+- `limit` is optional, defaults to 50, and is capped at 100
+- responds `400` when `before` or `limit` fail validation
+- return body (`200`):
 
-PATCH /chatrooms/:chatid/messages?at=<message_id>
+  ```json
+  {
+    "messages": [
+      {
+        "id": 3,
+        "chatId": 1,
+        "senderId": 1,
+        "content": "Third message",
+        "createdAt": "2026-09-25T12:00:02.000Z",
+        "sender": {
+          "id": 1,
+          "name": "JohnDoe",
+          "avatarUrl": null
+        }
+      }
+    ],
+    "hasMore": true
+  }
+  ```
+
+- `hasMore` is `true` when older messages remain beyond the returned page
+
+PATCH /chatrooms/:chatid/messages/:message_id
 
 - edit a message's content
 
-DELETE /chatrooms/:chatid/messages?at=<message_id>
+DELETE /chatrooms/:chatid/messages/:message_id
 
 - delete a message from the chat room, after the deletion future queries about that message will shown that it's deleted (this might need a db migration to add some kind of "deleted" field to the message model in order to implement this behavior)
 - the default behavior is to delete the message for everyone in the room
@@ -584,6 +610,7 @@ message-app/
             ├── chatRoomMembers.add.test.ts
             ├── chatRoomMembers.remove.test.ts
             ├── chatRoomMessages.send.test.ts
+            ├── chatRoomMessages.get.test.ts
             ├── chatRoom.validator.unit.test.ts
             ├── chatRoomCleanup.service.test.ts
             └── chatRoomCleanup.job.unit.test.ts
@@ -690,7 +717,7 @@ HTTP request
 
 ## Roadmap
 
-1. Complete message retrieval, editing and deletion APIs for direct and group rooms
+1. Complete message editing and deletion APIs for direct and group rooms
 2. Add friend list and request flows with membership enforcement
 3. Implement real-time communication with Socket.io
 4. Build the React frontend and integrate with TanStack Query

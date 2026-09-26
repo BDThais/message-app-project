@@ -1,7 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import {
   validateCreateChatRoomInput, validateUpdateChatRoomBody, validateAddMembersBody,
-  validateUserIdParam, validateChangeMemberRoleBody, validateSendMessageBody
+  validateUserIdParam, validateChangeMemberRoleBody, validateSendMessageBody,
+  validateGetMessagesQuery
 } from './chatRoom.validator';
 import {
   addMembersToExistingChatRoom, removeMemberFromChatRoom, changeMemberRoleInChatRoom
@@ -11,7 +12,7 @@ import {
   getDirectChatRoomsForUser, getGroupChatRoomsForUser, activityTimestamp,
   deleteChatRoomById, isForeignKeyConstraintError
 } from './chatRoom.service';
-import { createMessage } from './message.service';
+import { createMessage, getMessagesForChatRoom } from './message.service';
 
 export async function createChatRoom(req: Request, res: Response) {
   if (!req.user) {
@@ -249,6 +250,30 @@ export async function sendChatRoomMessage(req: Request, res: Response, next: Nex
     );
 
     return res.status(201).json({ message });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Route chain (see chatRoom.routes.ts): loadChatMembership only - reading
+// messages requires membership alone, in direct or group rooms alike, same
+// as sending (see the permission model in project-planning-doc.md), so
+// there's no requireGroupRoom / requireChatAdmin guard on this route. By the
+// time this runs the room exists and the requester is a member of it.
+export async function getChatRoomMessages(req: Request, res: Response, next: NextFunction) {
+  const validation = validateGetMessagesQuery(req.query);
+  if (!validation.valid) {
+    return res.status(400).json({ message: validation.message });
+  }
+
+  try {
+    const { messages, hasMore } = await getMessagesForChatRoom(
+      req.chatMembership!.chatId,
+      validation.data.limit,
+      validation.data.before
+    );
+
+    return res.status(200).json({ messages, hasMore });
   } catch (err) {
     next(err);
   }
