@@ -75,7 +75,7 @@ export async function createDirectChatRoom(
 /**
  * Creates a group room. The requester becomes admin; everyone they invite
  * joins as a regular member - the same default role
- * POST /chatrooms/:chatid/members will use.
+ * POST /chat/:chatid/member will use.
  */
 export async function createGroupChatRoom(
   tx: Prisma.TransactionClient,
@@ -115,7 +115,7 @@ export interface ChatRoomSummary {
  
 /**
  * Fetch direct chat rooms for a user.
- * Reusable by GET /chatrooms (no chatId) and later by GET /chatrooms/:chatid
+ * Reusable by GET /chat (no chatId) and later by GET /chat/:chatid
  * (pass chatId to scope the query down to a single room).
  * name/avatarUrl come from the *other* member, since direct rooms have
  * no name/avatar of their own.

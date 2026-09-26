@@ -10,7 +10,7 @@ import { prisma } from '../../lib/prisma';
  *
  * 1. Stamp: a room with no members and no `emptiedAt` (for example one whose
  *    members' accounts were all deleted, since that removes their memberships
- *    without going through DELETE /chatrooms/:chatid/members/:userid) gets
+ *    without going through DELETE /chat/:chatid/member/:userid) gets
  *    `emptiedAt = now`. The retention clock starts here, so such a room is
  *    never deleted in the same run that discovers it.
  * 2. Delete: rooms whose `emptiedAt` is older than the retention period.
@@ -18,7 +18,7 @@ import { prisma } from '../../lib/prisma';
  *    that somehow has members again is never deleted, whatever its stamp says.
  *
  * There's no step for "a stamped room gained members again" because it can't
- * happen through the API: every /chatrooms/:chatid route requires the
+ * happen through the API: every /chat/:chatid route requires the
  * requester to be a member, so nobody can reach an empty room to join or
  * add anyone to it.
  */

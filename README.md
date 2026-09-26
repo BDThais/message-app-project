@@ -88,11 +88,11 @@ Deletes the active session and clears the auth cookie.
 
 The protected chat routes are implemented on the server and include:
 
-- POST /chatrooms
-- GET /chatrooms
-- GET /chatrooms/:chatid
-- PATCH /chatrooms/:chatid
-- DELETE /chatrooms/:chatid
+- POST /chat
+- GET /chat
+- GET /chat/:chatid
+- PATCH /chat/:chatid
+- DELETE /chat/:chatid
 - Room membership logic for direct and group rooms
 - Admin-only room management controls
 

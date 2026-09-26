@@ -9,9 +9,9 @@ import { createDirectRoom, createGroupRoom, memberIdsOf, promoteToAdmin } from '
 // chatRoom.validator.unit.test.ts.
 
 const memberUrl = (chatId: number, userId: number | string) =>
-  `/chatrooms/${chatId}/members/${userId}`;
+  `/chat/${chatId}/member/${userId}`;
 
-describe('DELETE /chatrooms/:chatid/members/:userid', () => {
+describe('DELETE /chat/:chatid/member/:userid', () => {
   describe('who may remove whom', () => {
     it('lets an admin remove a regular member', async () => {
       const admin = await createUser('Alice');

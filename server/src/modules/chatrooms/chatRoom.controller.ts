@@ -133,7 +133,7 @@ export async function addChatRoomMembers(req: Request, res: Response, next: Next
       validation.data.memberIds
     );
 
-    // Same convention as POST /chatrooms: 201 when something was created,
+    // Same convention as POST /chat: 201 when something was created,
     // 200 when the request changed nothing (everyone was already a member).
     return res
       .status(addedMembers.length > 0 ? 201 : 200)

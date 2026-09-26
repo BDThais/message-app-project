@@ -12,7 +12,7 @@ app.use(cookieParser());
 //Routes
 
 app.use('/account', accountRoutes);
-app.use('/chatrooms', chatroomRoutes);
+app.use('/chat', chatroomRoutes);
 
 //Error Handler
 app.use(errorHandler);

@@ -48,16 +48,16 @@ Completed:
 - POST /account/login
 - GET /account/me
 - POST /account/logout
-- POST /chatrooms
-- GET /chatrooms
-- GET /chatrooms/:chatid
-- PATCH /chatrooms/:chatid
-- DELETE /chatrooms/:chatid
-- POST /chatrooms/:chatid/members
-- DELETE /chatrooms/:chatid/members/:userid
-- PATCH /chatrooms/:chatid/members/:userid
-- POST /chatrooms/:chatid/messages
-- GET /chatrooms/:chatid/messages
+- POST /chat
+- GET /chat
+- GET /chat/:chatid
+- PATCH /chat/:chatid
+- DELETE /chat/:chatid
+- POST /chat/:chatid/member
+- DELETE /chat/:chatid/member/:userid
+- PATCH /chat/:chatid/member/:userid
+- POST /chat/:chatid/message
+- GET /chat/:chatid/message
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Basic room summaries with latest-message metadata
@@ -195,7 +195,7 @@ All of these endpoints are routed after auth middleware so they can access the c
 A direct room has no name/avatar to edit, its members cannot add or remove the other member from the room, and all of its members are admins.
 Endpoints that require authorization have to be routed after the auth middlewares.
 
-POST /chatrooms (implemented)
+POST /chat (implemented)
 
 - create a new chat room
 - incoming body: type, member_ids, name?, avatar_url?
@@ -252,7 +252,7 @@ POST /chatrooms (implemented)
   }
   ```
 
-GET /chatrooms (implemented)
+GET /chat (implemented)
 
 - retrieve a list of all the chat rooms that have this user as its member
 - have separate functions for retrieving direct and group chat room, the functions return all direct/group chat rooms that has req.user
@@ -280,7 +280,7 @@ GET /chatrooms (implemented)
   }
   ```
 
-GET /chatrooms/:chatid (implemented)
+GET /chat/:chatid (implemented)
 
 - retrieve data about a specific room
 - return body:
@@ -302,7 +302,7 @@ GET /chatrooms/:chatid (implemented)
   }
   ```
 
-PATCH /chatrooms/:chatid (implemented)
+PATCH /chat/:chatid (implemented)
 
 - update the room's name and/or avatar_url
 - only valid for type: group rooms
@@ -331,14 +331,14 @@ PATCH /chatrooms/:chatid (implemented)
   }
   ```
 
-DELETE /chatrooms/:chatid (implemented)
+DELETE /chat/:chatid (implemented)
 
 - delete the room; cascades to its messages and memberships automatically
 - only valid for type: group rooms
 - requires admin
 - no response body (`204 No Content`)
 
-POST /chatrooms/:chatid/members (implemented)
+POST /chat/:chatid/member (implemented)
 
 - add one or many existing user to the room
 - only valid for type: group rooms
@@ -378,7 +378,7 @@ POST /chatrooms/:chatid/members (implemented)
   }
   ```
 
-DELETE /chatrooms/:chatid/members/:userid (implemented)
+DELETE /chat/:chatid/member/:userid (implemented)
 
 - remove a member from the room (delete their ChatMember record)
 - a user can always remove themself (leave); removing someone else requires admin
@@ -393,14 +393,14 @@ DELETE /chatrooms/:chatid/members/:userid (implemented)
 - this endpoint never deletes the ChatRoom record itself: when the last member leaves, it stamps the room's `emptied_at` in the same transaction, and the room is deleted later by the cleanup job (see "Empty chat room cleanup")
 - the room row is locked (`SELECT ... FOR UPDATE`) while the removal runs, so two admins leaving at the same moment cannot both pass the only-admin check and leave a room with members but no admin
 
-PATCH /chatrooms/:chatid/members/:userid (implemented)
+PATCH /chat/:chatid/member/:userid (implemented)
 
 - change a member's role in the given room
 - only valid for type: group rooms
 - requires admin
 - incoming body: { role: 'admin' | 'member' }
 - setting a member's role to the one they already hold is allowed and simply confirms it
-- reject with 409 if the target is the room's only remaining admin, the new role is 'member', and other members are still present (the same only-admin invariant `DELETE /chatrooms/:chatid/members/:userid` enforces on removal); this rule doesn't apply when the target is the room's only member
+- reject with 409 if the target is the room's only remaining admin, the new role is 'member', and other members are still present (the same only-admin invariant `DELETE /chat/:chatid/member/:userid` enforces on removal); this rule doesn't apply when the target is the room's only member
 - `:userid` must be a positive integer user ID, otherwise `400`
 - responds `404` when the target user is not a member of this room
 - incoming body:
@@ -429,7 +429,7 @@ PATCH /chatrooms/:chatid/members/:userid (implemented)
   }
   ```
 
-POST /chatrooms/:chatid/messages (implemented)
+POST /chat/:chatid/message (implemented)
 
 - post a new message to the chat room
 - both admins and regular members may send, in direct or group rooms alike; membership alone is required (no group-only or admin-only guard on this route)
@@ -463,7 +463,7 @@ POST /chatrooms/:chatid/messages (implemented)
 
 - responds `400` when `content` is missing, blank, not a string, or over the length limit
 
-GET /chatrooms/:chatid/messages?before=<message_id>&limit=50 (implemented)
+GET /chat/:chatid/message?before=<message_id>&limit=50 (implemented)
 
 - retrieve messages in the room, newest first
 - both admins and regular members may read, in direct or group rooms alike; membership alone is required (no group-only or admin-only guard on this route), same as sending
@@ -494,11 +494,11 @@ GET /chatrooms/:chatid/messages?before=<message_id>&limit=50 (implemented)
 
 - `hasMore` is `true` when older messages remain beyond the returned page
 
-PATCH /chatrooms/:chatid/messages/:message_id
+PATCH /chat/:chatid/message/:message_id
 
 - edit a message's content
 
-DELETE /chatrooms/:chatid/messages/:message_id
+DELETE /chat/:chatid/message/:message_id
 
 - delete a message from the chat room, after the deletion future queries about that message will shown that it's deleted (this might need a db migration to add some kind of "deleted" field to the message model in order to implement this behavior)
 - the default behavior is to delete the message for everyone in the room
@@ -632,7 +632,7 @@ Conventions:
 
 ## Empty chat room cleanup
 
-A room whose last member has left is not deleted on the spot. `DELETE /chatrooms/:chatid/members/:userid` stamps the room's `emptied_at` column in the same transaction as the removal, and a job running inside the API process deletes the room once it has stayed empty for the retention period. Deleting the room cascades to its messages.
+A room whose last member has left is not deleted on the spot. `DELETE /chat/:chatid/member/:userid` stamps the room's `emptied_at` column in the same transaction as the removal, and a job running inside the API process deletes the room once it has stayed empty for the retention period. Deleting the room cascades to its messages.
 The job is `modules/chatrooms/chatRoomCleanup.job.ts` (timer, validation of the two settings below) and the database work is `chatRoomCleanup.service.ts` (`purgeExpiredEmptyChatRooms`).
 
 - `EMPTY_ROOM_RETENTION_MS`: how long a room stays empty before it is deleted (default 7 days)
@@ -640,7 +640,7 @@ The job is `modules/chatrooms/chatRoomCleanup.job.ts` (timer, validation of the 
 - each sweep first stamps any empty room that has no `emptied_at` yet (for example when every member's account was deleted), so its retention clock starts then, and then deletes rooms whose stamp is older than the retention period
 - a room that has members is never deleted, whatever its `emptied_at` says
 - the job is started from `server.ts`, not `app.ts`, so tests that import the app do not start a timer
-- a room with no members cannot be reached through the API (every `/chatrooms/:chatid` route requires membership), so nothing can add members back to a room that is waiting for cleanup
+- a room with no members cannot be reached through the API (every `/chat/:chatid` route requires membership), so nothing can add members back to a room that is waiting for cleanup
 
 ## Cookie / CORS Notes
 
@@ -667,7 +667,7 @@ The backend follows a layered request flow:
 
 - Express receives the request and parses JSON bodies with `express.json()`.
 - `cookie-parser` makes the session cookie available through `req.cookies`.
-- The request is sent to the matching route under `/account` or `/chatrooms`.
+- The request is sent to the matching route under `/account` or `/chat`.
 
 2.**Authentication**
 

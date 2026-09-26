@@ -20,10 +20,10 @@ interface ChatMemberWriteClient {
  * Adds one or more users to a chat room as chat members with the given role.
  *
  * Reused by:
- * - POST /chatrooms (room creation) — called inside a transaction alongside
+ * - POST /chat (room creation) — called inside a transaction alongside
  *   the ChatRoom insert, so the room and its initial members are created
  *   atomically.
- * - POST /chatrooms/:chatid/members — called (via
+ * - POST /chat/:chatid/member — called (via
  *   addMembersToExistingChatRoom below) with the main `prisma` client,
  *   using the default role: 'member'.
  */
@@ -44,7 +44,7 @@ export async function addChatRoomMembers(
 }
 
 /**
- * Adds users to a room that already exists (POST /chatrooms/:chatid/members).
+ * Adds users to a room that already exists (POST /chat/:chatid/member).
  *
  * Users who are already members are left completely untouched - in
  * particular an existing admin is never downgraded to 'member' - and are
@@ -83,7 +83,7 @@ export type RemoveChatMemberResult =
   | 'only_admin';
 
 /**
- * Removes one member from a room (DELETE /chatrooms/:chatid/members/:userid).
+ * Removes one member from a room (DELETE /chat/:chatid/member/:userid).
  * Used both for "leave" (target is the requester) and for an admin removing
  * someone else - who is allowed to do which is decided by the controller.
  *
@@ -162,7 +162,7 @@ export type ChangeMemberRoleResult =
   | { outcome: 'only_admin' };
 
 /**
- * Changes a member's role (PATCH /chatrooms/:chatid/members/:userid). Only
+ * Changes a member's role (PATCH /chat/:chatid/member/:userid). Only
  * reachable for group rooms - a direct room's two members are both admins by
  * design (see createDirectChatRoom), and the route guards against direct
  * rooms with requireGroupRoom before this ever runs.

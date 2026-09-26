@@ -8,7 +8,7 @@ export type MessageWithSender = Prisma.MessageGetPayload<{
 }>;
 
 /**
- * Creates a new message in a chat room (POST /chatrooms/:chatid/messages).
+ * Creates a new message in a chat room (POST /chat/:chatid/message).
  * Membership is already guaranteed by loadChatMembership by the time this
  * runs - chatId comes from req.chatMembership and senderId from req.user, so
  * both are trusted to belong together and there's no membership check here.
@@ -30,7 +30,7 @@ export type MessagesPage = {
 };
 
 /**
- * Retrieves a page of messages for a chat room (GET /chatrooms/:chatid/messages),
+ * Retrieves a page of messages for a chat room (GET /chat/:chatid/message),
  * newest first. When `before` is given, only messages with a smaller id are
  * returned, so paging further back means passing the id of the oldest
  * message already loaded. Fetches one extra row to determine `hasMore`

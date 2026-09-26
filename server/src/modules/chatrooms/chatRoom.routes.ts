@@ -19,11 +19,11 @@ chatRoomRouter.get('/:chatid', getChatRoomById);
 
 chatRoomRouter.patch('/:chatid', requireGroupRoom, requireChatAdmin, updateChatRoom);
 chatRoomRouter.delete('/:chatid', requireGroupRoom, requireChatAdmin, deleteChatRoom);
-chatRoomRouter.post('/:chatid/members', requireGroupRoom, requireChatAdmin, addChatRoomMembers);
-chatRoomRouter.delete('/:chatid/members/:userid', removeChatRoomMember); // No blanket guard: any member may remove themself; removing someone else is checked in the controller.
-chatRoomRouter.patch('/:chatid/members/:userid', requireGroupRoom, requireChatAdmin, changeChatRoomMemberRole);
+chatRoomRouter.post('/:chatid/member', requireGroupRoom, requireChatAdmin, addChatRoomMembers);
+chatRoomRouter.delete('/:chatid/member/:userid', removeChatRoomMember); // No blanket guard: any member may remove themself; removing someone else is checked in the controller.
+chatRoomRouter.patch('/:chatid/member/:userid', requireGroupRoom, requireChatAdmin, changeChatRoomMemberRole);
 
-chatRoomRouter.post('/:chatid/messages', sendChatRoomMessage); // membership alone is enough
-chatRoomRouter.get('/:chatid/messages', getChatRoomMessages); // membership alone is enough
+chatRoomRouter.post('/:chatid/message', sendChatRoomMessage); // membership alone is enough
+chatRoomRouter.get('/:chatid/message', getChatRoomMessages); // membership alone is enough
 
 export default chatRoomRouter;

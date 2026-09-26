@@ -7,13 +7,13 @@ import { createGroupRoom } from '../helpers/chatRooms';
 // what is in chatRoom.permissions.test.ts; input validation is in
 // chatRoom.validator.unit.test.ts.
 
-describe('POST /chatrooms', () => {
+describe('POST /chat', () => {
   it('creates a group room and persists its members', async () => {
     const user = await createUser('Alice');
     const member = await createUser('Bob');
     const agent = await loginAs(user);
 
-    const res = await agent.post('/chatrooms').send({
+    const res = await agent.post('/chat').send({
       type: 'group',
       member_ids: [member.id],
       name: 'Project chat',
@@ -39,8 +39,8 @@ describe('POST /chatrooms', () => {
     const agent = await loginAs(user);
     const body = { type: 'direct', member_ids: [otherUser.id] };
 
-    const first = await agent.post('/chatrooms').send(body);
-    const second = await agent.post('/chatrooms').send(body);
+    const first = await agent.post('/chat').send(body);
+    const second = await agent.post('/chat').send(body);
 
     expect(first.status).toBe(201);
     expect(second.status).toBe(200);
@@ -53,7 +53,7 @@ describe('POST /chatrooms', () => {
     const user = await createUser('Alice');
     const agent = await loginAs(user);
 
-    const res = await agent.post('/chatrooms').send({ type: 'group', member_ids: [999_999] });
+    const res = await agent.post('/chat').send({ type: 'group', member_ids: [999_999] });
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'one or more member_ids do not refer to an existing user' });
@@ -62,7 +62,7 @@ describe('POST /chatrooms', () => {
   });
 });
 
-describe('GET /chatrooms', () => {
+describe('GET /chat', () => {
   it('lists direct and group rooms, most recent activity first', async () => {
     const user = await createUser('Alice');
     const otherUser = await createUser('Bob');
@@ -95,7 +95,7 @@ describe('GET /chatrooms', () => {
       },
     });
 
-    const res = await agent.get('/chatrooms');
+    const res = await agent.get('/chat');
 
     expect(res.status).toBe(200);
     expect(res.body.chatRooms.map((room: { id: number }) => room.id)).toEqual([
@@ -109,14 +109,14 @@ describe('GET /chatrooms', () => {
   });
 });
 
-describe('GET /chatrooms/:chatid', () => {
+describe('GET /chat/:chatid', () => {
   it('loads a room the user belongs to and includes their role', async () => {
     const user = await createUser('Alice');
     const admin = await createUser('Bob');
     const room = await createGroupRoom(admin.id, [user.id]);
     const agent = await loginAs(user);
 
-    const res = await agent.get(`/chatrooms/${room.id}`);
+    const res = await agent.get(`/chat/${room.id}`);
 
     expect(res.status).toBe(200);
     expect(res.body.chatRoom).toMatchObject({
@@ -128,14 +128,14 @@ describe('GET /chatrooms/:chatid', () => {
   });
 });
 
-describe('PATCH /chatrooms/:chatid', () => {
+describe('PATCH /chat/:chatid', () => {
   it('lets an admin rename a group room and change its avatar', async () => {
     const user = await createUser('Alice');
     const room = await createGroupRoom(user.id);
     const agent = await loginAs(user);
 
     const res = await agent
-      .patch(`/chatrooms/${room.id}`)
+      .patch(`/chat/${room.id}`)
       .send({ name: 'Updated project chat', avatar_url: 'https://example.com/project.png' });
 
     expect(res.status).toBe(200);
@@ -151,7 +151,7 @@ describe('PATCH /chatrooms/:chatid', () => {
   });
 });
 
-describe('DELETE /chatrooms/:chatid', () => {
+describe('DELETE /chat/:chatid', () => {
   it('lets an admin delete a group room together with its members and messages', async () => {
     const admin = await createUser('Alice');
     const member = await createUser('Bob');
@@ -159,7 +159,7 @@ describe('DELETE /chatrooms/:chatid', () => {
     await prisma.message.create({ data: { chatId: room.id, senderId: member.id, content: 'Hello' } });
     const agent = await loginAs(admin);
 
-    const res = await agent.delete(`/chatrooms/${room.id}`);
+    const res = await agent.delete(`/chat/${room.id}`);
 
     expect(res.status).toBe(204);
     expect(await prisma.chatRoom.findUnique({ where: { id: room.id } })).toBeNull();

@@ -20,7 +20,7 @@ type ValidationResult =
     | { valid: false; error: string };
 
 /**
- * Validates the body of POST /chatrooms and returns everything the
+ * Validates the body of POST /chat and returns everything the
  * controller needs, normalized:
  * - memberIds: deduplicated, with the requester's own ID filtered out (the
  *   controller adds them back separately since their role differs by room
@@ -128,7 +128,7 @@ type AddMembersValidation =
   | { valid: false; message: string };
 
 /**
- * Validates the body of POST /chatrooms/:chatid/members. Unlike room
+ * Validates the body of POST /chat/:chatid/member. Unlike room
  * creation, member_ids is required here (adding nobody is a client bug, not
  * a no-op). Returns the IDs deduplicated and camelCased for the service.
  */
@@ -150,7 +150,7 @@ type ChangeMemberRoleValidation =
   | { valid: true; data: { role: 'admin' | 'member' } }
   | { valid: false; message: string };
 
-/** Validates the body of PATCH /chatrooms/:chatid/members/:userid. */
+/** Validates the body of PATCH /chat/:chatid/member/:userid. */
 export function validateChangeMemberRoleBody(body: unknown): ChangeMemberRoleValidation {
   const { role } = isRecord(body) ? body : {};
 
@@ -167,7 +167,7 @@ type SendMessageValidation =
 
 const MAX_MESSAGE_LENGTH = 4000;
 
-/** Validates the body of POST /chatrooms/:chatid/messages. */
+/** Validates the body of POST /chat/:chatid/message. */
 export function validateSendMessageBody(body: unknown): SendMessageValidation {
   const { content } = isRecord(body) ? body : {};
 
@@ -193,7 +193,7 @@ const DEFAULT_MESSAGE_PAGE_SIZE = 50;
 const MAX_MESSAGE_PAGE_SIZE = 100;
 
 /**
- * Validates the query string of GET /chatrooms/:chatid/messages.
+ * Validates the query string of GET /chat/:chatid/message.
  * `before` (a message id) is optional and, when present, is validated with
  * the same rule as `:chatid`/`:userid` (positive integer, within the
  * Postgres integer range) since message ids come from the same kind of
@@ -245,7 +245,7 @@ type ChatIdParamValidation =
   | { valid: true; data: { chatId: number } }
   | { valid: false; message: string };
 
-/** Validates the ':chatid' URL param of every /chatrooms/:chatid route. */
+/** Validates the ':chatid' URL param of every /chat/:chatid route. */
 export function validateChatIdParam(rawChatId: unknown): ChatIdParamValidation {
   const chatId = parseIdParam(rawChatId);
 
@@ -258,7 +258,7 @@ type UserIdParamValidation =
   | { valid: true; data: { userId: number } }
   | { valid: false; message: string };
 
-/** Validates the ':userid' URL param of /chatrooms/:chatid/members/:userid. */
+/** Validates the ':userid' URL param of /chat/:chatid/member/:userid. */
 export function validateUserIdParam(rawUserId: unknown): UserIdParamValidation {
   const userId = parseIdParam(rawUserId);
 

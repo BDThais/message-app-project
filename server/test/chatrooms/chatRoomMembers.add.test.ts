@@ -6,7 +6,7 @@ import { createGroupRoom } from '../helpers/chatRooms';
 // Admin-only and group-only rules are in chatRoom.permissions.test.ts; the
 // full list of bad member_ids bodies is in chatRoom.validator.unit.test.ts.
 
-describe('POST /chatrooms/:chatid/members', () => {
+describe('POST /chat/:chatid/member', () => {
   it('lets an admin add several users as regular members', async () => {
     const admin = await createUser('Alice');
     const bob = await createUser('Bob');
@@ -15,7 +15,7 @@ describe('POST /chatrooms/:chatid/members', () => {
     const agent = await loginAs(admin);
 
     const res = await agent
-      .post(`/chatrooms/${room.id}/members`)
+      .post(`/chat/${room.id}/member`)
       .send({ member_ids: [bob.id, carol.id] });
 
     expect(res.status).toBe(201);
@@ -49,7 +49,7 @@ describe('POST /chatrooms/:chatid/members', () => {
     const agent = await loginAs(admin);
 
     const res = await agent
-      .post(`/chatrooms/${room.id}/members`)
+      .post(`/chat/${room.id}/member`)
       .send({ member_ids: [admin.id, bob.id, carol.id, carol.id] });
 
     expect(res.status).toBe(201);
@@ -74,7 +74,7 @@ describe('POST /chatrooms/:chatid/members', () => {
     const room = await createGroupRoom(admin.id, [bob.id]);
     const agent = await loginAs(admin);
 
-    const res = await agent.post(`/chatrooms/${room.id}/members`).send({ member_ids: [bob.id] });
+    const res = await agent.post(`/chat/${room.id}/member`).send({ member_ids: [bob.id] });
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ addedMembers: [], alreadyMemberIds: [bob.id] });
@@ -88,7 +88,7 @@ describe('POST /chatrooms/:chatid/members', () => {
     const agent = await loginAs(admin);
 
     const res = await agent
-      .post(`/chatrooms/${room.id}/members`)
+      .post(`/chat/${room.id}/member`)
       .send({ member_ids: [bob.id, 999_999] });
 
     expect(res.status).toBe(400);
@@ -103,7 +103,7 @@ describe('POST /chatrooms/:chatid/members', () => {
     const room = await createGroupRoom(admin.id);
     const agent = await loginAs(admin);
 
-    const res = await agent.post(`/chatrooms/${room.id}/members`).send({ member_ids: [] });
+    const res = await agent.post(`/chat/${room.id}/member`).send({ member_ids: [] });
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ message: "'member_ids' must be a non-empty array of user IDs" });

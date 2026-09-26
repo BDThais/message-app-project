@@ -3,11 +3,11 @@ import { prisma } from '../../src/lib/prisma';
 import { createUser, loginAs } from '../helpers/users';
 import { createDirectRoom, createGroupRoom } from '../helpers/chatRooms';
 
-// The session/membership guard on this route is covered once for every route
+// The session/memberhip guard on this route is covered once for every route
 // in chatRoom.permissions.test.ts; the full list of bad content bodies is in
 // chatRoom.validator.unit.test.ts.
 
-describe('POST /chatrooms/:chatid/messages', () => {
+describe('POST /chat/:chatid/message', () => {
   it('lets a regular member post a message to a group room', async () => {
     const admin = await createUser('Alice');
     const member = await createUser('Bob');
@@ -15,7 +15,7 @@ describe('POST /chatrooms/:chatid/messages', () => {
     const agent = await loginAs(member);
 
     const res = await agent
-      .post(`/chatrooms/${room.id}/messages`)
+      .post(`/chat/${room.id}/message`)
       .send({ content: '  Hello!  ' });
 
     expect(res.status).toBe(201);
@@ -36,7 +36,7 @@ describe('POST /chatrooms/:chatid/messages', () => {
     const room = await createDirectRoom(alice.id, bob.id);
     const agent = await loginAs(bob);
 
-    const res = await agent.post(`/chatrooms/${room.id}/messages`).send({ content: 'Hi Alice' });
+    const res = await agent.post(`/chat/${room.id}/message`).send({ content: 'Hi Alice' });
 
     expect(res.status).toBe(201);
     expect(res.body.message).toMatchObject({
@@ -46,15 +46,15 @@ describe('POST /chatrooms/:chatid/messages', () => {
     });
   });
 
-  it('becomes the room\'s lastMessage on GET /chatrooms', async () => {
+  it('becomes the room\'s lastMessage on GET /chat', async () => {
     const user = await createUser('Alice');
     const room = await createGroupRoom(user.id);
     const agent = await loginAs(user);
 
-    await agent.post(`/chatrooms/${room.id}/messages`).send({ content: 'First' });
-    await agent.post(`/chatrooms/${room.id}/messages`).send({ content: 'Second' });
+    await agent.post(`/chat/${room.id}/message`).send({ content: 'First' });
+    await agent.post(`/chat/${room.id}/message`).send({ content: 'Second' });
 
-    const res = await agent.get('/chatrooms');
+    const res = await agent.get('/chat');
 
     expect(res.body.chatRooms[0]).toMatchObject({ id: room.id, lastMessage: { content: 'Second' } });
   });
@@ -64,7 +64,7 @@ describe('POST /chatrooms/:chatid/messages', () => {
     const room = await createGroupRoom(user.id);
     const agent = await loginAs(user);
 
-    const res = await agent.post(`/chatrooms/${room.id}/messages`).send({ content: '   ' });
+    const res = await agent.post(`/chat/${room.id}/message`).send({ content: '   ' });
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ message: "'content' must be a non-empty string" });
