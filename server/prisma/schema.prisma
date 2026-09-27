@@ -85,6 +85,11 @@ model Message {
   senderId  Int?     @map("sender_id")
   createdAt DateTime @default(now()) @map("created_at")
   content   String
+  // Set when the message is deleted (DELETE /chat/:chatid/message/:message_id).
+  // The row itself is kept - content is cleared but the message stays in the
+  // room's history so its slot isn't lost - and future reads report it as
+  // deleted instead of returning the original content.
+  deletedAt DateTime? @map("deleted_at")
 
   chatRoom   ChatRoom     @relation(fields: [chatId], references: [id], onDelete: Cascade)
   sender     User?        @relation(fields: [senderId], references: [id], onDelete: SetNull)

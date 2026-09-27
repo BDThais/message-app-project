@@ -5,6 +5,7 @@ import {
   validateChatIdParam,
   validateCreateChatRoomInput,
   validateGetMessagesQuery,
+  validateMessageIdParam,
   validateSendMessageBody,
   validateUpdateChatRoomBody,
   validateUserIdParam,
@@ -224,5 +225,26 @@ describe('validateUserIdParam', () => {
     ['an id larger than a Postgres integer', '2147483648'],
   ])('rejects %s', (_label, rawUserId) => {
     expect(validateUserIdParam(rawUserId)).toEqual({ valid: false, message: 'Invalid user id' });
+  });
+});
+
+describe('validateMessageIdParam', () => {
+  it('accepts a plain positive integer', () => {
+    expect(validateMessageIdParam('42')).toEqual({ valid: true, data: { messageId: 42 } });
+  });
+
+  it.each([
+    ['a non-numeric id', 'abc'],
+    ['a decimal id', '1.5'],
+    ['a zero id', '0'],
+    ['a negative id', '-3'],
+    ['an id in scientific notation', '1e3'],
+    ['an id with spaces around it', ' 5 '],
+    ['an id larger than a Postgres integer', '2147483648'],
+  ])('rejects %s', (_label, rawMessageId) => {
+    expect(validateMessageIdParam(rawMessageId)).toEqual({
+      valid: false,
+      message: 'Invalid message id',
+    });
   });
 });

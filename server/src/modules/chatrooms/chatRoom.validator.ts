@@ -267,6 +267,19 @@ export function validateUserIdParam(rawUserId: unknown): UserIdParamValidation {
     : { valid: true, data: { userId } };
 }
 
+type MessageIdParamValidation =
+  | { valid: true; data: { messageId: number } }
+  | { valid: false; message: string };
+
+/** Validates the ':message_id' URL param of /chat/:chatid/message/:message_id. */
+export function validateMessageIdParam(rawMessageId: unknown): MessageIdParamValidation {
+  const messageId = parseIdParam(rawMessageId);
+
+  return messageId === null
+    ? { valid: false, message: 'Invalid message id' }
+    : { valid: true, data: { messageId } };
+}
+
 function isValidHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);

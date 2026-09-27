@@ -58,6 +58,7 @@ Completed:
 - PATCH /chat/:chatid/member/:userid
 - POST /chat/:chatid/message
 - GET /chat/:chatid/message
+- DELETE /chat/:chatid/message/:message_id
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Basic room summaries with latest-message metadata
@@ -66,7 +67,7 @@ Completed:
 
 Still planned or not yet implemented:
 
-- Message editing and deletion APIs for chat rooms
+- Message editing API for chat rooms
 - Friend search and friend request flows
 - Friendship management and acceptance/rejection
 - Real-time socket communication
@@ -82,6 +83,7 @@ Note: In the database, the mutual friendship model stores two rows per friendshi
 | Action                  | admin | member |
 | ----------------------- | :---: | :----: |
 | Send / read messages    |  ✅   |   ✅   |
+| Delete own message      |  ✅   |   ✅   |
 | Update room name/avatar |  ✅   |   ❌   |
 | Delete room             |  ✅   |   ❌   |
 | Add members             |  ✅   |   ❌   |
@@ -89,7 +91,7 @@ Note: In the database, the mutual friendship model stores two rows per friendshi
 | Leave the room          |  ✅   |   ✅   |
 | Promote/demote a member |  ✅   |   ❌   |
 
-Implemented so far: update, delete, add members, remove members, leave, promote/demote, sending messages and reading messages.
+Implemented so far: update, delete, add members, remove members, leave, promote/demote, sending messages, reading messages, and deleting a message (sender only - no admin-moderation override for other members' messages).
 
 ## API Status
 
@@ -498,10 +500,16 @@ PATCH /chat/:chatid/message/:message_id
 
 - edit a message's content
 
-DELETE /chat/:chatid/message/:message_id
+DELETE /chat/:chatid/message/:message_id (implemented)
 
-- delete a message from the chat room, after the deletion future queries about that message will shown that it's deleted (this might need a db migration to add some kind of "deleted" field to the message model in order to implement this behavior)
-- the default behavior is to delete the message for everyone in the room
+- delete a message from the chat room; the default (and only) behavior is to delete the message for everyone in the room, not just the requester
+- soft delete: the message row stays, but `content` is cleared and `deleted_at` is stamped, so it keeps its place in the room's history instead of leaving a gap in the id sequence; a later `GET /chat/:chatid/message` reports it with `content: ""` and a non-null `deletedAt`
+- only the message's own sender may delete it, in direct or group rooms alike; there is no admin-moderation override for other members' messages (see the permission model above)
+- `:message_id` must be a positive integer, otherwise `400`
+- responds `204 No Content` (no response body) when the message was deleted
+- responds `403` when the requester is not the message's sender
+- responds `404` when the message does not exist in this room, does not belong to this room, or was already deleted
+- deleting a message never deletes the underlying `ChatRoom` or affects other members' access to the room
 
 GET /friend/search/:tel
 

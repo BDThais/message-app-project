@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import {
   validateCreateChatRoomInput, validateUpdateChatRoomBody, validateAddMembersBody,
   validateUserIdParam, validateChangeMemberRoleBody, validateSendMessageBody,
-  validateGetMessagesQuery
+  validateGetMessagesQuery, validateMessageIdParam
 } from './chatRoom.validator';
 import {
   addMembersToExistingChatRoom, removeMemberFromChatRoom, changeMemberRoleInChatRoom
@@ -12,7 +12,7 @@ import {
   getDirectChatRoomsForUser, getGroupChatRoomsForUser, activityTimestamp,
   deleteChatRoomById, isForeignKeyConstraintError
 } from './chatRoom.service';
-import { createMessage, getMessagesForChatRoom } from './message.service';
+import { createMessage, getMessagesForChatRoom, deleteMessage } from './message.service';
 
 export async function createChatRoom(req: Request, res: Response) {
   if (!req.user) {
@@ -274,6 +274,37 @@ export async function getChatRoomMessages(req: Request, res: Response, next: Nex
     );
 
     return res.status(200).json({ messages, hasMore });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Route chain (see chatRoom.routes.ts): loadChatMembership only - deleting a
+// message is limited to the sender (checked in the service below), in direct
+// or group rooms alike, so there's no requireGroupRoom / requireChatAdmin
+// guard on this route. By the time this runs the room exists and the
+// requester is a member of it.
+export async function deleteChatRoomMessage(req: Request, res: Response, next: NextFunction) {
+  const validation = validateMessageIdParam(req.params.message_id);
+  if (!validation.valid) {
+    return res.status(400).json({ message: validation.message });
+  }
+
+  try {
+    const result = await deleteMessage(
+      req.chatMembership!.chatId,
+      validation.data.messageId,
+      req.user!.id
+    );
+
+    switch (result) {
+      case 'deleted':
+        return res.status(204).end();
+      case 'not_found':
+        return res.status(404).json({ message: 'Message not found in this chat room' });
+      case 'forbidden':
+        return res.status(403).json({ message: 'You can only delete your own messages' });
+    }
   } catch (err) {
     next(err);
   }
