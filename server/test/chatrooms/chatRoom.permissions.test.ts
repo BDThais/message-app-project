@@ -22,6 +22,7 @@ const allRoutes = [
   ['patch', '/chat/1/member/2'],
   ['post', '/chat/1/message'],
   ['get', '/chat/1/message'],
+  ['patch', '/chat/1/message/2'],
   ['delete', '/chat/1/message/2'],
 ] as const;
 

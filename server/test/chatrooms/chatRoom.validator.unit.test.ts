@@ -4,6 +4,7 @@ import {
   validateChangeMemberRoleBody,
   validateChatIdParam,
   validateCreateChatRoomInput,
+  validateEditMessageBody,
   validateGetMessagesQuery,
   validateMessageIdParam,
   validateSendMessageBody,
@@ -158,6 +159,29 @@ describe('validateSendMessageBody', () => {
     ],
   ])('rejects %s', (_label, body, message) => {
     expect(validateSendMessageBody(body)).toEqual({ valid: false, message });
+  });
+});
+
+describe('validateEditMessageBody', () => {
+  // Same rules as sending a message (validateSendMessageBody above), so this
+  // only pins that an edit can't get past any of them.
+  it('trims surrounding whitespace from content', () => {
+    expect(validateEditMessageBody({ content: '  Fixed  ' })).toEqual({
+      valid: true,
+      data: { content: 'Fixed' },
+    });
+  });
+
+  it.each([
+    ['no body', undefined, "'content' must be a non-empty string"],
+    ['a blank content', { content: '   ' }, "'content' must be a non-empty string"],
+    [
+      'content over the length limit',
+      { content: 'a'.repeat(4001) },
+      "'content' must be 4000 characters or fewer",
+    ],
+  ])('rejects %s', (_label, body, message) => {
+    expect(validateEditMessageBody(body)).toEqual({ valid: false, message });
   });
 });
 

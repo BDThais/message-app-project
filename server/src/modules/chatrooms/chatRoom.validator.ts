@@ -185,6 +185,19 @@ export function validateSendMessageBody(body: unknown): SendMessageValidation {
   return { valid: true, data: { content: content.trim() } };
 }
 
+type EditMessageValidation = SendMessageValidation;
+
+/**
+ * Validates the body of PATCH /chat/:chatid/message/:message_id. An edit is
+ * held to exactly the same rules as a new message (non-empty after trimming,
+ * at most 4000 characters) - a message can't be edited into something it
+ * couldn't have been sent as. Kept as its own function so the two can
+ * diverge later without touching the send route.
+ */
+export function validateEditMessageBody(body: unknown): EditMessageValidation {
+  return validateSendMessageBody(body);
+}
+
 type GetMessagesQueryValidation =
   | { valid: true; data: { limit: number; before?: number } }
   | { valid: false; message: string };

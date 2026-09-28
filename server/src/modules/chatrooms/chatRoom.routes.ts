@@ -3,7 +3,7 @@ import { requireUserAuth } from '../../middlewares/UserSessionAuth';
 import {
     createChatRoom, getChatRooms, getChatRoomById, updateChatRoom, deleteChatRoom, addChatRoomMembers,
     removeChatRoomMember, changeChatRoomMemberRole, sendChatRoomMessage, getChatRoomMessages,
-    deleteChatRoomMessage
+    editChatRoomMessage, deleteChatRoomMessage
 } from './chatRoom.controller';
 import { loadChatMembership } from './chatRoomAuth.middleware';
 import { requireGroupRoom, requireChatAdmin } from './chatRoomAuth.middleware';
@@ -26,6 +26,7 @@ chatRoomRouter.patch('/:chatid/member/:userid', requireGroupRoom, requireChatAdm
 
 chatRoomRouter.post('/:chatid/message', sendChatRoomMessage); // membership alone is enough
 chatRoomRouter.get('/:chatid/message', getChatRoomMessages); // membership alone is enough
+chatRoomRouter.patch('/:chatid/message/:message_id', editChatRoomMessage); // membership alone is enough; sender-only check is in the service
 chatRoomRouter.delete('/:chatid/message/:message_id', deleteChatRoomMessage); // membership alone is enough; sender-only check is in the controller/service
 
 export default chatRoomRouter;

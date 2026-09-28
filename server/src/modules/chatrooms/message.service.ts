@@ -1,5 +1,5 @@
 import { prisma } from '../../lib/prisma';
-import type { Prisma } from '../../generated/prisma/client';
+import { Prisma } from '../../generated/prisma/client';
 
 const senderSelect = { id: true, name: true, avatarUrl: true } as const;
 
@@ -99,4 +99,70 @@ export async function deleteMessage(
   });
 
   return 'deleted';
+}
+
+export type EditMessageResult =
+  // `edited` means the content changed and `editedAt` was stamped; `unchanged`
+  // means the new content equals the current one, so nothing was written.
+  // Kept apart so the future Socket.io layer only broadcasts real edits.
+  | { status: 'edited' | 'unchanged'; message: MessageWithSender }
+  // No message with this id in this room, or it was deleted.
+  | { status: 'not_found' }
+  // The requester didn't send this message.
+  | { status: 'forbidden' };
+
+/**
+ * Edits a message's content (PATCH /chat/:chatid/message/:message_id) and
+ * stamps `editedAt` so clients can show an "edited" label. `content` is
+ * expected to be already validated and trimmed by validateEditMessageBody.
+ *
+ * Same access rules as deleteMessage: only the message's own sender, in
+ * direct or group rooms alike, with no admin override. Membership in
+ * `chatId` is already guaranteed by loadChatMembership by the time this
+ * runs; this only additionally confirms the message belongs to that room
+ * and hasn't been deleted - a deleted message can never be edited back to
+ * life.
+ *
+ * Saving the content the message already has is not an edit: it returns
+ * `unchanged` without touching the row, so `editedAt` never gets stamped on
+ * a message that visibly didn't change.
+ */
+export async function editMessage(
+  chatId: number,
+  messageId: number,
+  requesterId: number,
+  content: string
+): Promise<EditMessageResult> {
+  const message = await prisma.message.findUnique({
+    where: { id: messageId },
+    include: { sender: { select: senderSelect } },
+  });
+
+  if (!message || message.chatId !== chatId || message.deletedAt !== null) {
+    return { status: 'not_found' };
+  }
+  if (message.senderId !== requesterId) {
+    return { status: 'forbidden' };
+  }
+  if (message.content === content) {
+    return { status: 'unchanged', message };
+  }
+
+  try {
+    // `deletedAt: null` is repeated in the write itself: if the sender
+    // deleted the message in another tab after the read above, this update
+    // matches nothing (instead of writing new content into a deleted row).
+    const edited = await prisma.message.update({
+      where: { id: messageId, deletedAt: null },
+      data: { content, editedAt: new Date() },
+      include: { sender: { select: senderSelect } },
+    });
+
+    return { status: 'edited', message: edited };
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+      return { status: 'not_found' };
+    }
+    throw err;
+  }
 }

@@ -58,6 +58,7 @@ Completed:
 - PATCH /chat/:chatid/member/:userid
 - POST /chat/:chatid/message
 - GET /chat/:chatid/message
+- PATCH /chat/:chatid/message/:message_id
 - DELETE /chat/:chatid/message/:message_id
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
@@ -67,7 +68,6 @@ Completed:
 
 Still planned or not yet implemented:
 
-- Message editing API for chat rooms
 - Friend search and friend request flows
 - Friendship management and acceptance/rejection
 - Real-time socket communication
@@ -83,6 +83,7 @@ Note: In the database, the mutual friendship model stores two rows per friendshi
 | Action                  | admin | member |
 | ----------------------- | :---: | :----: |
 | Send / read messages    |  ✅   |   ✅   |
+| Edit own message        |  ✅   |   ✅   |
 | Delete own message      |  ✅   |   ✅   |
 | Update room name/avatar |  ✅   |   ❌   |
 | Delete room             |  ✅   |   ❌   |
@@ -91,7 +92,7 @@ Note: In the database, the mutual friendship model stores two rows per friendshi
 | Leave the room          |  ✅   |   ✅   |
 | Promote/demote a member |  ✅   |   ❌   |
 
-Implemented so far: update, delete, add members, remove members, leave, promote/demote, sending messages, reading messages, and deleting a message (sender only - no admin-moderation override for other members' messages).
+Implemented so far: update, delete, add members, remove members, leave, promote/demote, sending messages, reading messages, and editing and deleting a message (sender only - no admin-moderation override for other members' messages).
 
 ## API Status
 
@@ -454,6 +455,8 @@ POST /chat/:chatid/message (implemented)
       "senderId": 1,
       "content": "Hello!",
       "createdAt": "2026-09-25T12:00:00.000Z",
+      "editedAt": null,
+      "deletedAt": null,
       "sender": {
         "id": 1,
         "name": "JohnDoe",
@@ -483,6 +486,8 @@ GET /chat/:chatid/message?before=<message_id>&limit=50 (implemented)
         "senderId": 1,
         "content": "Third message",
         "createdAt": "2026-09-25T12:00:02.000Z",
+        "editedAt": null,
+        "deletedAt": null,
         "sender": {
           "id": 1,
           "name": "JohnDoe",
@@ -496,9 +501,48 @@ GET /chat/:chatid/message?before=<message_id>&limit=50 (implemented)
 
 - `hasMore` is `true` when older messages remain beyond the returned page
 
-PATCH /chat/:chatid/message/:message_id
+PATCH /chat/:chatid/message/:message_id (implemented)
 
 - edit a message's content
+- only the message's own sender may edit it, in direct or group rooms alike; there is no admin-moderation override for other members' messages (see the permission model above). Membership alone gets a request to the controller, the sender check happens in the service, same as deleting
+- incoming body: `{ content }`, held to exactly the same rules as sending a message: a non-empty string (whitespace-only is rejected), trimmed and capped at 4000 characters
+- incoming body:
+
+  ```json
+  {
+    "content": "Hello, world!"
+  }
+  ```
+
+- `:message_id` must be a positive integer, otherwise `400`
+- a successful edit stamps `editedAt` (so clients can show an "edited" label) and leaves `createdAt` alone: the message keeps its place in the room's history and the room list keeps its order. When the edited message is the room's latest, `lastMessage` in the room summaries shows the new content
+- saving the content the message already has (after trimming) is allowed and simply confirms it: `200` with the message as it is, and `editedAt` is not stamped, so nothing looks edited that didn't change
+- only the current content is kept: there is no edit history and no edit time limit
+- a deleted message can never be edited back to life: the write itself is conditional on the message not being deleted, so an edit racing with a delete gets the same `404` as an edit sent after it
+- return body (`200`):
+
+  ```json
+  {
+    "message": {
+      "id": 1,
+      "chatId": 1,
+      "senderId": 1,
+      "content": "Hello, world!",
+      "createdAt": "2026-09-25T12:00:00.000Z",
+      "editedAt": "2026-09-28T09:30:00.000Z",
+      "deletedAt": null,
+      "sender": {
+        "id": 1,
+        "name": "JohnDoe",
+        "avatarUrl": null
+      }
+    }
+  }
+  ```
+
+- responds `400` when `:message_id` is not a valid ID, or when `content` is missing, blank, not a string, or over the length limit
+- responds `403` when the requester is not the message's sender
+- responds `404` when the message does not exist, does not belong to this room, or was deleted
 
 DELETE /chat/:chatid/message/:message_id (implemented)
 
@@ -511,38 +555,198 @@ DELETE /chat/:chatid/message/:message_id (implemented)
 - responds `404` when the message does not exist in this room, does not belong to this room, or was already deleted
 - deleting a message never deletes the underlying `ChatRoom` or affects other members' access to the room
 
+#### Friend endpoints (planned)
+
+Friend flows get their own module, `src/modules/friends/` (routes, controller, validator(s), service), mounted in `app.ts` behind `requireUserAuth` like the chat routes. A user is always returned to other users as `{ id, name, avatarUrl }`, never with `email` or `tel`.
+
+Planned schema changes for this milestone:
+
+- `PendingFriendRequest.createdAt` (`DateTime @default(now())`), needed to sort the inbox and to expire stale requests later
+- `@@index([receiverId])` on `PendingFriendRequest`: the existing `@@unique([senderId, receiverId])` index only serves lookups that start with the sender, and the inbox query filters by receiver
+
+ID conventions: `/friend/:id` takes a *user* ID. Every `/friend/requests/:id` route takes a *request* ID (`PendingFriendRequest.id`), not the other user's ID. With a user ID, `DELETE /friend/requests/:id` would be ambiguous when two users have sent each other a request at the same moment (reject theirs, or cancel yours?). Every `:id` must be a positive integer within the Postgres integer range, otherwise `400`.
+
 GET /friend/search/:tel
 
-- search users by phone number
+- look up one user by phone number, so the requester can send them a friend request
+- `:tel` must be a full E.164 number, validated with the same libphonenumber-js rule signup uses (`400` otherwise). It is a path parameter on purpose: `+` is kept as-is in a path (`/friend/search/+84912345678` and `/friend/search/%2B84912345678` both work), whereas in a query string `+` decodes to a space
+- exact match only, so the endpoint can't be used to browse or list users. It still lets any signed-in user test whether a number is registered, which is inherent to phone lookup, so it is rate limited per user (suggested: 30 per 15 minutes, `429` afterwards) and returns nothing beyond what the friend UI needs
+- `relationship` tells the client which button to show: `self`, `friend`, `request_sent`, `request_received` or `none`. For the two request states, `requestId` is included so the client can cancel or accept without another call
+- finding nobody is a normal outcome, not an error: `200` with `user: null`
+- return body (`200`):
+
+  ```json
+  {
+    "user": {
+      "id": 2,
+      "name": "JaneDoe",
+      "avatarUrl": null,
+      "relationship": "request_received",
+      "requestId": 7
+    }
+  }
+  ```
 
 GET /friend
 
-- retrieve the user's friends list
+- retrieve the requester's friends list, sorted by name (case-insensitive)
+- no pagination yet (friend lists are small); add `limit`/`before` in the style of `GET /chat/:chatid/message` if that stops being true
+- return body (`200`):
+
+  ```json
+  {
+    "friends": [
+      {
+        "id": 2,
+        "name": "JaneDoe",
+        "avatarUrl": null
+      }
+    ]
+  }
+  ```
 
 DELETE /friend/:id
 
-- unfriend a user
-- remove the mutual friendship records for both users
+- unfriend a user: delete both `FriendListMember` rows of the pair (`deleteMany` with an `OR` over the two directions, in one transaction)
+- responds `204 No Content` when the friendship was removed
+- responds `404` when the requester and `:id` are not friends
+- leaves any existing direct room between the two users, and its messages, untouched; unfriending only stops new conversations if friendship is made a requirement (see "Friendship and messaging" below)
 
 GET /friend/requests
 
-- retrieve the list of friend requests for the current user
+- retrieve the requester's pending friend requests, newest first
+- `direction` query parameter: `incoming` (default; requests others sent to the requester, the inbox) or `outgoing` (requests the requester sent, so the UI can show "request sent" and offer to cancel); `400` for any other value
+- `user` is always the *other* party: the sender for `incoming`, the receiver for `outgoing`
+- return body (`200`):
+
+  ```json
+  {
+    "requests": [
+      {
+        "id": 7,
+        "createdAt": "2026-09-28T09:00:00.000Z",
+        "user": {
+          "id": 2,
+          "name": "JaneDoe",
+          "avatarUrl": null
+        }
+      }
+    ]
+  }
+  ```
 
 POST /friend/requests
 
-- send a friend request with body: receiver_id
-- if the receiver already sent one to you, deny the request and point to the inbox flow instead
+- send a friend request; incoming body: `{ receiver_id }`
+- incoming body:
+
+  ```json
+  {
+    "receiver_id": 2
+  }
+  ```
+
+- responds `400` when `receiver_id` is not a valid ID, is the requester's own ID, or does not refer to an existing user (the same convention as `member_ids` in `POST /chat`)
+- responds `409` when the two are already friends, or when the requester already has a pending request to this user
+- responds `409` when the receiver already sent the requester a request: deny it and point to the inbox flow instead. The body carries that request's `requestId` so the client can offer "Accept" directly
+- rate limited per user (suggested: 20 per hour, `429` afterwards) to keep it from being used to spam
+- a duplicate that slips past the checks (double click, two tabs) is caught by the unique constraint and answered with the same `409`
+- return body (`201`), where `user` is the receiver:
+
+  ```json
+  {
+    "request": {
+      "id": 7,
+      "createdAt": "2026-09-28T09:00:00.000Z",
+      "user": {
+        "id": 2,
+        "name": "JaneDoe",
+        "avatarUrl": null
+      }
+    }
+  }
+  ```
+
+- known and accepted race: if two users send each other a request at the same instant, both can be stored (the unique constraint is per direction). This is harmless because accepting deletes the pair's requests in both directions (see below), so no hand-written database constraint is needed
 
 POST /friend/requests/:id/accept
 
-- accept the pending friend request for the given user ID
-- add the friendship records to both sides
-- remove the request record afterwards
+- accept a pending friend request; `:id` is the request ID
+- only the receiver can accept. Responds `404` when the request does not exist or is not addressed to the requester, so nobody can probe other users' requests
+- in one transaction: create both `FriendListMember` rows (`createMany` with `skipDuplicates`, so it is safe to repeat), then delete every pending request between the two users in either direction
+- does not create a chat room; the client calls `POST /chat` with `type: "direct"`, which reuses an existing room
+- return body (`201`), where `friend` is the sender who is now a friend:
+
+  ```json
+  {
+    "friend": {
+      "id": 2,
+      "name": "JaneDoe",
+      "avatarUrl": null
+    }
+  }
+  ```
 
 DELETE /friend/requests/:id
 
-- reject a pending friend request
-- delete the request from the database
+- delete a pending friend request; `:id` is the request ID
+- either party may call it: the receiver rejects, the sender cancels. Same effect, so one endpoint
+- responds `204 No Content` when the request was deleted
+- responds `404` when the request does not exist or the requester is neither its sender nor its receiver
+- the other party is not notified of a rejection
+
+Friendship and messaging (decision needed)
+
+Today `POST /chat` and `POST /chat/:chatid/member` accept any existing user ID, and user IDs are sequential integers, so anyone signed in can start a conversation with anyone. Friends have no effect on chat yet. Recommended, as its own step once the friend endpoints exist (it changes implemented endpoints and their tests):
+
+- `POST /chat`: for a direct room the other user must be a friend of the requester; for a group room every `member_ids` entry must be
+- `POST /chat/:chatid/member`: every added user must be a friend of the requester
+- respond `403` and list the offending IDs (for example `notFriendIds`), and change nobody, in line with the all-or-nothing rule these endpoints already follow
+- unfriending never removes anyone from an existing room. If harassment after unfriending becomes a concern, that is what a block feature would be for, and it is out of scope here
+
+### Proposed additional endpoints (not yet implemented)
+
+Gaps found by checking the API against the schema and against what the frontend will need. Roughly in priority order.
+
+GET /chat/:chatid/member
+
+- list the room's members; membership alone is required, direct or group. Today member lists only appear in the responses of room creation, add-members and change-role, so the frontend has no way to show who is in an existing room or to build the promote/remove screens
+- admins first, then by name
+- return body (`200`): `{ "members": [ ... ] }`, each entry in the member shape already used by `PATCH /chat/:chatid/member/:userid` (`memberId`, `chatId`, `role`, `lastReadMessageId`, `member: { id, name, avatarUrl }`)
+
+PUT /chat/:chatid/read
+
+- mark the room as read up to a message; incoming body: `{ message_id }`. `ChatMember.lastReadMessageId` already exists and is returned in every member payload, but nothing can set it
+- `message_id` must be a valid ID of a message in this room (`400` for a bad ID, `404` otherwise; a soft-deleted message is still valid)
+- the marker only moves forward: a `message_id` at or below the current one changes nothing and still returns `200`, so out-of-order requests from several tabs can't move it back. Implement as one conditional `updateMany` (`lastReadMessageId` is null or lower than the new value) rather than read-then-write
+- return body (`200`): `{ "lastReadMessageId": 42 }` (the marker as it stands after the call)
+- follow-up: add `unreadCount` to the room summaries of `GET /chat` and `GET /chat/:chatid`: messages in the room with an ID above `lastReadMessageId`, not sent by the requester and not deleted. The `(chatId, id)` index already covers it. Other members' `lastReadMessageId` values are also what a "seen by" indicator would be built from
+
+PATCH /account/me
+
+- update the requester's own profile; incoming body: `{ name?, avatar_url? }` with at least one. Same rules as signup's `name` and as `avatar_url` on `PATCH /chat/:chatid` (`null` clears it). `User.avatarUrl` is shown in every response but currently nothing can set it
+- return body (`200`): `{ "user": { id, name, email, tel, avatarUrl } }`. The user shape returned by login and `GET /account/me` (and `req.user`) has no `avatarUrl` today, so it needs adding there too for the client to read the avatar back
+
+POST /account/password
+
+- change the password; incoming body: `{ current_password, new_password }`. `new_password` follows the signup password rules; `401` when `current_password` is wrong
+- deletes the user's other sessions in the same transaction, so a leaked session stops working; the current session stays. Responds `204`
+- lower priority, both worth doing before deployment: `DELETE /account/me` (the empty-room cleanup already accounts for deleted accounts, but no endpoint deletes one) and a password reset flow, which needs email delivery and so belongs with production hardening
+
+Fixes to implemented endpoints:
+
+- `lastMessage.content` in the room summaries is `""` when the latest message was deleted, so the room list would show a blank preview. Add `deletedAt` to `lastMessage` and let the client show a placeholder such as "Message deleted" (dropping deleted messages from the lookup instead would make a room jump down the list after a delete)
+
+### Real-time events (planned)
+
+Socket.io stays a notification layer on top of the REST endpoints rather than a second way to write data, so validation, permissions and tests are reused as they are:
+
+- a controller (or a small `events` module) emits after the service call succeeds. Services keep returning a result the caller can inspect, like `editMessage`'s `edited` / `unchanged`, so only real changes are broadcast. Services still never import Socket.io
+- handshake: read the session cookie and resolve it with the same `getSessionUser` lookup; reject the connection without a valid session
+- on connect, the socket joins `user:<id>` (friend events, being added to a room) and `chat:<chatId>` for every room the user is a member of
+- leaving, being removed, or a deleted room must also remove the affected sockets from `chat:<chatId>` (`socketsLeave`), otherwise a removed member keeps receiving that room's messages
+- events: `message:new`, `message:updated` (payload identical to the `PATCH` response's `message`), `message:deleted` (`{ chatId, messageId, deletedAt }`), `chat:updated`, `chat:removed`, `member:added`, `member:removed`, `member:role_changed`, `read:updated`, `friend:request`, `friend:accepted`
+- typing indicators are socket-only and never stored
 
 ## Project Structure
 
@@ -619,6 +823,8 @@ message-app/
             ├── chatRoomMembers.remove.test.ts
             ├── chatRoomMessages.send.test.ts
             ├── chatRoomMessages.get.test.ts
+            ├── chatRoomMessages.edit.test.ts
+            ├── chatRoomMessages.delete.test.ts
             ├── chatRoom.validator.unit.test.ts
             ├── chatRoomCleanup.service.test.ts
             └── chatRoomCleanup.job.unit.test.ts
@@ -725,9 +931,9 @@ HTTP request
 
 ## Roadmap
 
-1. Complete message editing and deletion APIs for direct and group rooms
-2. Add friend list and request flows with membership enforcement
-3. Implement real-time communication with Socket.io
+1. Add friend list and request flows (see "Friend endpoints"), and decide whether friendship is required to start a chat
+2. Close the REST gaps listed under "Proposed additional endpoints" (member list, mark as read and unread counts, profile update)
+3. Implement real-time communication with Socket.io (see "Real-time events")
 4. Build the React frontend and integrate with TanStack Query
 5. Add authentication-aware UI states and protected routes
 6. Add deployment configuration and production hardening
