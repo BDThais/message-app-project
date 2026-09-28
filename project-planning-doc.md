@@ -699,7 +699,7 @@ Friendship and messaging (decision needed)
 
 Today `POST /chat` and `POST /chat/:chatid/member` accept any existing user ID, and user IDs are sequential integers, so anyone signed in can start a conversation with anyone. Friends have no effect on chat yet. Recommended, as its own step once the friend endpoints exist (it changes implemented endpoints and their tests):
 
-- `POST /chat`: for a direct room the other user must be a friend of the requester; for a group room every `member_ids` entry must be
+- `POST /chat`: for a direct room the other user must be a friend of the requester; for a group room every `member_ids` entry, the same rule is applied
 - `POST /chat/:chatid/member`: every added user must be a friend of the requester
 - respond `403` and list the offending IDs (for example `notFriendIds`), and change nobody, in line with the all-or-nothing rule these endpoints already follow
 - unfriending never removes anyone from an existing room. If harassment after unfriending becomes a concern, that is what a block feature would be for, and it is out of scope here
