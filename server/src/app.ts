@@ -2,6 +2,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import accountRoutes from './modules/account/account.routes';
 import chatroomRoutes from './modules/chatrooms/chatRoom.routes';
+import friendRoutes from './modules/friends/friend.routes';
 import { errorHandler } from './middlewares/ErrorHandler';
 
 const app = express();
@@ -13,6 +14,7 @@ app.use(cookieParser());
 
 app.use('/account', accountRoutes);
 app.use('/chat', chatroomRoutes);
+app.use('/friend', friendRoutes);
 
 //Error Handler
 app.use(errorHandler);

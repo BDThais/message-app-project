@@ -60,21 +60,22 @@ Completed:
 - GET /chat/:chatid/message
 - PATCH /chat/:chatid/message/:message_id
 - DELETE /chat/:chatid/message/:message_id
+- GET /friend/search/:tel
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Basic room summaries with latest-message metadata
 - Automatic cleanup of chat rooms that stay empty (see "Empty chat room cleanup")
-- Integration tests for the account endpoints, the chat-room endpoints and the empty-room cleanup
+- Integration tests for the account endpoints, the chat-room endpoints, the empty-room cleanup and the friend search endpoint
 
 Still planned or not yet implemented:
 
-- Friend search and friend request flows
-- Friendship management and acceptance/rejection
+- Friend request flows (send, list, accept, reject/cancel)
+- Friend list and unfriending
 - Real-time socket communication
 - Frontend application screens and state management
 - Production deployment hardening
 
-The room and auth systems are now acting as the current working backend foundation. Friend and realtime features remain future work and should be treated as the next milestone rather than as missing pieces of the current baseline.
+The room and auth systems are now acting as the current working backend foundation. The rest of the friend features (everything under "Friend endpoints" except search) and realtime remain future work and should be treated as the next milestone rather than as missing pieces of the current baseline.
 
 Note: In the database, the mutual friendship model stores two rows per friendship pair, one for each user, as described in the project requirements.
 
@@ -555,23 +556,23 @@ DELETE /chat/:chatid/message/:message_id (implemented)
 - responds `404` when the message does not exist in this room, does not belong to this room, or was already deleted
 - deleting a message never deletes the underlying `ChatRoom` or affects other members' access to the room
 
-#### Friend endpoints (planned)
+#### Friend endpoints (in progress: schema changes and search are implemented)
 
 Friend flows get their own module, `src/modules/friends/` (routes, controller, validator(s), service), mounted in `app.ts` behind `requireUserAuth` like the chat routes. A user is always returned to other users as `{ id, name, avatarUrl }`, never with `email` or `tel`.
 
-Planned schema changes for this milestone:
+Schema changes for this milestone (done, in migration `20260928120000_add_friend_request_created_at_and_receiver_index`):
 
 - `PendingFriendRequest.createdAt` (`DateTime @default(now())`), needed to sort the inbox and to expire stale requests later
 - `@@index([receiverId])` on `PendingFriendRequest`: the existing `@@unique([senderId, receiverId])` index only serves lookups that start with the sender, and the inbox query filters by receiver
 
 ID conventions: `/friend/:id` takes a *user* ID. Every `/friend/requests/:id` route takes a *request* ID (`PendingFriendRequest.id`), not the other user's ID. With a user ID, `DELETE /friend/requests/:id` would be ambiguous when two users have sent each other a request at the same moment (reject theirs, or cancel yours?). Every `:id` must be a positive integer within the Postgres integer range, otherwise `400`.
 
-GET /friend/search/:tel
+GET /friend/search/:tel (implemented)
 
 - look up one user by phone number, so the requester can send them a friend request
-- `:tel` must be a full E.164 number, validated with the same libphonenumber-js rule signup uses (`400` otherwise). It is a path parameter on purpose: `+` is kept as-is in a path (`/friend/search/+84912345678` and `/friend/search/%2B84912345678` both work), whereas in a query string `+` decodes to a space
-- exact match only, so the endpoint can't be used to browse or list users. It still lets any signed-in user test whether a number is registered, which is inherent to phone lookup, so it is rate limited per user (suggested: 30 per 15 minutes, `429` afterwards) and returns nothing beyond what the friend UI needs
-- `relationship` tells the client which button to show: `self`, `friend`, `request_sent`, `request_received` or `none`. For the two request states, `requestId` is included so the client can cancel or accept without another call
+- `:tel` must be a full E.164 number, validated with the same libphonenumber-js rule signup uses (`400` otherwise), and it must also be in canonical spelling: a `+` followed by at most 15 digits, with no spaces, dashes, parentheses or extension. That rule alone (`isValidPhoneNumber`) also accepts `+1 (415) 555-2671` and `+14155552671x123`, and because the lookup is an exact string match, accepting them would answer "nobody found" for a number that is registered. It is a path parameter on purpose: `+` is kept as-is in a path (`/friend/search/+84912345678` and `/friend/search/%2B84912345678` both work), whereas in a query string `+` decodes to a space
+- exact match only, so the endpoint can't be used to browse or list users. It still lets any signed-in user test whether a number is registered, which is inherent to phone lookup, so it is rate limited per user (30 per 15 minutes, `429` with `{ "message": ... }` afterwards; every request past the sign-in check counts, `400`s included) and returns nothing beyond what the friend UI needs
+- `relationship` tells the client which button to show: `self`, `friend`, `request_sent`, `request_received` or `none`. For the two request states, `requestId` is included so the client can cancel or accept without another call. When more than one applies, the first of `self`, `friend`, `request_received`, `request_sent` wins; the two request states only coexist through the send-at-the-same-instant race described under `POST /friend/requests`, and `request_received` wins because accepting it clears both
 - finding nobody is a normal outcome, not an error: `200` with `user: null`
 - return body (`200`):
 
@@ -736,6 +737,8 @@ POST /account/password
 Fixes to implemented endpoints:
 
 - `lastMessage.content` in the room summaries is `""` when the latest message was deleted, so the room list would show a blank preview. Add `deletedAt` to `lastMessage` and let the client show a placeholder such as "Message deleted" (dropping deleted messages from the lookup instead would make a room jump down the list after a delete)
+- `POST /account/signup` stores `tel` exactly as typed, and the rule it validates with (`isValidPhoneNumber`) accepts spaces, dashes, parentheses and extensions. So `+1 (415) 555-2671` and `+14155552671` can both register (the unique constraint only sees different strings), and the first is never found by `GET /friend/search/+14155552671`. Normalize with `parsePhoneNumberFromString(tel).number` before the duplicate check and before saving, and normalize the numbers already stored
+- `errorHandler` answers `500` for every error, including ones Express raised with a 4xx status: a malformed JSON body, or a path param with broken percent-encoding such as `/chat/%E0%A4%A` or `/friend/search/%E0%A4%A`. Answer with the error's own status when it is a 4xx
 
 ### Real-time events (planned)
 
@@ -798,36 +801,47 @@ message-app/
     │       │   ├── session.service.ts   // session database operations
     │       │   ├── login.validator.ts
     │       │   └── signup.validator.ts
-    │       └── chatrooms/
-    │           ├── chatRoom.routes.ts
-    │           ├── chatRoom.controller.ts
-    │           ├── chatRoom.validator.ts
-    │           ├── chatRoomAuth.middleware.ts   // loadChatMembership, requireGroupRoom, requireChatAdmin
-    │           ├── chatRoom.service.ts
-    │           ├── chatMember.service.ts
-    │           ├── message.service.ts
-    │           ├── chatRoomCleanup.service.ts
-    │           └── chatRoomCleanup.job.ts
+    │       ├── chatrooms/
+    │       │   ├── chatRoom.routes.ts
+    │       │   ├── chatRoom.controller.ts
+    │       │   ├── chatRoom.validator.ts
+    │       │   ├── chatRoomAuth.middleware.ts   // loadChatMembership, requireGroupRoom, requireChatAdmin
+    │       │   ├── chatRoom.service.ts
+    │       │   ├── chatMember.service.ts
+    │       │   ├── message.service.ts
+    │       │   ├── chatRoomCleanup.service.ts
+    │       │   └── chatRoomCleanup.job.ts
+    │       └── friends/
+    │           ├── friend.routes.ts
+    │           ├── friend.controller.ts
+    │           ├── friend.validator.ts
+    │           ├── friend.service.ts
+    │           └── friendRateLimit.middleware.ts   // per-user limiters (friendSearchLimiter)
     └── test/
         ├── setup.ts
         ├── helpers/                          // shared fixtures, not test files
         │   ├── users.ts                      // createUser, loginAs (session cookie without going through /account/login)
-        │   └── chatRooms.ts                  // createGroupRoom, createDirectRoom, promoteToAdmin, memberIdsOf
+        │   ├── chatRooms.ts                  // createGroupRoom, createDirectRoom, promoteToAdmin, memberIdsOf
+        │   └── friends.ts                    // makeFriends, createFriendRequest
         ├── account/
         │   ├── session.test.ts               // login, me, logout
         │   └── signup.test.ts
-        └── chatrooms/
-            ├── chatRoom.test.ts              // create, list, get, update and delete a room
-            ├── chatRoom.permissions.test.ts  // sign-in, membership, group-only and admin-only guards, per route
-            ├── chatRoomMembers.add.test.ts
-            ├── chatRoomMembers.remove.test.ts
-            ├── chatRoomMessages.send.test.ts
-            ├── chatRoomMessages.get.test.ts
-            ├── chatRoomMessages.edit.test.ts
-            ├── chatRoomMessages.delete.test.ts
-            ├── chatRoom.validator.unit.test.ts
-            ├── chatRoomCleanup.service.test.ts
-            └── chatRoomCleanup.job.unit.test.ts
+        ├── chatrooms/
+        │   ├── chatRoom.test.ts              // create, list, get, update and delete a room
+        │   ├── chatRoom.permissions.test.ts  // sign-in, membership, group-only and admin-only guards, per route
+        │   ├── chatRoomMembers.add.test.ts
+        │   ├── chatRoomMembers.remove.test.ts
+        │   ├── chatRoomMessages.send.test.ts
+        │   ├── chatRoomMessages.get.test.ts
+        │   ├── chatRoomMessages.edit.test.ts
+        │   ├── chatRoomMessages.delete.test.ts
+        │   ├── chatRoom.validator.unit.test.ts
+        │   ├── chatRoomCleanup.service.test.ts
+        │   └── chatRoomCleanup.job.unit.test.ts
+        └── friends/
+            ├── friendSearch.test.ts          // GET /friend/search/:tel
+            ├── friend.permissions.test.ts    // sign-in guard, per route
+            └── friend.validator.unit.test.ts
 ```
 
 Conventions:
@@ -840,7 +854,7 @@ Conventions:
 - Middleware used by a single feature lives in that feature's folder (for example `chatRoomAuth.middleware.ts`); `src/middlewares/` only holds middleware shared across features.
 - Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.
 - Background jobs live in the folder of the feature they belong to and are started from `server.ts`, never from `app.ts`, so tests that import the app do not start timers.
-- Tests live in `server/test/`, in a folder per feature that mirrors `src/modules/` (`test/account/`, `test/chatrooms/`), and import from `../../src/...`. Shared fixtures live in `test/helpers/`. `loginAs(user)` creates the session row and sends its cookie directly, so no test outside `test/account/` depends on `/account/login` or its rate limiter.
+- Tests live in `server/test/`, in a folder per feature that mirrors `src/modules/` (`test/account/`, `test/chatrooms/`, `test/friends/`), and import from `../../src/...`. Shared fixtures live in `test/helpers/`. `loginAs(user)` creates the session row and sends its cookie directly, so no test outside `test/account/` depends on `/account/login` or its rate limiter.
 - Each test file covers what its part of the code owns: an endpoint file covers that endpoint's business rules plus one bad-input case to prove the validator is wired in; the full list of bad inputs is a table in `chatRoom.validator.unit.test.ts` (no database); `chatRoom.permissions.test.ts` covers the shared guards once per route, so a new route should be added to its lists. Keep a new test only if it guards a rule that is not already covered by another one.
 - `npm run build` runs `tsc` and then `scripts/fix-esm-imports.mjs`. The source keeps extensionless imports, but Node's ESM loader needs real file names, so the script rewrites the relative imports in `dist/` (`./app` becomes `./app.js`, a folder import becomes `./dir/index.js`) and fails the build if an import points at nothing. `npm start` runs `node dist/server.js`.
 
@@ -881,13 +895,13 @@ The backend follows a layered request flow:
 
 - Express receives the request and parses JSON bodies with `express.json()`.
 - `cookie-parser` makes the session cookie available through `req.cookies`.
-- The request is sent to the matching route under `/account` or `/chat`.
+- The request is sent to the matching route under `/account`, `/chat` or `/friend`.
 
 2.**Authentication**
 
 - Account signup and login validate the incoming body in their controllers before calling the account services.
 - Login verifies the password, then `createSession` (`session.service.ts`) deletes the user's expired sessions and stores a new one, and `setSessionCookie` (`middlewares/SessionCookie.ts`) sends the session cookie in the response.
-- Protected chat-room routes run `requireUserAuth`, which calls `getSessionUser` in `middlewares/SessionCookie.ts`: it reads the session cookie, resolves it through `findSessionUser` in `session.service.ts`, clears the cookie when the session has expired, and returns the user, which `requireUserAuth` attaches to `req.user`.
+- Protected chat-room and friend routes run `requireUserAuth`, which calls `getSessionUser` in `middlewares/SessionCookie.ts`: it reads the session cookie, resolves it through `findSessionUser` in `session.service.ts`, clears the cookie when the session has expired, and returns the user, which `requireUserAuth` attaches to `req.user`.
 - `/account/me` uses the same `getSessionUser` lookup but returns `user: null` when no valid session exists. Logout deletes the session when present and clears the cookie.
 
 3.**Route-level authorization**
@@ -907,6 +921,7 @@ The backend follows a layered request flow:
 - Account services create and find users. The session service creates, reads, and deletes sessions (rows only; cookies are handled in `middlewares/SessionCookie.ts`).
 - Chat-room services create rooms and memberships in a Prisma transaction, load direct and group rooms, retrieve the latest message for room summaries, and update or delete rooms.
 - Direct-room responses derive the room name and avatar from the other member; group-room responses use the room's own name and avatar fields.
+- Friend services look up users and the friend-list and pending-request rows that connect them to the requester. Other users are returned as `{ id, name, avatarUrl }` only, never with `email` or `tel`.
 
 6.**Response and error flow**
 
