@@ -76,6 +76,6 @@ describe('GET /chat/:chatid/message', () => {
     const res = await agent.get(`/chat/${room.id}/message?before=abc`);
 
     expect(res.status).toBe(400);
-    expect(res.body).toEqual({ message: "'before' must be a positive integer message id" });
+    expect(res.body).toEqual({ error: "'before' must be a positive integer message id" });
   });
 });

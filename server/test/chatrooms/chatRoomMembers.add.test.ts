@@ -93,7 +93,7 @@ describe('POST /chat/:chatid/member', () => {
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
-      message: 'one or more member_ids do not refer to an existing user',
+      error: 'one or more member_ids do not refer to an existing user',
     });
     expect(await prisma.chatMember.count({ where: { chatId: room.id } })).toBe(1);
   });
@@ -106,6 +106,6 @@ describe('POST /chat/:chatid/member', () => {
     const res = await agent.post(`/chat/${room.id}/member`).send({ member_ids: [] });
 
     expect(res.status).toBe(400);
-    expect(res.body).toEqual({ message: "'member_ids' must be a non-empty array of user IDs" });
+    expect(res.body).toEqual({ error: "'member_ids' must be a non-empty array of user IDs" });
   });
 });

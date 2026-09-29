@@ -69,7 +69,7 @@ describe('DELETE /chat/:chatid/message/:message_id', () => {
     const res = await adminAgent.delete(messageUrl(room.id, sent.body.message.id));
 
     expect(res.status).toBe(403);
-    expect(res.body).toEqual({ message: 'You can only delete your own messages' });
+    expect(res.body).toEqual({ error: 'You can only delete your own messages' });
     expect(
       (await prisma.message.findUniqueOrThrow({ where: { id: sent.body.message.id } })).deletedAt
     ).toBeNull();
@@ -87,7 +87,7 @@ describe('DELETE /chat/:chatid/message/:message_id', () => {
 
     for (const res of [noSuchMessage, alreadyDeleted]) {
       expect(res.status).toBe(404);
-      expect(res.body).toEqual({ message: 'Message not found in this chat room' });
+      expect(res.body).toEqual({ error: 'Message not found in this chat room' });
     }
   });
 
@@ -101,7 +101,7 @@ describe('DELETE /chat/:chatid/message/:message_id', () => {
     const res = await agent.delete(messageUrl(roomB.id, sent.body.message.id));
 
     expect(res.status).toBe(404);
-    expect(res.body).toEqual({ message: 'Message not found in this chat room' });
+    expect(res.body).toEqual({ error: 'Message not found in this chat room' });
   });
 
   it('rejects an invalid message id with 400', async () => {
@@ -112,6 +112,6 @@ describe('DELETE /chat/:chatid/message/:message_id', () => {
     const res = await agent.delete(messageUrl(room.id, 'abc'));
 
     expect(res.status).toBe(400);
-    expect(res.body).toEqual({ message: 'Invalid message id' });
+    expect(res.body).toEqual({ error: 'Invalid message id' });
   });
 });

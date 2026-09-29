@@ -1,5 +1,5 @@
 import validator from 'validator';
-import { isValidPhoneNumber } from 'libphonenumber-js';
+import { isValidPhoneNumber, parsePhoneNumberFromString } from 'libphonenumber-js';
 import { findExistingUser } from './account.service';
 
 export type AccountBody = {
@@ -44,8 +44,28 @@ function validateEmail(email: string): string | null {
     return null;
 }
 
+/**
+ * The canonical E.164 spelling of a phone number ('+' and digits only), or null
+ * when the number is not valid. Signup stores this form, not what was typed:
+ * isValidPhoneNumber also accepts spaces, dashes, parentheses, non-ASCII digits
+ * and extensions, and the unique constraint on `tel` compares raw strings, so
+ * '+1 (415) 555-2671' and '+14155552671' would otherwise both register, and
+ * GET /friend/search/:tel (an exact match) could never find the first one.
+ * An extension is not part of E.164 and is dropped.
+ *
+ * isValidPhoneNumber stays the gate on purpose: it rejects a few inputs that
+ * parsePhoneNumberFromString(...).isValid() alone would let through (leading
+ * whitespace, a trailing newline), so the set of numbers signup accepts does
+ * not change.
+ */
+export function normalizeTel(tel: string): string | null {
+    if (!isValidPhoneNumber(tel)) return null;
+
+    return parsePhoneNumberFromString(tel)?.number ?? null;
+}
+
 function validateTel(tel: string): string | null {
-    if (!isValidPhoneNumber(tel)) {
+    if (normalizeTel(tel) === null) {
         return 'Invalid phone number format';
     }
     return null;

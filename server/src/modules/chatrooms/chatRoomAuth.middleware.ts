@@ -33,7 +33,7 @@ export async function loadChatMembership(
 ) {
   const validation = validateChatIdParam(rawChatId);
   if (!validation.valid) {
-    return res.status(400).json({ message: validation.message });
+    return res.status(400).json({ error: validation.message });
   }
   const { chatId } = validation.data;
 
@@ -41,7 +41,7 @@ export async function loadChatMembership(
     const membership = await getChatMembership(req.user!.id, chatId);
 
     if (!membership) {
-      return res.status(404).json({ message: 'Chat room not found' });
+      return res.status(404).json({ error: 'Chat room not found' });
     }
 
     req.chatMembership = {
@@ -59,7 +59,7 @@ export async function loadChatMembership(
 /** Route guard: requester must be an admin of the room. */
 export function requireChatAdmin(req: Request, res: Response, next: NextFunction) {
   if (req.chatMembership?.role !== 'admin') {
-    return res.status(403).json({ message: 'Admin role required for this action' });
+    return res.status(403).json({ error: 'Admin role required for this action' });
   }
   next();
 }
@@ -72,7 +72,7 @@ export function requireChatAdmin(req: Request, res: Response, next: NextFunction
  */
 export function requireGroupRoom(req: Request, res: Response, next: NextFunction) {
   if (req.chatMembership?.roomType !== 'group') {
-    return res.status(403).json({ message: 'Not available for direct chat rooms' });
+    return res.status(403).json({ error: 'Not available for direct chat rooms' });
   }
   next();
 }

@@ -13,7 +13,8 @@
     "db:test:up": "node scripts/test-db.mjs up",
     "db:test:down": "node scripts/test-db.mjs down",
     "db:test:deploy": "node scripts/test-db.mjs deploy",
-    "db:test:reset": "node scripts/test-db.mjs reset"
+    "db:test:reset": "node scripts/test-db.mjs reset",
+    "db:normalize-tels": "node scripts/normalize-tels.mjs"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",

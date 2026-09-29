@@ -52,7 +52,7 @@ describe('DELETE /chat/:chatid/member/:userid', () => {
 
       for (const res of [removeMember, removeAdmin]) {
         expect(res.status).toBe(403);
-        expect(res.body).toEqual({ message: 'Admin role required for this action' });
+        expect(res.body).toEqual({ error: 'Admin role required for this action' });
       }
       expect(await memberIdsOf(room.id)).toEqual([admin.id, bob.id, carol.id]);
     });
@@ -68,7 +68,7 @@ describe('DELETE /chat/:chatid/member/:userid', () => {
 
       for (const res of [notAMember, noSuchUser]) {
         expect(res.status).toBe(404);
-        expect(res.body).toEqual({ message: 'Member not found in this chat room' });
+        expect(res.body).toEqual({ error: 'Member not found in this chat room' });
       }
       expect(await memberIdsOf(room.id)).toEqual([admin.id]);
     });
@@ -81,7 +81,7 @@ describe('DELETE /chat/:chatid/member/:userid', () => {
       const res = await agent.delete(memberUrl(room.id, 'abc'));
 
       expect(res.status).toBe(400);
-      expect(res.body).toEqual({ message: 'Invalid user id' });
+      expect(res.body).toEqual({ error: 'Invalid user id' });
       expect(await memberIdsOf(room.id)).toEqual([admin.id]);
     });
   });
@@ -102,7 +102,7 @@ describe('DELETE /chat/:chatid/member/:userid', () => {
       expect(aliceLeaves.status).toBe(204);
       expect(bobLeaves.status).toBe(409);
       expect(bobLeaves.body).toEqual({
-        message:
+        error:
           'The only admin cannot be removed while other members remain; promote another member to admin first',
       });
       expect(await memberIdsOf(room.id)).toEqual([bob.id, carol.id]);
@@ -159,7 +159,7 @@ describe('DELETE /chat/:chatid/member/:userid', () => {
 
       expect(res.status).toBe(403);
       expect(res.body).toEqual({
-        message: 'You can only remove yourself from a direct chat room',
+        error: 'You can only remove yourself from a direct chat room',
       });
       expect(await memberIdsOf(room.id)).toEqual([alice.id, bob.id]);
     });

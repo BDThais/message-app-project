@@ -30,6 +30,20 @@ describe(`POST ${signUpRoute}`, () => {
     expect(await verifyPassword(user!.passwordHash, validBody.password)).toBe(true);
   });
 
+  // isValidPhoneNumber accepts all of these; the stored (and searchable) form is
+  // the canonical E.164 number, so they all end up as validBody.tel.
+  it.each([
+    ['parentheses and dashes', '+1 (415) 555-2671'],
+    ['spaces', '+1 415 555 2671'],
+    ['an extension', '+14155552671 ext. 123'],
+  ])('stores the canonical number when the phone number is typed with %s', async (_label, tel) => {
+    const res = await request(app).post(signUpRoute).send({ ...validBody, tel });
+
+    expect(res.status).toBe(201);
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: validBody.email } });
+    expect(user.tel).toBe(validBody.tel);
+  });
+
   it('returns 400 when a field is missing', async () => {
     const { password: _password, ...rest } = validBody;
     const res = await request(app).post(signUpRoute).send(rest);
@@ -96,5 +110,24 @@ describe(`POST ${signUpRoute}`, () => {
 
     expect(res.status).toBe(409);
     expect(res.body.error).toBe('Phone number already exists');
+  });
+
+  it('returns 409 when the same phone number is already registered in another spelling', async () => {
+    await prisma.user.create({
+      data: {
+        name: 'existing-user',
+        email: 'existing@example.com',
+        tel: validBody.tel,
+        passwordHash: 'existing-hash',
+      },
+    });
+
+    const res = await request(app)
+      .post(signUpRoute)
+      .send({ ...validBody, tel: '+1 (415) 555-2671' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('Phone number already exists');
+    expect(await prisma.user.count()).toBe(1);
   });
 });

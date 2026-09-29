@@ -10,5 +10,5 @@ export const friendSearchLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 30,
   keyGenerator: (req) => String(req.user!.id),
-  message: { message: 'Too many searches, try again later' },
+  message: { error: 'Too many searches, try again later' },
 });

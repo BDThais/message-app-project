@@ -65,7 +65,7 @@ describe('GET /friend/search/:tel', () => {
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
-      message: "'tel' must be a valid phone number in E.164 format, for example +84912345678",
+      error: "'tel' must be a valid phone number in E.164 format, for example +84912345678",
     });
   });
 
@@ -143,6 +143,27 @@ describe('GET /friend/search/:tel', () => {
       });
     });
 
+    it('is friend rather than a request state when both exist', async () => {
+      // Accepting clears the pair's requests, so this only happens through a
+      // stale row, but the documented order is self, friend, request_received,
+      // request_sent: a friendship is never shown as a pending request.
+      const alice = await createUser('Alice');
+      const bob = await createUser('Bob');
+      await makeFriends(alice.id, bob.id);
+      await createFriendRequest(alice.id, bob.id);
+      await createFriendRequest(bob.id, alice.id);
+      const agent = await loginAs(alice);
+
+      const res = await agent.get(searchUrl(bob.tel));
+
+      expect(res.body.user).toEqual({
+        id: bob.id,
+        name: 'Bob',
+        avatarUrl: null,
+        relationship: 'friend',
+      });
+    });
+
     it('is request_received when both users have sent each other a request', async () => {
       // The accepted send-at-the-same-instant race from the planning doc: the
       // received request is the one the requester can accept, and accepting it
@@ -176,7 +197,7 @@ describe('GET /friend/search/:tel', () => {
     const otherUser = await bobAgent.get(searchUrl('+84912345678'));
 
     expect(blocked.status).toBe(429);
-    expect(blocked.body).toEqual({ message: 'Too many searches, try again later' });
+    expect(blocked.body).toEqual({ error: 'Too many searches, try again later' });
     expect(otherUser.status).toBe(200);
   });
 });

@@ -67,7 +67,7 @@ describe('POST /chat/:chatid/message', () => {
     const res = await agent.post(`/chat/${room.id}/message`).send({ content: '   ' });
 
     expect(res.status).toBe(400);
-    expect(res.body).toEqual({ message: "'content' must be a non-empty string" });
+    expect(res.body).toEqual({ error: "'content' must be a non-empty string" });
     expect(await prisma.message.count({ where: { chatId: room.id } })).toBe(0);
   });
 });

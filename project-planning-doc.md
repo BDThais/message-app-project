@@ -104,6 +104,8 @@ POST /account/signup
 - Creates a new user account
 - Validates name, email, tel, and password
 - Checks for duplicate email or phone number
+- Stores `tel` in its canonical E.164 spelling (`+` and digits only), not as typed: `isValidPhoneNumber` accepts spaces, dashes, parentheses, non-ASCII digits and extensions, and the unique constraint compares raw strings, so `+1 (415) 555-2671` and `+14155552671` would otherwise both register, and `GET /friend/search/:tel` (an exact match) could never find the first. `normalizeTel` in `signup.validator.ts` validates with `isValidPhoneNumber` (so the set of accepted numbers is unchanged) and then takes `parsePhoneNumberFromString(tel).number`; an extension is dropped. The duplicate check and the insert both use the normalized number, so another spelling of a registered number answers `409`
+- Numbers stored before this change are rewritten by `npm run db:normalize-tels` (`scripts/normalize-tels.mjs`, run from `server/` against the database in `DATABASE_URL`). It is a dry run that lists the changes; add `-- --apply` to write them, in one transaction. It never touches a number that is no longer valid or accounts that would end up with the same number: it lists them, exits with code `1`, and leaves the merge or delete to you
 - Hashes the password before saving
 - incoming body:
 
@@ -124,7 +126,7 @@ POST /account/signup
   }
   ```
 
-- responds `400` with `{ "error": ... }` when validation fails and `409` when the email or phone number is already taken
+- responds `400` with `{ "error": ... }` when validation fails and `409` when the email or phone number is already taken (in any spelling of the number)
 
 POST /account/login
 
@@ -132,7 +134,7 @@ POST /account/login
 - Returns a generic invalid credentials message for both failed user and password checks
 - Deletes any expired session already stored for the same user
 - Creates a new session and sets the session cookie
-- Rate limited to 10 attempts per 15 minutes per IP (`429` afterwards)
+- Rate limited to 10 attempts per 15 minutes per IP (`429` with `{ "error": ... }` afterwards); `loginLimiter` lives in `modules/account/accountRateLimit.middleware.ts`
 - responds `400` when email or password is missing or not a string, and `401` for invalid credentials
 - incoming body:
 
@@ -571,7 +573,7 @@ GET /friend/search/:tel (implemented)
 
 - look up one user by phone number, so the requester can send them a friend request
 - `:tel` must be a full E.164 number, validated with the same libphonenumber-js rule signup uses (`400` otherwise), and it must also be in canonical spelling: a `+` followed by at most 15 digits, with no spaces, dashes, parentheses or extension. That rule alone (`isValidPhoneNumber`) also accepts `+1 (415) 555-2671` and `+14155552671x123`, and because the lookup is an exact string match, accepting them would answer "nobody found" for a number that is registered. It is a path parameter on purpose: `+` is kept as-is in a path (`/friend/search/+84912345678` and `/friend/search/%2B84912345678` both work), whereas in a query string `+` decodes to a space
-- exact match only, so the endpoint can't be used to browse or list users. It still lets any signed-in user test whether a number is registered, which is inherent to phone lookup, so it is rate limited per user (30 per 15 minutes, `429` with `{ "message": ... }` afterwards; every request past the sign-in check counts, `400`s included) and returns nothing beyond what the friend UI needs
+- exact match only, so the endpoint can't be used to browse or list users. It still lets any signed-in user test whether a number is registered, which is inherent to phone lookup, so it is rate limited per user (30 per 15 minutes, `429` with `{ "error": ... }` afterwards; every request past the sign-in check counts, `400`s included) and returns nothing beyond what the friend UI needs
 - `relationship` tells the client which button to show: `self`, `friend`, `request_sent`, `request_received` or `none`. For the two request states, `requestId` is included so the client can cancel or accept without another call. When more than one applies, the first of `self`, `friend`, `request_received`, `request_sent` wins; the two request states only coexist through the send-at-the-same-instant race described under `POST /friend/requests`, and `request_received` wins because accepting it clears both
 - finding nobody is a normal outcome, not an error: `200` with `user: null`
 - return body (`200`):
@@ -737,8 +739,6 @@ POST /account/password
 Fixes to implemented endpoints:
 
 - `lastMessage.content` in the room summaries is `""` when the latest message was deleted, so the room list would show a blank preview. Add `deletedAt` to `lastMessage` and let the client show a placeholder such as "Message deleted" (dropping deleted messages from the lookup instead would make a room jump down the list after a delete)
-- `POST /account/signup` stores `tel` exactly as typed, and the rule it validates with (`isValidPhoneNumber`) accepts spaces, dashes, parentheses and extensions. So `+1 (415) 555-2671` and `+14155552671` can both register (the unique constraint only sees different strings), and the first is never found by `GET /friend/search/+14155552671`. Normalize with `parsePhoneNumberFromString(tel).number` before the duplicate check and before saving, and normalize the numbers already stored
-- `errorHandler` answers `500` for every error, including ones Express raised with a 4xx status: a malformed JSON body, or a path param with broken percent-encoding such as `/chat/%E0%A4%A` or `/friend/search/%E0%A4%A`. Answer with the error's own status when it is a 4xx
 
 ### Real-time events (planned)
 
@@ -778,6 +778,7 @@ message-app/
     │   └── migrations/              // Database migration history
     ├── scripts/
     │   ├── fix-esm-imports.mjs      // after tsc: adds .js to the relative imports in dist/
+    │   ├── normalize-tels.mjs       // one-off: rewrite stored users.tel to canonical E.164 (dry run unless --apply)
     │   └── test-db.mjs              // up | down | deploy | reset for the test database
     ├── src/
     │   ├── app.ts
@@ -789,13 +790,13 @@ message-app/
     │   │   ├── passwordHash.ts
     │   │   └── prisma.ts
     │   ├── middlewares/             // shared by several features
-    │   │   ├── ErrorHandler.ts
-    │   │   ├── RateLimiter.ts
+    │   │   ├── ErrorHandler.ts      // every error body is { error }; keeps the status of 4xx errors Express raises
     │   │   ├── SessionCookie.ts     // set/clear/read the session cookie
     │   │   └── UserSessionAuth.ts   // requireUserAuth
     │   └── modules/
     │       ├── account/
     │       │   ├── account.routes.ts
+    │       │   ├── accountRateLimit.middleware.ts   // loginLimiter (per IP)
     │       │   ├── account.controller.ts
     │       │   ├── account.service.ts
     │       │   ├── session.service.ts   // session database operations
@@ -825,7 +826,10 @@ message-app/
         │   └── friends.ts                    // makeFriends, createFriendRequest
         ├── account/
         │   ├── session.test.ts               // login, me, logout
-        │   └── signup.test.ts
+        │   └── signup.test.ts                // includes the canonical-number and duplicate-spelling cases
+        ├── middlewares/                      // mirrors src/middlewares/
+        │   ├── errorHandler.unit.test.ts     // the handler alone, with a fake response
+        │   └── errorHandler.test.ts          // errors Express raises itself (malformed JSON, bad percent-encoding)
         ├── chatrooms/
         │   ├── chatRoom.test.ts              // create, list, get, update and delete a room
         │   ├── chatRoom.permissions.test.ts  // sign-in, membership, group-only and admin-only guards, per route
@@ -851,10 +855,11 @@ Conventions:
 - All database operations are kept in the `*.service.ts` files and go through the shared Prisma client from `src/lib/prisma.ts`. There is no separate repositories layer, so a transaction (room creation, member removal) stays inside one service function.
 - A fixed technical limit shared by more than one module (for example the Postgres INTEGER max, reused as both an ID ceiling and a `setInterval`/`setTimeout` delay ceiling) is declared once in `src/lib/constants.ts` and imported everywhere it's needed, instead of being redeclared per file.
 - Services never import Express (no `req`, `res` or cookies). HTTP concerns live in controllers and middleware, so other entry points, such as the future Socket.io handlers, can call the same services.
-- Middleware used by a single feature lives in that feature's folder (for example `chatRoomAuth.middleware.ts`); `src/middlewares/` only holds middleware shared across features.
+- Middleware used by a single feature lives in that feature's folder (for example `chatRoomAuth.middleware.ts`, `accountRateLimit.middleware.ts`, `friendRateLimit.middleware.ts`); `src/middlewares/` only holds middleware shared across features. Rate limiters follow the same rule: each feature keeps its own limiters, keyed by IP where nobody is signed in yet (`loginLimiter`) and by user id after `requireUserAuth` (`friendSearchLimiter`).
+- Error bodies: every `4xx` and `5xx` response has the shape `{ "error": "<text>" }`, whichever layer sends it (controller, feature middleware, rate limiter, `errorHandler`). `message` is not used for errors because it is already a success-body key for a chat message (`POST` and `PATCH /chat/:chatid/message` return `{ "message": { ... } }`), so a client could otherwise get a string and an object under the same key from one endpoint. Validators keep their own internal `{ valid: false, message }` result; the controller puts that text under `error`. A success body that only confirms an action (`201 { "message": "Account created successfully" }` from signup) is not an error body and is unchanged.
 - Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.
 - Background jobs live in the folder of the feature they belong to and are started from `server.ts`, never from `app.ts`, so tests that import the app do not start timers.
-- Tests live in `server/test/`, in a folder per feature that mirrors `src/modules/` (`test/account/`, `test/chatrooms/`, `test/friends/`), and import from `../../src/...`. Shared fixtures live in `test/helpers/`. `loginAs(user)` creates the session row and sends its cookie directly, so no test outside `test/account/` depends on `/account/login` or its rate limiter.
+- Tests live in `server/test/`, in a folder per feature that mirrors `src/modules/` (`test/account/`, `test/chatrooms/`, `test/friends/`; `test/middlewares/` mirrors `src/middlewares/`), and import from `../../src/...`. Shared fixtures live in `test/helpers/`. `loginAs(user)` creates the session row and sends its cookie directly, so no test outside `test/account/` depends on `/account/login` or its rate limiter.
 - Each test file covers what its part of the code owns: an endpoint file covers that endpoint's business rules plus one bad-input case to prove the validator is wired in; the full list of bad inputs is a table in `chatRoom.validator.unit.test.ts` (no database); `chatRoom.permissions.test.ts` covers the shared guards once per route, so a new route should be added to its lists. Keep a new test only if it guards a rule that is not already covered by another one.
 - `npm run build` runs `tsc` and then `scripts/fix-esm-imports.mjs`. The source keeps extensionless imports, but Node's ESM loader needs real file names, so the script rewrites the relative imports in `dist/` (`./app` becomes `./app.js`, a folder import becomes `./dir/index.js`) and fails the build if an import points at nothing. `npm start` runs `node dist/server.js`.
 
@@ -926,8 +931,9 @@ The backend follows a layered request flow:
 6.**Response and error flow**
 
 - Successful service results are mapped to JSON responses by the controller and returned to the client.
-- Validation and authorization failures return directly from the relevant controller or middleware with an appropriate `4xx` status.
+- Validation and authorization failures return directly from the relevant controller or middleware with an appropriate `4xx` status and an `{ error }` body.
 - Unexpected service or Prisma errors are forwarded with `next(error)` and handled by the application's final error-handler middleware.
+- The error handler answers `500 { "error": "Internal server error" }` for those and logs them. An error that carries its own `4xx` status (Express and body-parser set one) is answered with that status instead: a malformed JSON body or a path param with broken percent-encoding, such as `/chat/%E0%A4%A` or `/friend/search/%E0%A4%A`, is a `400`, not a `500`. Such an error is the client's mistake, so it is not logged, and its text is only sent to the client when the error marks it as safe to expose (otherwise the plain status text, for example `Bad Request`).
 
 For a typical protected request, the flow is:
 

@@ -106,7 +106,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
       .send({ content: 'Not yours' });
 
     expect(res.status).toBe(403);
-    expect(res.body).toEqual({ message: 'You can only edit your own messages' });
+    expect(res.body).toEqual({ error: 'You can only edit your own messages' });
     expect(await prisma.message.findUniqueOrThrow({ where: { id: sent.body.message.id } })).toMatchObject({
       content: 'Mine',
       editedAt: null,
@@ -125,7 +125,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
 
     for (const res of [noSuchMessage, deleted]) {
       expect(res.status).toBe(404);
-      expect(res.body).toEqual({ message: 'Message not found in this chat room' });
+      expect(res.body).toEqual({ error: 'Message not found in this chat room' });
     }
     expect(await prisma.message.findUniqueOrThrow({ where: { id: sent.body.message.id } })).toMatchObject({
       content: '',
@@ -143,7 +143,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
     const res = await agent.patch(messageUrl(roomB.id, sent.body.message.id)).send({ content: 'Moved' });
 
     expect(res.status).toBe(404);
-    expect(res.body).toEqual({ message: 'Message not found in this chat room' });
+    expect(res.body).toEqual({ error: 'Message not found in this chat room' });
     expect(
       (await prisma.message.findUniqueOrThrow({ where: { id: sent.body.message.id } })).content
     ).toBe('In room A');
@@ -158,7 +158,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
     const res = await agent.patch(messageUrl(room.id, sent.body.message.id)).send({ content: '   ' });
 
     expect(res.status).toBe(400);
-    expect(res.body).toEqual({ message: "'content' must be a non-empty string" });
+    expect(res.body).toEqual({ error: "'content' must be a non-empty string" });
     expect(
       (await prisma.message.findUniqueOrThrow({ where: { id: sent.body.message.id } })).content
     ).toBe('Keep me');

@@ -46,7 +46,7 @@ describe('every chat-room route', () => {
       const res = await agent.get(`/chat/${chatId}`);
 
       expect(res.status).toBe(404);
-      expect(res.body).toEqual({ message: 'Chat room not found' });
+      expect(res.body).toEqual({ error: 'Chat room not found' });
     }
   });
 
@@ -59,7 +59,7 @@ describe('every chat-room route', () => {
       const res = await agent.get(`/chat/${chatId}`);
 
       expect(res.status, chatId).toBe(400);
-      expect(res.body).toEqual({ message: 'Invalid chat room id' });
+      expect(res.body).toEqual({ error: 'Invalid chat room id' });
     }
   });
 });
@@ -98,7 +98,7 @@ describe.each(adminOnlyRoutes)('$name', ({ call }) => {
     const res = await call(agent, room.id);
 
     expect(res.status).toBe(403);
-    expect(res.body).toEqual({ message: 'Admin role required for this action' });
+    expect(res.body).toEqual({ error: 'Admin role required for this action' });
     expect(await prisma.chatRoom.findUnique({ where: { id: room.id } })).toMatchObject({
       name: 'Project chat',
     });
@@ -114,7 +114,7 @@ describe.each(adminOnlyRoutes)('$name', ({ call }) => {
     const res = await call(agent, room.id);
 
     expect(res.status).toBe(403);
-    expect(res.body).toEqual({ message: 'Not available for direct chat rooms' });
+    expect(res.body).toEqual({ error: 'Not available for direct chat rooms' });
     expect(await prisma.chatRoom.count({ where: { id: room.id } })).toBe(1);
     expect(await prisma.chatMember.count({ where: { chatId: room.id } })).toBe(2);
   });

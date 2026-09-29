@@ -8,7 +8,7 @@ import { findUserByTel } from './friend.service';
 export async function searchUserByTel(req: Request, res: Response, next: NextFunction) {
   const validation = validateTelParam(req.params.tel);
   if (!validation.valid) {
-    return res.status(400).json({ message: validation.message });
+    return res.status(400).json({ error: validation.message });
   }
 
   try {

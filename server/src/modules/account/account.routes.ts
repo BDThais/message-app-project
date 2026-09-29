@@ -1,6 +1,6 @@
 import Router from 'express';
 import {signup, login, logout, me} from './account.controller';
-import { loginLimiter } from '../../middlewares/RateLimiter';
+import { loginLimiter } from './accountRateLimit.middleware';
 
 const accountRouter = Router();
 

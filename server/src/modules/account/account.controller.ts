@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { hashPassword } from '../../lib/passwordHash';
-import { validateAccountBody, checkDuplication } from './signup.validator';
+import { validateAccountBody, checkDuplication, normalizeTel } from './signup.validator';
 import type { AccountBody } from './signup.validator';
 import { validateLogin } from './login.validator';
 import { createUser } from './account.service';
@@ -17,7 +17,11 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
           return res.status(400).json({ error: validationError });
         }
     
-        const duplicationError = await checkDuplication(email, tel);
+        // validateAccountBody accepted tel, so it normalizes. Both the duplicate
+        // check and the insert use the canonical form, never the raw input.
+        const normalizedTel = normalizeTel(tel)!;
+
+        const duplicationError = await checkDuplication(email, normalizedTel);
         if (duplicationError) {
           return res.status(409).json({ error: duplicationError });
         }
@@ -27,7 +31,7 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
         await createUser({
           name,
           email,
-          tel,
+          tel: normalizedTel,
           passwordHash
         });
     

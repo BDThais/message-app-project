@@ -89,7 +89,7 @@ export async function getChatRoomById(req: Request, res: Response, next: NextFun
 export async function updateChatRoom(req: Request, res: Response, next: NextFunction) {
   const validation = validateUpdateChatRoomBody(req.body);
   if (!validation.valid) {
-    return res.status(400).json({ message: validation.message });
+    return res.status(400).json({ error: validation.message });
   }
 
   try {
@@ -124,7 +124,7 @@ export async function deleteChatRoom(req: Request, res: Response, next: NextFunc
 export async function addChatRoomMembers(req: Request, res: Response, next: NextFunction) {
   const validation = validateAddMembersBody(req.body);
   if (!validation.valid) {
-    return res.status(400).json({ message: validation.message });
+    return res.status(400).json({ error: validation.message });
   }
 
   try {
@@ -143,7 +143,7 @@ export async function addChatRoomMembers(req: Request, res: Response, next: Next
       // One of the member_ids doesn't refer to a real user; nobody was added.
       return res
         .status(400)
-        .json({ message: 'one or more member_ids do not refer to an existing user' });
+        .json({ error: 'one or more member_ids do not refer to an existing user' });
     }
     next(err);
   }
@@ -158,7 +158,7 @@ export async function addChatRoomMembers(req: Request, res: Response, next: Next
 export async function removeChatRoomMember(req: Request, res: Response, next: NextFunction) {
   const validation = validateUserIdParam(req.params.userid);
   if (!validation.valid) {
-    return res.status(400).json({ message: validation.message });
+    return res.status(400).json({ error: validation.message });
   }
 
   const { chatId, role, roomType } = req.chatMembership!;
@@ -170,10 +170,10 @@ export async function removeChatRoomMember(req: Request, res: Response, next: Ne
     if (roomType === 'direct') {
       return res
         .status(403)
-        .json({ message: 'You can only remove yourself from a direct chat room' });
+        .json({ error: 'You can only remove yourself from a direct chat room' });
     }
     if (role !== 'admin') {
-      return res.status(403).json({ message: 'Admin role required for this action' });
+      return res.status(403).json({ error: 'Admin role required for this action' });
     }
   }
 
@@ -184,10 +184,10 @@ export async function removeChatRoomMember(req: Request, res: Response, next: Ne
       case 'removed':
         return res.status(204).end();
       case 'not_a_member':
-        return res.status(404).json({ message: 'Member not found in this chat room' });
+        return res.status(404).json({ error: 'Member not found in this chat room' });
       case 'only_admin':
         return res.status(409).json({
-          message:
+          error:
             'The only admin cannot be removed while other members remain; promote another member to admin first',
         });
     }
@@ -202,11 +202,11 @@ export async function removeChatRoomMember(req: Request, res: Response, next: Ne
 export async function changeChatRoomMemberRole(req: Request, res: Response, next: NextFunction) {
   const idValidation = validateUserIdParam(req.params.userid);
   if (!idValidation.valid) {
-    return res.status(400).json({ message: idValidation.message });
+    return res.status(400).json({ error: idValidation.message });
   }
   const bodyValidation = validateChangeMemberRoleBody(req.body);
   if (!bodyValidation.valid) {
-    return res.status(400).json({ message: bodyValidation.message });
+    return res.status(400).json({ error: bodyValidation.message });
   }
 
   const targetId = idValidation.data.userId;
@@ -219,10 +219,10 @@ export async function changeChatRoomMemberRole(req: Request, res: Response, next
       case 'updated':
         return res.status(200).json({ member: result.member });
       case 'not_a_member':
-        return res.status(404).json({ message: 'Member not found in this chat room' });
+        return res.status(404).json({ error: 'Member not found in this chat room' });
       case 'only_admin':
         return res.status(409).json({
-          message:
+          error:
             'The only admin cannot be demoted while other members remain; promote another member to admin first',
         });
     }
@@ -239,7 +239,7 @@ export async function changeChatRoomMemberRole(req: Request, res: Response, next
 export async function sendChatRoomMessage(req: Request, res: Response, next: NextFunction) {
   const validation = validateSendMessageBody(req.body);
   if (!validation.valid) {
-    return res.status(400).json({ message: validation.message });
+    return res.status(400).json({ error: validation.message });
   }
 
   try {
@@ -263,7 +263,7 @@ export async function sendChatRoomMessage(req: Request, res: Response, next: Nex
 export async function getChatRoomMessages(req: Request, res: Response, next: NextFunction) {
   const validation = validateGetMessagesQuery(req.query);
   if (!validation.valid) {
-    return res.status(400).json({ message: validation.message });
+    return res.status(400).json({ error: validation.message });
   }
 
   try {
@@ -287,7 +287,7 @@ export async function getChatRoomMessages(req: Request, res: Response, next: Nex
 export async function deleteChatRoomMessage(req: Request, res: Response, next: NextFunction) {
   const validation = validateMessageIdParam(req.params.message_id);
   if (!validation.valid) {
-    return res.status(400).json({ message: validation.message });
+    return res.status(400).json({ error: validation.message });
   }
 
   try {
@@ -301,9 +301,9 @@ export async function deleteChatRoomMessage(req: Request, res: Response, next: N
       case 'deleted':
         return res.status(204).end();
       case 'not_found':
-        return res.status(404).json({ message: 'Message not found in this chat room' });
+        return res.status(404).json({ error: 'Message not found in this chat room' });
       case 'forbidden':
-        return res.status(403).json({ message: 'You can only delete your own messages' });
+        return res.status(403).json({ error: 'You can only delete your own messages' });
     }
   } catch (err) {
     next(err);
@@ -318,12 +318,12 @@ export async function deleteChatRoomMessage(req: Request, res: Response, next: N
 export async function editChatRoomMessage(req: Request, res: Response, next: NextFunction) {
   const idValidation = validateMessageIdParam(req.params.message_id);
   if (!idValidation.valid) {
-    return res.status(400).json({ message: idValidation.message });
+    return res.status(400).json({ error: idValidation.message });
   }
 
   const bodyValidation = validateEditMessageBody(req.body);
   if (!bodyValidation.valid) {
-    return res.status(400).json({ message: bodyValidation.message });
+    return res.status(400).json({ error: bodyValidation.message });
   }
 
   try {
@@ -339,9 +339,9 @@ export async function editChatRoomMessage(req: Request, res: Response, next: Nex
       case 'unchanged':
         return res.status(200).json({ message: result.message });
       case 'not_found':
-        return res.status(404).json({ message: 'Message not found in this chat room' });
+        return res.status(404).json({ error: 'Message not found in this chat room' });
       case 'forbidden':
-        return res.status(403).json({ message: 'You can only edit your own messages' });
+        return res.status(403).json({ error: 'You can only edit your own messages' });
     }
   } catch (err) {
     next(err);

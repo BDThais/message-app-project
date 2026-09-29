@@ -72,6 +72,8 @@ Response:
 }
 ```
 
+`tel` must be a valid phone number with its country code. It is stored in canonical E.164 form (`+` and digits only), so `+1 (415) 555-2671` is saved as `+14155552671`, and registering the same number in another spelling answers `409`. Error responses across the API have the shape `{ "error": "..." }`.
+
 #### POST /account/login
 
 Authenticates a user and sets a session cookie.
