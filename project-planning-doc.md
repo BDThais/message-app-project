@@ -590,54 +590,6 @@ GET /friend/search/:tel (implemented)
   }
   ```
 
-GET /friend
-
-- retrieve the requester's friends list, sorted by name (case-insensitive)
-- no pagination yet (friend lists are small); add `limit`/`before` in the style of `GET /chat/:chatid/message` if that stops being true
-- return body (`200`):
-
-  ```json
-  {
-    "friends": [
-      {
-        "id": 2,
-        "name": "JaneDoe",
-        "avatarUrl": null
-      }
-    ]
-  }
-  ```
-
-DELETE /friend/:id
-
-- unfriend a user: delete both `FriendListMember` rows of the pair (`deleteMany` with an `OR` over the two directions, in one transaction)
-- responds `204 No Content` when the friendship was removed
-- responds `404` when the requester and `:id` are not friends
-- leaves any existing direct room between the two users, and its messages, untouched; unfriending only stops new conversations if friendship is made a requirement (see "Friendship and messaging" below)
-
-GET /friend/requests
-
-- retrieve the requester's pending friend requests, newest first
-- `direction` query parameter: `incoming` (default; requests others sent to the requester, the inbox) or `outgoing` (requests the requester sent, so the UI can show "request sent" and offer to cancel); `400` for any other value
-- `user` is always the *other* party: the sender for `incoming`, the receiver for `outgoing`
-- return body (`200`):
-
-  ```json
-  {
-    "requests": [
-      {
-        "id": 7,
-        "createdAt": "2026-09-28T09:00:00.000Z",
-        "user": {
-          "id": 2,
-          "name": "JaneDoe",
-          "avatarUrl": null
-        }
-      }
-    ]
-  }
-  ```
-
 POST /friend/requests
 
 - send a friend request; incoming body: `{ receiver_id }`
@@ -672,6 +624,29 @@ POST /friend/requests
 
 - known and accepted race: if two users send each other a request at the same instant, both can be stored (the unique constraint is per direction). This is harmless because accepting deletes the pair's requests in both directions (see below), so no hand-written database constraint is needed
 
+GET /friend/requests
+
+- retrieve the requester's pending friend requests, newest first
+- `direction` query parameter: `incoming` (default; requests others sent to the requester, the inbox) or `outgoing` (requests the requester sent, so the UI can show "request sent" and offer to cancel); `400` for any other value
+- `user` is always the *other* party: the sender for `incoming`, the receiver for `outgoing`
+- return body (`200`):
+
+  ```json
+  {
+    "requests": [
+      {
+        "id": 7,
+        "createdAt": "2026-09-28T09:00:00.000Z",
+        "user": {
+          "id": 2,
+          "name": "JaneDoe",
+          "avatarUrl": null
+        }
+      }
+    ]
+  }
+  ```
+
 POST /friend/requests/:id/accept
 
 - accept a pending friend request; `:id` is the request ID
@@ -697,6 +672,31 @@ DELETE /friend/requests/:id
 - responds `204 No Content` when the request was deleted
 - responds `404` when the request does not exist or the requester is neither its sender nor its receiver
 - the other party is not notified of a rejection
+
+GET /friend
+
+- retrieve the requester's friends list, sorted by name (case-insensitive)
+- no pagination yet (friend lists are small); add `limit`/`before` in the style of `GET /chat/:chatid/message` if that stops being true
+- return body (`200`):
+
+  ```json
+  {
+    "friends": [
+      {
+        "id": 2,
+        "name": "JaneDoe",
+        "avatarUrl": null
+      }
+    ]
+  }
+  ```
+
+DELETE /friend/:id
+
+- unfriend a user: delete both `FriendListMember` rows of the pair (`deleteMany` with an `OR` over the two directions, in one transaction)
+- responds `204 No Content` when the friendship was removed
+- responds `404` when the requester and `:id` are not friends
+- leaves any existing direct room between the two users, and its messages, untouched; unfriending only stops new conversations if friendship is made a requirement (see "Friendship and messaging" below)
 
 Friendship and messaging (decision needed)
 
