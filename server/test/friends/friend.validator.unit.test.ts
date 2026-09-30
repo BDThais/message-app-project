@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { validateTelParam } from '../../src/modules/friends/friend.validator';
+import { MAX_INT32 } from '../../src/lib/constants';
+import {
+  validateSendFriendRequestBody,
+  validateTelParam,
+} from '../../src/modules/friends/friend.validator';
 
 // Pure function, so no database and no HTTP: the endpoint test only needs one
 // bad-input case to prove the validator is wired in, and every other bad input
@@ -44,5 +48,46 @@ describe('validateTelParam', () => {
   it('rejects a value that is not a string', () => {
     expect(validateTelParam(undefined)).toMatchObject({ valid: false });
     expect(validateTelParam(14155552671)).toMatchObject({ valid: false });
+  });
+});
+
+describe('validateSendFriendRequestBody', () => {
+  const requesterId = 1;
+
+  it.each([
+    ['an ordinary ID', 2],
+    ['the smallest ID other than the requester\'s', 2],
+    ['the largest ID the database can hold', MAX_INT32],
+  ])('accepts %s', (_label, receiverId) => {
+    expect(validateSendFriendRequestBody({ receiver_id: receiverId }, requesterId)).toEqual({
+      valid: true,
+      data: { receiverId },
+    });
+  });
+
+  it.each([
+    ['no body at all', undefined],
+    ['a body that is not an object', 'receiver_id=2'],
+    ['a missing receiver_id', {}],
+    ['a null receiver_id', { receiver_id: null }],
+    ['a receiver_id given as a string', { receiver_id: '2' }],
+    ['a receiver_id given as an array', { receiver_id: [2] }],
+    ['a fractional receiver_id', { receiver_id: 2.5 }],
+    ['zero', { receiver_id: 0 }],
+    ['a negative ID', { receiver_id: -2 }],
+    ['an ID past the database integer range', { receiver_id: MAX_INT32 + 1 }],
+    ['a receiver_id that is not finite', { receiver_id: Infinity }],
+  ])('rejects %s', (_label, body) => {
+    expect(validateSendFriendRequestBody(body, requesterId)).toEqual({
+      valid: false,
+      message: "'receiver_id' must be a valid user ID",
+    });
+  });
+
+  it("rejects the requester's own ID", () => {
+    expect(validateSendFriendRequestBody({ receiver_id: requesterId }, requesterId)).toEqual({
+      valid: false,
+      message: 'You cannot send a friend request to yourself',
+    });
   });
 });

@@ -7,7 +7,10 @@ import app from '../../src/app';
 // the guard lets a request through is tested in the other files.
 
 // Add new routes here (e.g. GET /friend, the /friend/requests routes) so they are covered too.
-const allRoutes = [['get', '/friend/search/+14155552671']] as const;
+const allRoutes = [
+  ['get', '/friend/search/+14155552671'],
+  ['post', '/friend/requests'],
+] as const;
 
 describe('every friend route', () => {
   it('rejects a request without a session', async () => {

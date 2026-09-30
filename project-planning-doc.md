@@ -61,21 +61,22 @@ Completed:
 - PATCH /chat/:chatid/message/:message_id
 - DELETE /chat/:chatid/message/:message_id
 - GET /friend/search/:tel
+- POST /friend/requests
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Basic room summaries with latest-message metadata
 - Automatic cleanup of chat rooms that stay empty (see "Empty chat room cleanup")
-- Integration tests for the account endpoints, the chat-room endpoints, the empty-room cleanup and the friend search endpoint
+- Integration tests for the account endpoints, the chat-room endpoints, the empty-room cleanup, the friend search endpoint and the send-friend-request endpoint
 
 Still planned or not yet implemented:
 
-- Friend request flows (send, list, accept, reject/cancel)
+- Friend request flows (list, accept, reject/cancel)
 - Friend list and unfriending
 - Real-time socket communication
 - Frontend application screens and state management
 - Production deployment hardening
 
-The room and auth systems are now acting as the current working backend foundation. The rest of the friend features (everything under "Friend endpoints" except search) and realtime remain future work and should be treated as the next milestone rather than as missing pieces of the current baseline.
+The room and auth systems are now acting as the current working backend foundation. The rest of the friend features (everything under "Friend endpoints" except search and sending a request) and realtime remain future work and should be treated as the next milestone rather than as missing pieces of the current baseline.
 
 Note: In the database, the mutual friendship model stores two rows per friendship pair, one for each user, as described in the project requirements.
 
@@ -558,7 +559,7 @@ DELETE /chat/:chatid/message/:message_id (implemented)
 - responds `404` when the message does not exist in this room, does not belong to this room, or was already deleted
 - deleting a message never deletes the underlying `ChatRoom` or affects other members' access to the room
 
-#### Friend endpoints (in progress: schema changes and search are implemented)
+#### Friend endpoints (in progress: schema changes, search and sending a request are implemented)
 
 Friend flows get their own module, `src/modules/friends/` (routes, controller, validator(s), service), mounted in `app.ts` behind `requireUserAuth` like the chat routes. A user is always returned to other users as `{ id, name, avatarUrl }`, never with `email` or `tel`.
 
@@ -590,7 +591,7 @@ GET /friend/search/:tel (implemented)
   }
   ```
 
-POST /friend/requests
+POST /friend/requests (implemented)
 
 - send a friend request; incoming body: `{ receiver_id }`
 - incoming body:
@@ -604,7 +605,7 @@ POST /friend/requests
 - responds `400` when `receiver_id` is not a valid ID, is the requester's own ID, or does not refer to an existing user (the same convention as `member_ids` in `POST /chat`)
 - responds `409` when the two are already friends, or when the requester already has a pending request to this user
 - responds `409` when the receiver already sent the requester a request: deny it and point to the inbox flow instead. The body carries that request's `requestId` so the client can offer "Accept" directly
-- rate limited per user (suggested: 20 per hour, `429` afterwards) to keep it from being used to spam
+- rate limited per user (20 per hour, `429` with `{ "error": ... }` afterwards; like search, every request past the sign-in check counts, `400`s and `409`s included) to keep it from being used to spam
 - a duplicate that slips past the checks (double click, two tabs) is caught by the unique constraint and answered with the same `409`
 - return body (`201`), where `user` is the receiver:
 
@@ -739,6 +740,7 @@ POST /account/password
 Fixes to implemented endpoints:
 
 - `lastMessage.content` in the room summaries is `""` when the latest message was deleted, so the room list would show a blank preview. Add `deletedAt` to `lastMessage` and let the client show a placeholder such as "Message deleted" (dropping deleted messages from the lookup instead would make a room jump down the list after a delete)
+- signup controller's P2002 handler reports any unique violation as "Phone number already exists", even when the email is the cause
 
 ### Real-time events (planned)
 
@@ -817,7 +819,7 @@ message-app/
     │           ├── friend.controller.ts
     │           ├── friend.validator.ts
     │           ├── friend.service.ts
-    │           └── friendRateLimit.middleware.ts   // per-user limiters (friendSearchLimiter)
+    │           └── friendRateLimit.middleware.ts   // per-user limiters (friendSearchLimiter, friendRequestLimiter)
     └── test/
         ├── setup.ts
         ├── helpers/                          // shared fixtures, not test files
@@ -844,6 +846,7 @@ message-app/
         │   └── chatRoomCleanup.job.unit.test.ts
         └── friends/
             ├── friendSearch.test.ts          // GET /friend/search/:tel
+            ├── friendRequests.send.test.ts   // POST /friend/requests
             ├── friend.permissions.test.ts    // sign-in guard, per route
             └── friend.validator.unit.test.ts
 ```

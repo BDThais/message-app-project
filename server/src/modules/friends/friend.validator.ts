@@ -1,4 +1,5 @@
 import { isValidPhoneNumber } from 'libphonenumber-js';
+import { MAX_INT32 as MAX_ID } from '../../lib/constants';
 
 // A full E.164 number in its canonical spelling: '+', a country code that
 // does not start with 0, and at most 15 digits in total.
@@ -30,4 +31,35 @@ export function validateTelParam(rawTel: unknown): TelParamValidation {
   }
 
   return { valid: true, data: { tel: rawTel } };
+}
+
+type SendFriendRequestValidation =
+  | { valid: true; data: { receiverId: number } }
+  | { valid: false; message: string };
+
+/**
+ * Validates the body of POST /friend/requests. `receiver_id` must be a
+ * positive integer within the Postgres integer range (the same rule as the
+ * IDs in POST /chat's `member_ids`) and must not be the requester's own ID.
+ * Whether it refers to an existing user is the service's question, not the
+ * validator's.
+ */
+export function validateSendFriendRequestBody(
+  body: unknown,
+  requesterId: number
+): SendFriendRequestValidation {
+  // Express leaves req.body undefined when the request has no JSON body.
+  const { receiver_id } = typeof body === 'object' && body !== null
+    ? (body as Record<string, unknown>)
+    : {};
+
+  if (!Number.isInteger(receiver_id) || (receiver_id as number) < 1 || (receiver_id as number) > MAX_ID) {
+    return { valid: false, message: "'receiver_id' must be a valid user ID" };
+  }
+
+  if (receiver_id === requesterId) {
+    return { valid: false, message: 'You cannot send a friend request to yourself' };
+  }
+
+  return { valid: true, data: { receiverId: receiver_id as number } };
 }

@@ -12,3 +12,13 @@ export const friendSearchLimiter = rateLimit({
   keyGenerator: (req) => String(req.user!.id),
   message: { error: 'Too many searches, try again later' },
 });
+
+// Sending a request notifies another person, so it is capped to keep it from
+// being used to spam. Like the search limiter, every request that gets past
+// requireUserAuth counts, including ones answered with a 400 or 409.
+export const friendRequestLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 20,
+  keyGenerator: (req) => String(req.user!.id),
+  message: { error: 'Too many friend requests, try again later' },
+});

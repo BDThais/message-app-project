@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
-import { validateTelParam } from './friend.validator';
-import { findUserByTel } from './friend.service';
+import { validateTelParam, validateSendFriendRequestBody } from './friend.validator';
+import { findUserByTel, createFriendRequest } from './friend.service';
 
 // Route chain (see friend.routes.ts): requireUserAuth -> friendSearchLimiter,
 // so by the time this runs the requester is signed in and within their search
@@ -15,6 +15,40 @@ export async function searchUserByTel(req: Request, res: Response, next: NextFun
     const user = await findUserByTel(req.user!.id, validation.data.tel);
 
     return res.status(200).json({ user });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Route chain (see friend.routes.ts): requireUserAuth -> friendRequestLimiter.
+// The service reports the expected refusals as a `status`; anything it throws
+// is unexpected and goes to the shared error handler.
+export async function sendFriendRequest(req: Request, res: Response, next: NextFunction) {
+  const requesterId = req.user!.id;
+
+  const validation = validateSendFriendRequestBody(req.body, requesterId);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.message });
+  }
+
+  try {
+    const result = await createFriendRequest(requesterId, validation.data.receiverId);
+
+    switch (result.status) {
+      case 'created':
+        return res.status(201).json({ request: result.request });
+      case 'receiver_not_found':
+        return res.status(400).json({ error: 'receiver_id does not refer to an existing user' });
+      case 'already_friends':
+        return res.status(409).json({ error: 'You are already friends with this user' });
+      case 'already_sent':
+        return res.status(409).json({ error: 'You have already sent this user a friend request' });
+      case 'already_received':
+        return res.status(409).json({
+          error: 'This user has already sent you a friend request',
+          requestId: result.requestId,
+        });
+    }
   } catch (err) {
     next(err);
   }
