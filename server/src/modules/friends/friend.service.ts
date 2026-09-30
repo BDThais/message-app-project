@@ -84,15 +84,19 @@ export async function findUserByTel(
 /** A user as other users see them: never email or tel. */
 export type PublicUser = { id: number; name: string; avatarUrl: string | null };
 
-/** What POST /friend/requests answers with: the new request and its receiver. */
-export type SentFriendRequest = {
+/**
+ * A pending friend request as the API shows it. `user` is always the *other*
+ * party: the receiver in what POST /friend/requests answers with and in the
+ * outgoing list, the sender in the incoming list.
+ */
+export type FriendRequestSummary = {
   id: number;
   createdAt: Date;
   user: PublicUser;
 };
 
 export type SendFriendRequestResult =
-  | { status: 'created'; request: SentFriendRequest }
+  | { status: 'created'; request: FriendRequestSummary }
   | { status: 'receiver_not_found' }
   | { status: 'already_friends' }
   | { status: 'already_sent' }
@@ -166,4 +170,54 @@ export async function createFriendRequest(
     if (isPrismaError(err, 'P2003')) return { status: 'receiver_not_found' };
     throw err;
   }
+}
+
+/**
+ * Which side of the pending requests GET /friend/requests lists: `incoming`
+ * is the inbox (requests others sent to the requester), `outgoing` is what the
+ * requester sent and can still cancel.
+ */
+export type FriendRequestDirection = 'incoming' | 'outgoing';
+
+const publicUserSelect = { id: true, name: true, avatarUrl: true } as const;
+
+// Newest first. `id` breaks ties between requests with the same createdAt, so
+// the order does not change from one call to the next.
+const newestFirst: Prisma.PendingFriendRequestOrderByWithRelationInput[] = [
+  { createdAt: 'desc' },
+  { id: 'desc' },
+];
+
+/**
+ * Behind GET /friend/requests: the requester's pending requests in one
+ * direction, newest first, each with the other party as `user`. The other
+ * party is selected down to `{ id, name, avatarUrl }` in the query itself, so
+ * email and tel never leave the database. There is no pagination yet.
+ *
+ * Both queries are served by an index: `incoming` filters on receiverId (the
+ * @@index added for the inbox), `outgoing` on senderId (the leading column of
+ * @@unique([senderId, receiverId])). Requests cascade with their users, so
+ * the other party always exists.
+ */
+export async function listFriendRequests(
+  requesterId: number,
+  direction: FriendRequestDirection
+): Promise<FriendRequestSummary[]> {
+  if (direction === 'incoming') {
+    const rows = await prisma.pendingFriendRequest.findMany({
+      where: { receiverId: requesterId },
+      orderBy: newestFirst,
+      select: { id: true, createdAt: true, sender: { select: publicUserSelect } },
+    });
+
+    return rows.map(({ id, createdAt, sender }) => ({ id, createdAt, user: sender }));
+  }
+
+  const rows = await prisma.pendingFriendRequest.findMany({
+    where: { senderId: requesterId },
+    orderBy: newestFirst,
+    select: { id: true, createdAt: true, receiver: { select: publicUserSelect } },
+  });
+
+  return rows.map(({ id, createdAt, receiver }) => ({ id, createdAt, user: receiver }));
 }

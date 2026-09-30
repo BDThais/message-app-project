@@ -1,5 +1,6 @@
 import { isValidPhoneNumber } from 'libphonenumber-js';
 import { MAX_INT32 as MAX_ID } from '../../lib/constants';
+import type { FriendRequestDirection } from './friend.service';
 
 // A full E.164 number in its canonical spelling: '+', a country code that
 // does not start with 0, and at most 15 digits in total.
@@ -62,4 +63,31 @@ export function validateSendFriendRequestBody(
   }
 
   return { valid: true, data: { receiverId: receiver_id as number } };
+}
+
+type GetFriendRequestsQueryValidation =
+  | { valid: true; data: { direction: FriendRequestDirection } }
+  | { valid: false; message: string };
+
+/**
+ * Validates the query string of GET /friend/requests. `direction` is optional
+ * and defaults to `incoming` (the inbox); the only other value is `outgoing`.
+ * Anything else is a 400, including an empty value (`?direction=`), a
+ * different case (`Incoming`) and a repeated parameter, which Express parses
+ * into an array. Other query parameters are ignored.
+ */
+export function validateGetFriendRequestsQuery(query: unknown): GetFriendRequestsQueryValidation {
+  const { direction } = typeof query === 'object' && query !== null
+    ? (query as Record<string, unknown>)
+    : {};
+
+  if (direction === undefined || direction === 'incoming') {
+    return { valid: true, data: { direction: 'incoming' } };
+  }
+
+  if (direction === 'outgoing') {
+    return { valid: true, data: { direction: 'outgoing' } };
+  }
+
+  return { valid: false, message: "'direction' must be 'incoming' or 'outgoing'" };
 }

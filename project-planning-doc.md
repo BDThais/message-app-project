@@ -38,6 +38,8 @@ Scripts (run from `server/`):
 Name any new database-free test `*.unit.test.ts` so `test:unit` picks it up. Every other test file is an integration
 test and needs the test database.
 
+Claude's chat sandbox has no Docker and cannot download Prisma's schema engine, so `npm test` does not work there; the workaround (a local Postgres plus applying the migration SQL by hand) and other notes for working on this repo from that sandbox are in `CLAUDE_SANDBOX_NOTES.md`.
+
 ## Current Implementation Status
 
 The backend is now at a broader API MVP than the original plan. The active implementation includes the account lifecycle and the room-management layer required for chat features:
@@ -62,21 +64,22 @@ Completed:
 - DELETE /chat/:chatid/message/:message_id
 - GET /friend/search/:tel
 - POST /friend/requests
+- GET /friend/requests
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Basic room summaries with latest-message metadata
 - Automatic cleanup of chat rooms that stay empty (see "Empty chat room cleanup")
-- Integration tests for the account endpoints, the chat-room endpoints, the empty-room cleanup, the friend search endpoint and the send-friend-request endpoint
+- Integration tests for the account endpoints, the chat-room endpoints, the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint and the list-friend-requests endpoint
 
 Still planned or not yet implemented:
 
-- Friend request flows (list, accept, reject/cancel)
+- Friend request flows (accept, reject/cancel)
 - Friend list and unfriending
 - Real-time socket communication
 - Frontend application screens and state management
 - Production deployment hardening
 
-The room and auth systems are now acting as the current working backend foundation. The rest of the friend features (everything under "Friend endpoints" except search and sending a request) and realtime remain future work and should be treated as the next milestone rather than as missing pieces of the current baseline.
+The room and auth systems are now acting as the current working backend foundation. The rest of the friend features (everything under "Friend endpoints" except search, sending a request and listing requests) and realtime remain future work and should be treated as the next milestone rather than as missing pieces of the current baseline.
 
 Note: In the database, the mutual friendship model stores two rows per friendship pair, one for each user, as described in the project requirements.
 
@@ -559,7 +562,7 @@ DELETE /chat/:chatid/message/:message_id (implemented)
 - responds `404` when the message does not exist in this room, does not belong to this room, or was already deleted
 - deleting a message never deletes the underlying `ChatRoom` or affects other members' access to the room
 
-#### Friend endpoints (in progress: schema changes, search and sending a request are implemented)
+#### Friend endpoints (in progress: schema changes, search, sending a request and listing requests are implemented)
 
 Friend flows get their own module, `src/modules/friends/` (routes, controller, validator(s), service), mounted in `app.ts` behind `requireUserAuth` like the chat routes. A user is always returned to other users as `{ id, name, avatarUrl }`, never with `email` or `tel`.
 
@@ -625,11 +628,14 @@ POST /friend/requests (implemented)
 
 - known and accepted race: if two users send each other a request at the same instant, both can be stored (the unique constraint is per direction). This is harmless because accepting deletes the pair's requests in both directions (see below), so no hand-written database constraint is needed
 
-GET /friend/requests
+GET /friend/requests (implemented)
 
 - retrieve the requester's pending friend requests, newest first
-- `direction` query parameter: `incoming` (default; requests others sent to the requester, the inbox) or `outgoing` (requests the requester sent, so the UI can show "request sent" and offer to cancel); `400` for any other value
-- `user` is always the *other* party: the sender for `incoming`, the receiver for `outgoing`
+- `direction` query parameter: `incoming` (default; requests others sent to the requester, the inbox) or `outgoing` (requests the requester sent, so the UI can show "request sent" and offer to cancel); `400` with `{ "error": "'direction' must be 'incoming' or 'outgoing'" }` for any other value, including an empty one (`?direction=`), a different case (`Incoming`) and a repeated parameter (`?direction=incoming&direction=outgoing`). Other query parameters are ignored
+- `user` is always the *other* party: the sender for `incoming`, the receiver for `outgoing`. It is selected down to `{ id, name, avatarUrl }` in the query itself, so `email` and `tel` are never read
+- sorted by `createdAt` descending, with the request `id` descending as the tie-break, so requests with the same timestamp always come back in the same order
+- an empty list is a normal outcome: `200` with `requests: []`
+- no pagination and no rate limiter: it only lists requests that already involve the requester, so it reveals nothing about other users. Add `limit`/`before` in the style of `GET /chat/:chatid/message` if an inbox can grow large
 - return body (`200`):
 
   ```json
@@ -825,7 +831,7 @@ message-app/
         ├── helpers/                          // shared fixtures, not test files
         │   ├── users.ts                      // createUser, loginAs (session cookie without going through /account/login)
         │   ├── chatRooms.ts                  // createGroupRoom, createDirectRoom, promoteToAdmin, memberIdsOf
-        │   └── friends.ts                    // makeFriends, createFriendRequest
+        │   └── friends.ts                    // makeFriends, createFriendRequest (optional createdAt)
         ├── account/
         │   ├── session.test.ts               // login, me, logout
         │   └── signup.test.ts                // includes the canonical-number and duplicate-spelling cases
@@ -847,6 +853,7 @@ message-app/
         └── friends/
             ├── friendSearch.test.ts          // GET /friend/search/:tel
             ├── friendRequests.send.test.ts   // POST /friend/requests
+            ├── friendRequests.get.test.ts    // GET /friend/requests
             ├── friend.permissions.test.ts    // sign-in guard, per route
             └── friend.validator.unit.test.ts
 ```

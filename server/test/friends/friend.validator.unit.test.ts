@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_INT32 } from '../../src/lib/constants';
 import {
+  validateGetFriendRequestsQuery,
   validateSendFriendRequestBody,
   validateTelParam,
 } from '../../src/modules/friends/friend.validator';
@@ -88,6 +89,35 @@ describe('validateSendFriendRequestBody', () => {
     expect(validateSendFriendRequestBody({ receiver_id: requesterId }, requesterId)).toEqual({
       valid: false,
       message: 'You cannot send a friend request to yourself',
+    });
+  });
+});
+
+describe('validateGetFriendRequestsQuery', () => {
+  it.each([
+    ['no query parameters', {}, 'incoming'],
+    ['no query object at all', undefined, 'incoming'],
+    ['incoming', { direction: 'incoming' }, 'incoming'],
+    ['outgoing', { direction: 'outgoing' }, 'outgoing'],
+    ['other parameters, which are ignored', { direction: 'outgoing', page: '2' }, 'outgoing'],
+  ])('accepts %s', (_label, query, direction) => {
+    expect(validateGetFriendRequestsQuery(query)).toEqual({ valid: true, data: { direction } });
+  });
+
+  it.each([
+    ['an unknown value', { direction: 'all' }],
+    ['an empty value', { direction: '' }],
+    ['a different case', { direction: 'Incoming' }],
+    ['surrounding whitespace', { direction: ' outgoing' }],
+    ['a repeated parameter (parsed into an array)', { direction: ['incoming', 'outgoing'] }],
+    ['a single-item array', { direction: ['incoming'] }],
+    ['a nested object', { direction: { value: 'incoming' } }],
+    ['a value that is not a string', { direction: 1 }],
+    ['null', { direction: null }],
+  ])('rejects %s', (_label, query) => {
+    expect(validateGetFriendRequestsQuery(query)).toEqual({
+      valid: false,
+      message: "'direction' must be 'incoming' or 'outgoing'",
     });
   });
 });

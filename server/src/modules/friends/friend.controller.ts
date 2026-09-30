@@ -1,6 +1,10 @@
 import type { Request, Response, NextFunction } from 'express';
-import { validateTelParam, validateSendFriendRequestBody } from './friend.validator';
-import { findUserByTel, createFriendRequest } from './friend.service';
+import {
+  validateTelParam,
+  validateSendFriendRequestBody,
+  validateGetFriendRequestsQuery,
+} from './friend.validator';
+import { findUserByTel, createFriendRequest, listFriendRequests } from './friend.service';
 
 // Route chain (see friend.routes.ts): requireUserAuth -> friendSearchLimiter,
 // so by the time this runs the requester is signed in and within their search
@@ -49,6 +53,24 @@ export async function sendFriendRequest(req: Request, res: Response, next: NextF
           requestId: result.requestId,
         });
     }
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Route chain (see friend.routes.ts): requireUserAuth only. Listing what
+// already concerns the requester tells them nothing about anyone else, so it
+// has no limiter. An empty list is a normal outcome: 200 with requests: [].
+export async function getFriendRequests(req: Request, res: Response, next: NextFunction) {
+  const validation = validateGetFriendRequestsQuery(req.query);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.message });
+  }
+
+  try {
+    const requests = await listFriendRequests(req.user!.id, validation.data.direction);
+
+    return res.status(200).json({ requests });
   } catch (err) {
     next(err);
   }

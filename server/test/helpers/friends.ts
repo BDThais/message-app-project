@@ -10,7 +10,12 @@ export async function makeFriends(userAId: number, userBId: number) {
   });
 }
 
-/** A pending friend request from `senderId` to `receiverId`. */
-export function createFriendRequest(senderId: number, receiverId: number) {
-  return prisma.pendingFriendRequest.create({ data: { senderId, receiverId } });
+/**
+ * A pending friend request from `senderId` to `receiverId`. Pass `createdAt`
+ * when a test cares about the order of requests; otherwise it is the current time.
+ */
+export function createFriendRequest(senderId: number, receiverId: number, createdAt?: Date) {
+  return prisma.pendingFriendRequest.create({
+    data: { senderId, receiverId, ...(createdAt ? { createdAt } : {}) },
+  });
 }
