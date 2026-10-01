@@ -3,8 +3,14 @@ import {
   validateTelParam,
   validateSendFriendRequestBody,
   validateGetFriendRequestsQuery,
+  validateRequestIdParam,
 } from './friend.validator';
-import { findUserByTel, createFriendRequest, listFriendRequests } from './friend.service';
+import {
+  findUserByTel,
+  createFriendRequest,
+  listFriendRequests,
+  acceptPendingFriendRequest,
+} from './friend.service';
 
 // Route chain (see friend.routes.ts): requireUserAuth -> friendSearchLimiter,
 // so by the time this runs the requester is signed in and within their search
@@ -71,6 +77,30 @@ export async function getFriendRequests(req: Request, res: Response, next: NextF
     const requests = await listFriendRequests(req.user!.id, validation.data.direction);
 
     return res.status(200).json({ requests });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Route chain (see friend.routes.ts): requireUserAuth only. Accepting works
+// only on a request addressed to the requester, so it tells them nothing about
+// anyone else and has no limiter. A request that does not exist and one that
+// belongs to somebody else get the same 404.
+export async function acceptFriendRequest(req: Request, res: Response, next: NextFunction) {
+  const validation = validateRequestIdParam(req.params.id);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.message });
+  }
+
+  try {
+    const result = await acceptPendingFriendRequest(req.user!.id, validation.data.requestId);
+
+    switch (result.status) {
+      case 'accepted':
+        return res.status(201).json({ friend: result.friend });
+      case 'not_found':
+        return res.status(404).json({ error: 'Friend request not found' });
+    }
   } catch (err) {
     next(err);
   }

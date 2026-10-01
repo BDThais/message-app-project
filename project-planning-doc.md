@@ -65,21 +65,22 @@ Completed:
 - GET /friend/search/:tel
 - POST /friend/requests
 - GET /friend/requests
+- POST /friend/requests/:id/accept
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Basic room summaries with latest-message metadata
 - Automatic cleanup of chat rooms that stay empty (see "Empty chat room cleanup")
-- Integration tests for the account endpoints, the chat-room endpoints, the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint and the list-friend-requests endpoint
+- Integration tests for the account endpoints, the chat-room endpoints, the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint and the accept-friend-request endpoint
 
 Still planned or not yet implemented:
 
-- Friend request flows (accept, reject/cancel)
+- Friend request flows (reject/cancel)
 - Friend list and unfriending
 - Real-time socket communication
 - Frontend application screens and state management
 - Production deployment hardening
 
-The room and auth systems are now acting as the current working backend foundation. The rest of the friend features (everything under "Friend endpoints" except search, sending a request and listing requests) and realtime remain future work and should be treated as the next milestone rather than as missing pieces of the current baseline.
+The room and auth systems are now acting as the current working backend foundation. The rest of the friend features (everything under "Friend endpoints" except search, sending, listing and accepting a request) and realtime remain future work and should be treated as the next milestone rather than as missing pieces of the current baseline.
 
 Note: In the database, the mutual friendship model stores two rows per friendship pair, one for each user, as described in the project requirements.
 
@@ -562,7 +563,7 @@ DELETE /chat/:chatid/message/:message_id (implemented)
 - responds `404` when the message does not exist in this room, does not belong to this room, or was already deleted
 - deleting a message never deletes the underlying `ChatRoom` or affects other members' access to the room
 
-#### Friend endpoints (in progress: schema changes, search, sending a request and listing requests are implemented)
+#### Friend endpoints (in progress: schema changes, search, sending, listing and accepting a request are implemented)
 
 Friend flows get their own module, `src/modules/friends/` (routes, controller, validator(s), service), mounted in `app.ts` behind `requireUserAuth` like the chat routes. A user is always returned to other users as `{ id, name, avatarUrl }`, never with `email` or `tel`.
 
@@ -654,11 +655,15 @@ GET /friend/requests (implemented)
   }
   ```
 
-POST /friend/requests/:id/accept
+POST /friend/requests/:id/accept (implemented)
 
-- accept a pending friend request; `:id` is the request ID
-- only the receiver can accept. Responds `404` when the request does not exist or is not addressed to the requester, so nobody can probe other users' requests
-- in one transaction: create both `FriendListMember` rows (`createMany` with `skipDuplicates`, so it is safe to repeat), then delete every pending request between the two users in either direction
+- accept a pending friend request; `:id` is the request ID (`400` with `{ "error": "Invalid friend request id" }` when it is not a valid ID)
+- only the receiver can accept. Responds `404` with `{ "error": "Friend request not found" }` when the request does not exist or is not addressed to the requester, so nobody can probe other users' requests. A request that was already accepted is gone, so repeating the call answers `404`
+- in one transaction: create both `FriendListMember` rows (`createMany` with `skipDuplicates`, so it is safe to repeat and completes a friendship that only has one of its two rows), then delete every pending request between the two users in either direction
+- the two rows are always created in the same order (lower user ID first), whoever accepts. Two users who sent each other a request at the same instant can also accept at the same instant, and if each transaction inserted its own side first, Postgres could abort one of them as a deadlock
+- a double click or a second tab sending the same accept twice at once is answered with `201` and `201`, or `201` and `404`, never a `5xx`; either way there is one friendship and no request left
+- no rate limiter: it only works on a request addressed to the requester, so it reveals nothing about other users
+- if the sender's account is deleted while the request is being accepted, the answer is the same `404`
 - does not create a chat room; the client calls `POST /chat` with `type: "direct"`, which reuses an existing room
 - return body (`201`), where `friend` is the sender who is now a friend:
 
@@ -795,6 +800,7 @@ message-app/
     │   │   └── config.ts
     │   ├── lib/
     │   │   ├── constants.ts
+    │   │   ├── parseIdParam.ts      // numeric URL param -> ID or null (used by the chat and friend validators)
     │   │   ├── passwordHash.ts
     │   │   └── prisma.ts
     │   ├── middlewares/             // shared by several features
@@ -854,6 +860,7 @@ message-app/
             ├── friendSearch.test.ts          // GET /friend/search/:tel
             ├── friendRequests.send.test.ts   // POST /friend/requests
             ├── friendRequests.get.test.ts    // GET /friend/requests
+            ├── friendRequests.accept.test.ts // POST /friend/requests/:id/accept
             ├── friend.permissions.test.ts    // sign-in guard, per route
             └── friend.validator.unit.test.ts
 ```

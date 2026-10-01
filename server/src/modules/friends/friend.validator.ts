@@ -1,5 +1,6 @@
 import { isValidPhoneNumber } from 'libphonenumber-js';
 import { MAX_INT32 as MAX_ID } from '../../lib/constants';
+import { parseIdParam } from '../../lib/parseIdParam';
 import type { FriendRequestDirection } from './friend.service';
 
 // A full E.164 number in its canonical spelling: '+', a country code that
@@ -90,4 +91,22 @@ export function validateGetFriendRequestsQuery(query: unknown): GetFriendRequest
   }
 
   return { valid: false, message: "'direction' must be 'incoming' or 'outgoing'" };
+}
+
+type RequestIdParamValidation =
+  | { valid: true; data: { requestId: number } }
+  | { valid: false; message: string };
+
+/**
+ * Validates the ':id' URL param of the /friend/requests/:id routes, which is a
+ * *request* ID (PendingFriendRequest.id), not a user ID. Only plain digit
+ * strings between 1 and the Postgres integer maximum are accepted (see
+ * parseIdParam).
+ */
+export function validateRequestIdParam(rawRequestId: unknown): RequestIdParamValidation {
+  const requestId = parseIdParam(rawRequestId);
+
+  return requestId === null
+    ? { valid: false, message: 'Invalid friend request id' }
+    : { valid: true, data: { requestId } };
 }

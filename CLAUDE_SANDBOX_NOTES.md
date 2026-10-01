@@ -1,6 +1,6 @@
 # Notes for Claude: working on this repo in the claude.ai chat sandbox
 
-Notes to self from earlier sessions, so a new session does not re-discover them. They describe the claude.ai chat sandbox only, not the developer's machine (there, `npm test` with Docker works as documented in `project-planning-doc.md`). Last verified 2026-09-30. If something below no longer matches reality, fix this file in the same patch.
+Notes to self from earlier sessions, so a new session does not re-discover them. They describe the claude.ai chat sandbox only, not the developer's machine (there, `npm test` with Docker works as documented in `project-planning-doc.md`). Last verified 2026-10-01. If something below no longer matches reality, fix this file in the same patch.
 
 ## What the sandbox can and cannot do
 
@@ -67,3 +67,5 @@ After a schema change: re-run step 3, and apply only the new `migration.sql`. To
 - Baseline first: run `tsc` and the existing tests before changing anything, so a later failure is clearly mine.
 - Mutation-check new tests: break the code on purpose (wrong sort, wrong filter), confirm the test fails, restore.
 - Edit files with small `python3` scripts that `assert` the target text occurs exactly once.
+- Wrap anything that can block (raw `pg` sessions in a lock experiment, long loops) in `timeout 60`: a hung command costs the whole 300 s tool call. Never `pkill -f <pattern>` when the pattern is in your own command line, it kills your shell.
+- To see the SQL Prisma really sends, turn on statement logging, run one test and read `/tmp/pg.log`: `psql -h /tmp -p 55432 -U chatapp_test -d chatapp_test -c "ALTER SYSTEM SET log_statement='all'" -c "SELECT pg_reload_conf()"`, then `ALTER SYSTEM RESET log_statement`.

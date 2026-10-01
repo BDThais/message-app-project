@@ -221,3 +221,75 @@ export async function listFriendRequests(
 
   return rows.map(({ id, createdAt, receiver }) => ({ id, createdAt, user: receiver }));
 }
+
+export type AcceptFriendRequestResult =
+  | { status: 'accepted'; friend: PublicUser }
+  // The request does not exist, or is not addressed to the requester. The two
+  // cases are not told apart, so nobody can probe other users' requests.
+  | { status: 'not_found' };
+
+/**
+ * Behind POST /friend/requests/:id/accept. `requestId` is expected to be
+ * validated already (see validateRequestIdParam). Only the receiver can accept:
+ * the request is looked up by its ID *and* `receiverId = requesterId`.
+ *
+ * One transaction: create both friend-list rows, then delete every pending
+ * request between the two users in either direction (this also clears the
+ * send-at-the-same-instant race, see "Friend endpoints" in the planning doc).
+ * The rows are created with `skipDuplicates`, so a half-written friendship is
+ * completed and a repeated or concurrent accept does not fail. They are also
+ * always created in the same order, so concurrent accepts do not deadlock on
+ * each other's rows (see below).
+ *
+ * A sender who is deleted in the gap between the lookup and the insert fails
+ * the foreign key (P2003); their requests are gone with them, so it is reported
+ * as `not_found`, like any other request that no longer exists.
+ */
+export async function acceptPendingFriendRequest(
+  requesterId: number,
+  requestId: number
+): Promise<AcceptFriendRequestResult> {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const pending = await tx.pendingFriendRequest.findFirst({
+        where: { id: requestId, receiverId: requesterId },
+        select: { sender: { select: publicUserSelect } },
+      });
+
+      if (!pending) return { status: 'not_found' } as const;
+
+      const friend = pending.sender;
+
+      // The two rows always go in in the same order (lower user ID first),
+      // whoever accepts. Two users who sent each other a request can accept at
+      // the same instant; if each transaction inserted its own side first, each
+      // could end up waiting on the row the other just inserted, and Postgres
+      // would abort one of them as a deadlock (a 500). In one fixed order the
+      // second transaction just waits for the first and then skips the rows.
+      const [lowId, highId] =
+        requesterId < friend.id ? [requesterId, friend.id] : [friend.id, requesterId];
+
+      await tx.friendListMember.createMany({
+        data: [
+          { userId: lowId, friendId: highId },
+          { userId: highId, friendId: lowId },
+        ],
+        skipDuplicates: true,
+      });
+
+      await tx.pendingFriendRequest.deleteMany({
+        where: {
+          OR: [
+            { senderId: friend.id, receiverId: requesterId },
+            { senderId: requesterId, receiverId: friend.id },
+          ],
+        },
+      });
+
+      return { status: 'accepted', friend } as const;
+    });
+  } catch (err) {
+    if (isPrismaError(err, 'P2003')) return { status: 'not_found' };
+    throw err;
+  }
+}

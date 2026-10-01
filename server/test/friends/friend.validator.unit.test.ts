@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MAX_INT32 } from '../../src/lib/constants';
 import {
   validateGetFriendRequestsQuery,
+  validateRequestIdParam,
   validateSendFriendRequestBody,
   validateTelParam,
 } from '../../src/modules/friends/friend.validator';
@@ -118,6 +119,36 @@ describe('validateGetFriendRequestsQuery', () => {
     expect(validateGetFriendRequestsQuery(query)).toEqual({
       valid: false,
       message: "'direction' must be 'incoming' or 'outgoing'",
+    });
+  });
+});
+
+describe('validateRequestIdParam', () => {
+  it.each([
+    ['an ordinary ID', '7', 7],
+    ['the smallest ID', '1', 1],
+    ['the largest ID the database can hold', String(MAX_INT32), MAX_INT32],
+  ])('accepts %s', (_label, raw, requestId) => {
+    expect(validateRequestIdParam(raw)).toEqual({ valid: true, data: { requestId } });
+  });
+
+  it.each([
+    ['zero', '0'],
+    ['a negative ID', '-7'],
+    ['an ID past the database integer range', String(MAX_INT32 + 1)],
+    ['a fractional ID', '7.5'],
+    ['exponent notation', '1e3'],
+    ['a hexadecimal number', '0x10'],
+    ['a plus sign', '+7'],
+    ['surrounding whitespace', ' 7 '],
+    ['letters', 'abc'],
+    ['an empty string', ''],
+    ['a value that is not a string', 7],
+    ['no value at all', undefined],
+  ])('rejects %s', (_label, raw) => {
+    expect(validateRequestIdParam(raw)).toEqual({
+      valid: false,
+      message: 'Invalid friend request id',
     });
   });
 });
