@@ -1,5 +1,20 @@
 import { ChatMemberRole, ChatRoomType, Prisma } from '../../generated/prisma/client';
 import { prisma } from '../../lib/prisma';
+import { findNonFriendIds } from '../friends/friend.service';
+
+/**
+ * How a member entry leaves the API: the membership (`chatId`, `role`,
+ * `lastReadMessageId`) plus the user as `member: { id, name, avatarUrl }`.
+ * `memberId` is left out because it is the same value as `member.id`, so a
+ * client reads the user from one place. Spread into every query whose result
+ * is sent to the client (room creation, add members, change role) so the three
+ * endpoints cannot drift apart. It only shapes the output: `memberId` is still
+ * usable in `where` and `orderBy`.
+ */
+export const memberResponseArgs = {
+  omit: { memberId: true },
+  include: { member: { select: { id: true, name: true, avatarUrl: true } } },
+} as const;
 
 /**
  * Minimal shape needed to write chat_members rows. Both the main `prisma`
@@ -49,13 +64,23 @@ export async function addChatRoomMembers(
  * Users who are already members are left completely untouched - in
  * particular an existing admin is never downgraded to 'member' - and are
  * reported back in `alreadyMemberIds` instead of failing the request.
- * Everyone else joins with the default role: 'member'.
+ * Everyone else joins with the default role: 'member', but only if they are
+ * a friend of the requester. The friend check covers just the users who would
+ * be added: an existing member is skipped whether or not they are still a
+ * friend, so repeating a request never fails because of someone already in
+ * the room. If any of the others is not a friend (or does not exist, which is
+ * not told apart) the result is `not_friends` and *nobody* from this request
+ * is added.
  *
- * The insert is a single statement, so if any ID doesn't refer to a real
- * user the foreign-key error (see isForeignKeyConstraintError) is thrown
- * and *nobody* from this request is added.
+ * The insert is a single statement, so if a user is deleted after the friend
+ * check the foreign-key error (see isForeignKeyConstraintError) is thrown and
+ * likewise nobody from this request is added.
  */
-export async function addMembersToExistingChatRoom(chatId: number, memberIds: number[]) {
+export async function addMembersToExistingChatRoom(
+  chatId: number,
+  requesterId: number,
+  memberIds: number[]
+) {
   const existingMembers = await prisma.chatMember.findMany({
     where: { chatId, memberId: { in: memberIds } },
     select: { memberId: true },
@@ -64,15 +89,19 @@ export async function addMembersToExistingChatRoom(chatId: number, memberIds: nu
   const alreadyMemberIds = existingMembers.map((row) => row.memberId);
   const newMemberIds = memberIds.filter((id) => !alreadyMemberIds.includes(id));
 
+  if ((await findNonFriendIds(prisma, requesterId, newMemberIds)).length > 0) {
+    return { status: 'not_friends' } as const;
+  }
+
   await addChatRoomMembers(prisma, chatId, newMemberIds);
 
   const addedMembers = await prisma.chatMember.findMany({
     where: { chatId, memberId: { in: newMemberIds } },
-    include: { member: { select: { id: true, name: true, avatarUrl: true } } },
+    ...memberResponseArgs,
     orderBy: { memberId: 'asc' },
   });
 
-  return { addedMembers, alreadyMemberIds };
+  return { status: 'added', addedMembers, alreadyMemberIds } as const;
 }
 
 export type RemoveChatMemberResult =
@@ -150,9 +179,7 @@ export async function removeMemberFromChatRoom(
   });
 }
 
-type ChatMemberWithUser = Prisma.ChatMemberGetPayload<{
-  include: { member: { select: { id: true; name: true; avatarUrl: true } } };
-}>;
+type ChatMemberWithUser = Prisma.ChatMemberGetPayload<typeof memberResponseArgs>;
 
 export type ChangeMemberRoleResult =
   | { outcome: 'updated'; member: ChatMemberWithUser }
@@ -213,7 +240,7 @@ export async function changeMemberRoleInChatRoom(
     const member = await tx.chatMember.update({
       where: { memberId_chatId: { memberId: targetId, chatId } },
       data: { role },
-      include: { member: { select: { id: true, name: true, avatarUrl: true } } },
+      ...memberResponseArgs,
     });
 
     return { outcome: 'updated', member };

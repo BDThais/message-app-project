@@ -1,27 +1,45 @@
-import { addChatRoomMembers } from './chatMember.service';
+import { addChatRoomMembers, memberResponseArgs } from './chatMember.service';
+import { findNonFriendIds } from '../friends/friend.service';
 import { prisma } from '../../lib/prisma';
 import { Prisma, ChatRoomType, ChatMemberRole } from '../../generated/prisma/client';
 
-const memberInclude = {
-  members: {
-    include: { member: { select: { id: true, name: true, avatarUrl: true } } },
-  },
-} as const;
+const memberInclude = { members: memberResponseArgs } as const;
 
 type ChatRoomWithMembers = Prisma.ChatRoomGetPayload<{ include: typeof memberInclude }>;
 
+export type CreateChatRoomResult =
+  | { status: 'ok'; room: ChatRoomWithMembers; created: boolean }
+  // Refused: at least one of `memberIds` is not a friend of the requester (or
+  // does not exist, which is not told apart). Nothing was created.
+  | { status: 'not_friends' };
+
+/**
+ * Behind POST /chat. Everyone the requester invites has to be their friend,
+ * checked before anything is written, so a refused request creates no room
+ * and no members. For a direct room the check also comes before the lookup of
+ * an existing room, so a room between two former friends is not handed out
+ * again here (it is still listed by GET /chat and keeps working). A group room
+ * with no `memberIds` needs no friends.
+ */
 export async function createChatRoom(
   type: ChatRoomType,
   requesterId: number,
   memberIds: number[],
   name: string | undefined,
   avatarUrl: string | undefined
-): Promise<{ room: ChatRoomWithMembers; created: boolean }> {
-  return prisma.$transaction((tx) =>
-    type === ChatRoomType.direct
-      ? createDirectChatRoom(tx, requesterId, memberIds[0]!)
-      : createGroupChatRoom(tx, requesterId, memberIds, name, avatarUrl)
-  );
+): Promise<CreateChatRoomResult> {
+  return prisma.$transaction(async (tx) => {
+    if ((await findNonFriendIds(tx, requesterId, memberIds)).length > 0) {
+      return { status: 'not_friends' } as const;
+    }
+
+    const { room, created } =
+      type === ChatRoomType.direct
+        ? await createDirectChatRoom(tx, requesterId, memberIds[0]!)
+        : await createGroupChatRoom(tx, requesterId, memberIds, name, avatarUrl);
+
+    return { status: 'ok', room, created } as const;
+  });
 }
 
 export async function getChatMembership(memberId: number, chatId: number) {

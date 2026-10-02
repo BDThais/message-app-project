@@ -47,9 +47,11 @@ export function validateCreateChatRoomInput(
         return { valid: false, error: 'type must be "direct" or "group"' };
     }
 
+    // Same ID range as POST /chat/:chatid/member. An ID outside the INTEGER
+    // column's range would make the friendship lookup fail with a 500.
     if (member_ids !== undefined && (
       !Array.isArray(member_ids) ||
-      member_ids.some((id) => !Number.isInteger(id))
+      member_ids.some((id) => !Number.isInteger(id) || id < 1 || id > MAX_ID)
     )) {
       return { valid: false, error: 'member_ids must be an array of user IDs' };
     }

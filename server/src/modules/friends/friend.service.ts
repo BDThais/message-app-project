@@ -294,6 +294,40 @@ export async function acceptPendingFriendRequest(
   }
 }
 
+/**
+ * Which of `userIds` are not friends of the requester. Used by the chat-room
+ * endpoints, which only let people start a conversation with their friends
+ * (see "Friendship and messaging" in the planning doc). Two users are friends
+ * when the requester's *own* friend-list row names the other one, the same row
+ * GET /friend, GET /friend/search/:tel and DELETE /friend/:id read, so every
+ * endpoint agrees on who is a friend.
+ *
+ * A user who does not exist has no friend-list row either, so they come back
+ * as a non-friend like any stranger; callers answer both the same way and
+ * nobody can probe which user IDs exist. `userIds` must already be valid IDs
+ * (integers from 1 to MAX_INT32, as the chat-room validators ensure): an ID
+ * outside the column's range would make the database refuse the query.
+ *
+ * Takes the client so it can run inside the caller's transaction. It does not
+ * lock anything: a friendship removed right after the check still counts as
+ * the friendship it was when the check ran.
+ */
+export async function findNonFriendIds(
+  client: Prisma.TransactionClient,
+  requesterId: number,
+  userIds: number[]
+): Promise<number[]> {
+  if (userIds.length === 0) return [];
+
+  const rows = await client.friendListMember.findMany({
+    where: { userId: requesterId, friendId: { in: userIds } },
+    select: { friendId: true },
+  });
+  const friendIds = new Set(rows.map((row) => row.friendId));
+
+  return userIds.filter((id) => !friendIds.has(id));
+}
+
 export type RemoveFriendResult = { status: 'removed' } | { status: 'not_friends' };
 
 /**

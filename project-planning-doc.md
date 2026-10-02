@@ -69,9 +69,10 @@ Completed:
 - DELETE /friend/:id
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
+- Friendship requirement for creating a room and adding members (see "Friendship and messaging")
 - Basic room summaries with latest-message metadata
 - Automatic cleanup of chat rooms that stay empty (see "Empty chat room cleanup")
-- Integration tests for the account endpoints, the chat-room endpoints, the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint and the unfriend endpoint
+- Integration tests for the account endpoints, the chat-room endpoints, the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
 
 Still planned or not yet implemented:
 
@@ -212,6 +213,7 @@ POST /chat (implemented)
 - create a new chat room
 - incoming body: type, member_ids, name?, avatar_url?
 - for direct rooms, `member_ids` must contain exactly one other integer user ID; direct rooms cannot include `name` or `avatar_url`
+- every `member_ids` entry must be an integer from 1 to 2147483647 and a friend of the requester (see "Friendship and messaging"); a group room with no `member_ids` needs no friends
 - for group rooms, `member_ids` may be omitted or be an empty array; the requester is always added as an admin
 - group rooms may include `name` and `avatar_url`
 - incoming body:
@@ -226,8 +228,10 @@ POST /chat (implemented)
   ```
 
 - a group room can also be created without `member_ids` or with additional member IDs, for example `"member_ids": [2, 3]`
-- responds `201` when a new room is created and `200` when an existing direct room between the same two users is reused
-- responds `400` on validation errors or when a `member_ids` entry does not refer to an existing user
+- responds `201` when a new room is created and `200` when an existing direct room between the same two friends is reused
+- responds `400` on validation errors
+- each entry of `members` is `{ chatId, role, lastReadMessageId, member: { id, name, avatarUrl } }`. The user is only under `member`: there is no separate `memberId`, it would repeat `member.id`. `POST /chat/:chatid/member` and `PATCH /chat/:chatid/member/:userid` return entries of the same shape
+- responds `403` with `{ "error": "Only your friends can be added to a chat room" }` when any `member_ids` entry is not a friend of the requester, or does not exist (the two are not told apart), and creates no room and no members. For a direct room this check comes before the lookup of an existing room, so two former friends get `403` here, not their old room back
 - return body:
 
   ```json
@@ -239,7 +243,6 @@ POST /chat (implemented)
     "createdAt": "2026-09-13T12:00:00.000Z",
     "members": [
       {
-        "memberId": 1,
         "chatId": 1,
         "role": "admin",
         "lastReadMessageId": null,
@@ -250,7 +253,6 @@ POST /chat (implemented)
         }
       },
       {
-        "memberId": 2,
         "chatId": 1,
         "role": "member",
         "lastReadMessageId": null,
@@ -359,7 +361,7 @@ POST /chat/:chatid/member (implemented)
 - new members are inserted with role: member
 - `member_ids` is required: a non-empty array of positive integer user IDs (duplicates are ignored)
 - users who are already members (including the requester) are skipped and left unchanged, so an existing admin is never demoted; their IDs are returned in `alreadyMemberIds`
-- if any ID does not refer to an existing user, respond `400` and add nobody from that request
+- every user who would be *added* must be a friend of the requester (see "Friendship and messaging"). If any of them is not a friend, or does not exist (the two are not told apart), respond `403` with `{ "error": "Only your friends can be added to a chat room" }` and add nobody from that request. Users who are already members are not checked, so they are skipped even if they are no longer friends
 - responds `201` when at least one member was added, `200` when everyone was already a member
 - incoming body:
 
@@ -375,7 +377,6 @@ POST /chat/:chatid/member (implemented)
   {
     "addedMembers": [
       {
-        "memberId": 3,
         "chatId": 1,
         "role": "member",
         "lastReadMessageId": null,
@@ -428,7 +429,6 @@ PATCH /chat/:chatid/member/:userid (implemented)
   ```json
   {
     "member": {
-      "memberId": 2,
       "chatId": 1,
       "role": "admin",
       "lastReadMessageId": null,
@@ -607,7 +607,7 @@ POST /friend/requests (implemented)
   }
   ```
 
-- responds `400` when `receiver_id` is not a valid ID, is the requester's own ID, or does not refer to an existing user (the same convention as `member_ids` in `POST /chat`)
+- responds `400` when `receiver_id` is not a valid ID, is the requester's own ID, or does not refer to an existing user (unlike `POST /chat`, which answers `403` for an unknown user and a stranger alike)
 - responds `409` when the two are already friends, or when the requester already has a pending request to this user
 - responds `409` when the receiver already sent the requester a request: deny it and point to the inbox flow instead. The body carries that request's `requestId` so the client can offer "Accept" directly
 - rate limited per user (20 per hour, `429` with `{ "error": ... }` afterwards; like search, every request past the sign-in check counts, `400`s and `409`s included) to keep it from being used to spam
@@ -712,16 +712,21 @@ DELETE /friend/:id (implemented)
 - no rate limiter: it only works on the requester's own friend list, so it reveals nothing about other users
 - a double click or a second tab sending the same request twice at once, or both friends unfriending each other at the same instant, is answered with `204` and `204`, or `204` and `404`, never a `5xx` (unlike accepting, the two rows are removed by one `DELETE` statement, so no fixed row order is needed); either way the friendship is gone
 - does not touch pending friend requests (a pair that are friends has none, because accepting clears them), so after unfriending either user can send the other a new request
-- leaves any existing direct room between the two users, and its messages, untouched; unfriending only stops new conversations if friendship is made a requirement (see "Friendship and messaging" below)
+- leaves any existing direct room between the two users, and its messages, untouched, and they can keep messaging in it. What unfriending stops is new conversations between them: a new direct room, or adding one to a group of the other (see "Friendship and messaging" below)
 
-Friendship and messaging (decision needed)
+Friendship and messaging (implemented)
 
-Today `POST /chat` and `POST /chat/:chatid/member` accept any existing user ID, and user IDs are sequential integers, so anyone signed in can start a conversation with anyone. Friends have no effect on chat yet. Recommended, as its own step once the friend endpoints exist (it changes implemented endpoints and their tests):
+Friendship is required to start a conversation. Before this rule `POST /chat` and `POST /chat/:chatid/member` accepted any existing user ID, and user IDs are sequential integers, so anyone signed in could start a conversation with anyone, and read their name and avatar from the response. The rules:
 
-- `POST /chat`: for a direct room the other user must be a friend of the requester; for a group room every `member_ids` entry, the same rule is applied
-- `POST /chat/:chatid/member`: every added user must be a friend of the requester
-- respond `403`, and change nobody, in line with the all-or-nothing rule these endpoints already follow
-- unfriending never removes anyone from an existing room and it also doesn't stop new conversations. If harassment after unfriending becomes a concern, that is what a block feature would be for, and it is out of scope here
+- `POST /chat`: for a direct room the other user must be a friend of the requester; for a group room every `member_ids` entry must be (the requester's own ID is dropped first, as before). A group room created with no `member_ids` needs no friends
+- `POST /chat/:chatid/member`: every user who would be *added* must be a friend of the requester. A user who is already a member (the requester included) is skipped as before, friend or not, so a repeated request does not start failing because of someone who is already in the room
+- "friend" means the requester's *own* friend-list row names the user, the same rule `GET /friend`, `GET /friend/search/:tel` and `DELETE /friend/:id` use. The members of a group do not have to be friends with each other, only with whoever adds them
+- respond `403` with `{ "error": "Only your friends can be added to a chat room" }` and change nobody, in line with the all-or-nothing rule these endpoints already follow: one user who is not a friend refuses the whole request, and a room is never created without its members. The check runs after validation (`400`) and, on `POST /chat/:chatid/member`, after the group-room and admin guards (`403` with their own bodies)
+- a user ID that does not exist gets the same `403` as a stranger, so nobody can probe which user IDs exist. This replaces the old `400` for an unknown ID on these two endpoints. A member ID below 1 or above 2147483647 is still a `400` on both, because the database would refuse the lookup (`POST /chat` used to answer `500` for such an ID)
+- for a direct room the check comes before the lookup of an existing room: two former friends get `403` from `POST /chat`, not their old room back with `200`. The room itself is untouched
+- unfriending never removes anyone from an existing room, and the room keeps working: the former friends can still read and send messages in it, and `GET /chat` still lists it. What it stops is *new* conversations: a new direct room, or adding that user to a group. If harassment after unfriending becomes a concern, that is what a block feature would be for, and it is out of scope here
+- the check is not locked against a concurrent unfriend: a friendship removed at the same instant counts as the friendship it was when checked. A user deleted after the check but before the insert fails the foreign key and gets the same `403`
+- the check lives in `findNonFriendIds` (`friend.service.ts`), which the chat-room services call; it is the only place where the chat-room module reads the friend list
 
 ### Proposed additional endpoints (not yet implemented)
 
@@ -731,7 +736,7 @@ GET /chat/:chatid/member
 
 - list the room's members; membership alone is required, direct or group. Today member lists only appear in the responses of room creation, add-members and change-role, so the frontend has no way to show who is in an existing room or to build the promote/remove screens
 - admins first, then by name
-- return body (`200`): `{ "members": [ ... ] }`, each entry in the member shape already used by `PATCH /chat/:chatid/member/:userid` (`memberId`, `chatId`, `role`, `lastReadMessageId`, `member: { id, name, avatarUrl }`)
+- return body (`200`): `{ "members": [ ... ] }`, each entry in the member shape already used by `PATCH /chat/:chatid/member/:userid` (`chatId`, `role`, `lastReadMessageId`, `member: { id, name, avatarUrl }`)
 
 PUT /chat/:chatid/read
 
@@ -853,6 +858,7 @@ message-app/
         │   ├── chatRoom.permissions.test.ts  // sign-in, membership, group-only and admin-only guards, per route
         │   ├── chatRoomMembers.add.test.ts
         │   ├── chatRoomMembers.remove.test.ts
+        │   ├── chatRoomMembers.role.test.ts
         │   ├── chatRoomMessages.send.test.ts
         │   ├── chatRoomMessages.get.test.ts
         │   ├── chatRoomMessages.edit.test.ts
@@ -946,7 +952,7 @@ The backend follows a layered request flow:
 
 - Services contain all database operations and use the shared Prisma client from `src/lib/prisma`. They do not import Express.
 - Account services create and find users. The session service creates, reads, and deletes sessions (rows only; cookies are handled in `middlewares/SessionCookie.ts`).
-- Chat-room services create rooms and memberships in a Prisma transaction, load direct and group rooms, retrieve the latest message for room summaries, and update or delete rooms.
+- Chat-room services check with `findNonFriendIds` (from the friend service) that everyone being added is a friend of the requester, create rooms and memberships in a Prisma transaction, load direct and group rooms, retrieve the latest message for room summaries, and update or delete rooms.
 - Direct-room responses derive the room name and avatar from the other member; group-room responses use the room's own name and avatar fields.
 - Friend services look up users and the friend-list and pending-request rows that connect them to the requester. Other users are returned as `{ id, name, avatarUrl }` only, never with `email` or `tel`.
 
@@ -974,7 +980,7 @@ HTTP request
 
 ## Roadmap
 
-1. Add friend list and request flows (see "Friend endpoints"), and decide whether friendship is required to start a chat
+1. Finish the friend flows (see "Friend endpoints"); friendship is already required to start a chat (see "Friendship and messaging")
 2. Close the REST gaps listed under "Proposed additional endpoints" (member list, mark as read and unread counts, profile update)
 3. Implement real-time communication with Socket.io (see "Real-time events")
 4. Build the React frontend and integrate with TanStack Query

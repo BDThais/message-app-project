@@ -40,6 +40,9 @@ describe('validateCreateChatRoomInput', () => {
     ['a missing type', { member_ids: [2] }, 'type must be "direct" or "group"'],
     ['an unknown type', { type: 'channel' }, 'type must be "direct" or "group"'],
     ['member_ids that are not integers', { type: 'group', member_ids: ['2'] }, 'member_ids must be an array of user IDs'],
+    ['a member id below 1', { type: 'group', member_ids: [0] }, 'member_ids must be an array of user IDs'],
+    // One past the INTEGER column's maximum: it would make the database refuse the friendship lookup.
+    ['a member id too big for the database', { type: 'group', member_ids: [2_147_483_648] }, 'member_ids must be an array of user IDs'],
     ['a direct room with no other member', { type: 'direct', member_ids: [] }, 'a direct chat room requires exactly one other member'],
     ['a direct room with only the requester', { type: 'direct', member_ids: [1] }, 'a direct chat room requires exactly one other member'],
     ['a direct room with two other members', { type: 'direct', member_ids: [2, 3] }, 'a direct chat room requires exactly one other member'],

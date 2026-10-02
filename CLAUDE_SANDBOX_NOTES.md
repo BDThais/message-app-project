@@ -1,15 +1,16 @@
 # Notes for Claude: working on this repo in the claude.ai chat sandbox
 
-Notes to self from earlier sessions, so a new session does not re-discover them. They describe the claude.ai chat sandbox only, not the developer's machine (there, `npm test` with Docker works as documented in `project-planning-doc.md`). Last verified 2026-10-01. If something below no longer matches reality, fix this file in the same patch.
+Notes to self from earlier sessions, so a new session does not re-discover them. They describe the claude.ai chat sandbox only, not the developer's machine (there, `npm test` with Docker works as documented in `project-planning-doc.md`). Last verified 2026-10-02. If something below no longer matches reality, fix this file in the same patch.
 
 ## What the sandbox can and cannot do
 
-- Runs as root on Ubuntu 24 with Node 22. **No Docker**, no Postgres preinstalled. The file system resets between sessions, so the setup below is needed every time (check first: `pg_isready -h /tmp -p 55432`).
+- Runs as root on Ubuntu 24 with Node 22. **No Docker**, no Postgres preinstalled. The file system resets between sessions, so the setup below is needed every time (check first: `pg_isready -h /tmp -p 55432`; in a fresh sandbox it prints "not found" because `postgresql-client` is not installed yet, which also means step 1 is needed).
 - Works: `git clone` from github.com, `npm ci` (npm registry), `apt-get install` (archive.ubuntu.com). `apt-get update` prints a 403 for the nodesource repo; ignore it, installs still work.
 - **Blocked: `binaries.prisma.sh`.** Every Prisma command that wants the schema engine dies with `Failed to fetch the engine file ... 403`. That covers `npx prisma generate` as-is, `prisma migrate deploy/reset`, and so `npm run db:test:deploy`, `db:test:reset` and `npm test` (which also calls Docker). `PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1` does not help. What works instead:
   - `prisma generate` never calls the schema engine, so stub it: `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true npx prisma generate`
   - apply the migrations yourself: run each `prisma/migrations/*/migration.sql` through `psql`, in folder-name order (below). This does not fill `_prisma_migrations`, which is irrelevant for tests.
   - run tests with `npx vitest run`, not `npm test`. `npm run test:unit` needs no database.
+- The Postgres process is gone between turns of the same conversation, although `/tmp/pgdata` is still there. Check `pg_isready -h /tmp -p 55432` at the start of every turn; if it does not answer, only restart it (do not redo `initdb`, that wipes the data): `su postgres -c "$PGBIN/pg_ctl -D /tmp/pgdata -o '-p 55432 -k /tmp' -l /tmp/pg.log -w start"`.
 - The default shell is `/bin/sh`: `<( ... )` fails there. Wrap such commands in `bash -c '...'`.
 
 ## Setup (tested from a clean sandbox)
@@ -50,7 +51,7 @@ After a schema change: re-run step 3, and apply only the new `migration.sql`. To
 
 ## Working from the user's uploads
 
-- The uploaded `project-planning-doc.md` and `schema.prisma` have CRLF line endings (a Windows checkout); the repo has LF. Compare with `tr -d '\r'`, and never copy an upload over a repo file. On 2026-09-30 both matched the remote's HEAD exactly, so cloning is enough; still diff them once.
+- The uploaded `project-planning-doc.md` and `schema.prisma` have CRLF line endings (a Windows checkout); the repo has LF. Compare with `tr -d '\r'`, and never copy an upload over a repo file. On 2026-09-30 and 2026-10-02 both matched the remote's HEAD exactly, so cloning is enough; still diff them once.
 - Read the doc with `grep -n -i friend`/`sed -n` on the relevant section; it is ~970 lines and the viewer truncates it. "Friend endpoints" is the spec for the friend routes, "Project structure" lists files and tests, and the conventions (file names, layering, tests per file, error bodies `{ error }`) are stated there. Follow them; do not re-derive them from the code.
 - The user has each time asked for the result **as a patch file**, and for the planning doc to be updated alongside the code. Per implemented endpoint, the doc needs: the "Completed" list, the "Integration tests for ..." bullet, the "Still planned" list, the "rest of the friend features" sentence, the section heading of "Friend endpoints", the endpoint's own heading marked `(implemented)` with any new rules, and the test-file tree.
 

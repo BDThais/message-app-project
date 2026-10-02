@@ -14,6 +14,11 @@ import {
 } from './chatRoom.service';
 import { createMessage, getMessagesForChatRoom, deleteMessage, editMessage } from './message.service';
 
+// One body for every refusal of the friendship rule (POST /chat and
+// POST /chat/:chatid/member). It does not say which ID was refused or why, so
+// a stranger and a user who does not exist look the same.
+const NOT_FRIENDS_ERROR = 'Only your friends can be added to a chat room';
+
 export async function createChatRoom(req: Request, res: Response) {
   if (!req.user) {
     return res.status(401).json({ error: 'Unauthorized Access' });
@@ -27,21 +32,18 @@ export async function createChatRoom(req: Request, res: Response) {
   const { type, memberIds, name, avatarUrl } = validation;
 
   try {
-    const { room, created } = await createChatRoomService(
-      type,
-      requesterId,
-      memberIds,
-      name,
-      avatarUrl
-    );
+    const result = await createChatRoomService(type, requesterId, memberIds, name, avatarUrl);
 
-    return res.status(created ? 201 : 200).json(room);
+    if (result.status === 'not_friends') {
+      return res.status(403).json({ error: NOT_FRIENDS_ERROR });
+    }
+
+    return res.status(result.created ? 201 : 200).json(result.room);
   } catch (err) {
     if (isForeignKeyConstraintError(err)) {
-      // One of the member_ids doesn't refer to a real user.
-      return res
-        .status(400)
-        .json({ error: 'one or more member_ids do not refer to an existing user' });
+      // A member_ids user was deleted after the friendship check, so they are
+      // no longer a friend.
+      return res.status(403).json({ error: NOT_FRIENDS_ERROR });
     }
     throw err;
   }
@@ -128,10 +130,17 @@ export async function addChatRoomMembers(req: Request, res: Response, next: Next
   }
 
   try {
-    const { addedMembers, alreadyMemberIds } = await addMembersToExistingChatRoom(
+    const result = await addMembersToExistingChatRoom(
       req.chatMembership!.chatId,
+      req.user!.id,
       validation.data.memberIds
     );
+
+    if (result.status === 'not_friends') {
+      return res.status(403).json({ error: NOT_FRIENDS_ERROR });
+    }
+
+    const { addedMembers, alreadyMemberIds } = result;
 
     // Same convention as POST /chat: 201 when something was created,
     // 200 when the request changed nothing (everyone was already a member).
@@ -140,10 +149,9 @@ export async function addChatRoomMembers(req: Request, res: Response, next: Next
       .json({ addedMembers, alreadyMemberIds });
   } catch (err) {
     if (isForeignKeyConstraintError(err)) {
-      // One of the member_ids doesn't refer to a real user; nobody was added.
-      return res
-        .status(400)
-        .json({ error: 'one or more member_ids do not refer to an existing user' });
+      // A member_ids user was deleted after the friendship check, so they are
+      // no longer a friend; nobody was added.
+      return res.status(403).json({ error: NOT_FRIENDS_ERROR });
     }
     next(err);
   }
