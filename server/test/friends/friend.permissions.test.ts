@@ -12,6 +12,7 @@ const allRoutes = [
   ['post', '/friend/requests'],
   ['get', '/friend/requests'],
   ['post', '/friend/requests/1/accept'],
+  ['delete', '/friend/1'],
 ] as const;
 
 describe('every friend route', () => {

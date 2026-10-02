@@ -293,3 +293,50 @@ export async function acceptPendingFriendRequest(
     throw err;
   }
 }
+
+export type RemoveFriendResult = { status: 'removed' } | { status: 'not_friends' };
+
+/**
+ * Behind DELETE /friend/:id. `friendId` is expected to be validated already
+ * (see validateUserIdParam). The two are friends when the requester's own
+ * friend-list row names `friendId`; that is the row GET /friend and
+ * findUserByTel read, so the endpoints agree on who is a friend. Anything else
+ * (a stranger, a user who does not exist, the requester's own ID) is
+ * `not_friends`, so nobody can probe which user IDs exist.
+ *
+ * One transaction: check the requester's row, then delete both rows of the
+ * pair in a single `deleteMany`. That also removes a leftover row on the other
+ * side, so the pair is gone for both of them. Unlike accepting, this needs no
+ * fixed row order: both rows go in one DELETE statement, so two friends
+ * removing each other at the same instant just queue on the same rows. The
+ * second of two concurrent calls finds nothing left to delete and may still
+ * answer `removed`; that is harmless, the friendship is gone either way.
+ *
+ * Existing direct chat rooms and their messages are left alone, and so are
+ * pending friend requests (a pair that are friends has none, accepting clears
+ * them).
+ */
+export async function removeFriend(
+  requesterId: number,
+  friendId: number
+): Promise<RemoveFriendResult> {
+  return prisma.$transaction(async (tx) => {
+    const own = await tx.friendListMember.findUnique({
+      where: { userId_friendId: { userId: requesterId, friendId } },
+      select: { userId: true },
+    });
+
+    if (!own) return { status: 'not_friends' } as const;
+
+    await tx.friendListMember.deleteMany({
+      where: {
+        OR: [
+          { userId: requesterId, friendId },
+          { userId: friendId, friendId: requesterId },
+        ],
+      },
+    });
+
+    return { status: 'removed' } as const;
+  });
+}

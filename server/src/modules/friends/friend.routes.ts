@@ -6,6 +6,7 @@ import {
   sendFriendRequest,
   getFriendRequests,
   acceptFriendRequest,
+  unfriend,
 } from './friend.controller';
 
 const friendRouter = Router();
@@ -17,5 +18,6 @@ friendRouter.get('/search/:tel', friendSearchLimiter, searchUserByTel);
 friendRouter.post('/requests', friendRequestLimiter, sendFriendRequest);
 friendRouter.get('/requests', getFriendRequests);
 friendRouter.post('/requests/:id/accept', acceptFriendRequest);
+friendRouter.delete('/:id', unfriend);
 
 export default friendRouter;

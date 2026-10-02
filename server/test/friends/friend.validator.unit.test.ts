@@ -5,6 +5,7 @@ import {
   validateRequestIdParam,
   validateSendFriendRequestBody,
   validateTelParam,
+  validateUserIdParam,
 } from '../../src/modules/friends/friend.validator';
 
 // Pure function, so no database and no HTTP: the endpoint test only needs one
@@ -149,6 +150,36 @@ describe('validateRequestIdParam', () => {
     expect(validateRequestIdParam(raw)).toEqual({
       valid: false,
       message: 'Invalid friend request id',
+    });
+  });
+});
+
+describe('validateUserIdParam', () => {
+  it.each([
+    ['an ordinary ID', '7', 7],
+    ['the smallest ID', '1', 1],
+    ['the largest ID the database can hold', String(MAX_INT32), MAX_INT32],
+  ])('accepts %s', (_label, raw, userId) => {
+    expect(validateUserIdParam(raw)).toEqual({ valid: true, data: { userId } });
+  });
+
+  it.each([
+    ['zero', '0'],
+    ['a negative ID', '-7'],
+    ['an ID past the database integer range', String(MAX_INT32 + 1)],
+    ['a fractional ID', '7.5'],
+    ['exponent notation', '1e3'],
+    ['a hexadecimal number', '0x10'],
+    ['a plus sign', '+7'],
+    ['surrounding whitespace', ' 7 '],
+    ['letters', 'abc'],
+    ['an empty string', ''],
+    ['a value that is not a string', 7],
+    ['no value at all', undefined],
+  ])('rejects %s', (_label, raw) => {
+    expect(validateUserIdParam(raw)).toEqual({
+      valid: false,
+      message: 'Invalid user id',
     });
   });
 });

@@ -66,21 +66,22 @@ Completed:
 - POST /friend/requests
 - GET /friend/requests
 - POST /friend/requests/:id/accept
+- DELETE /friend/:id
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Basic room summaries with latest-message metadata
 - Automatic cleanup of chat rooms that stay empty (see "Empty chat room cleanup")
-- Integration tests for the account endpoints, the chat-room endpoints, the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint and the accept-friend-request endpoint
+- Integration tests for the account endpoints, the chat-room endpoints, the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint and the unfriend endpoint
 
 Still planned or not yet implemented:
 
 - Friend request flows (reject/cancel)
-- Friend list and unfriending
+- Friend list (`GET /friend`)
 - Real-time socket communication
 - Frontend application screens and state management
 - Production deployment hardening
 
-The room and auth systems are now acting as the current working backend foundation. The rest of the friend features (everything under "Friend endpoints" except search, sending, listing and accepting a request) and realtime remain future work and should be treated as the next milestone rather than as missing pieces of the current baseline.
+The room and auth systems are now acting as the current working backend foundation. The rest of the friend features (everything under "Friend endpoints" except search, sending, listing and accepting a request, and unfriending) and realtime remain future work and should be treated as the next milestone rather than as missing pieces of the current baseline.
 
 Note: In the database, the mutual friendship model stores two rows per friendship pair, one for each user, as described in the project requirements.
 
@@ -563,7 +564,7 @@ DELETE /chat/:chatid/message/:message_id (implemented)
 - responds `404` when the message does not exist in this room, does not belong to this room, or was already deleted
 - deleting a message never deletes the underlying `ChatRoom` or affects other members' access to the room
 
-#### Friend endpoints (in progress: schema changes, search, sending, listing and accepting a request are implemented)
+#### Friend endpoints (in progress: schema changes, search, sending, listing and accepting a request, and unfriending are implemented)
 
 Friend flows get their own module, `src/modules/friends/` (routes, controller, validator(s), service), mounted in `app.ts` behind `requireUserAuth` like the chat routes. A user is always returned to other users as `{ id, name, avatarUrl }`, never with `email` or `tel`.
 
@@ -703,11 +704,14 @@ GET /friend
   }
   ```
 
-DELETE /friend/:id
+DELETE /friend/:id (implemented)
 
-- unfriend a user: delete both `FriendListMember` rows of the pair (`deleteMany` with an `OR` over the two directions, in one transaction)
-- responds `204 No Content` when the friendship was removed
-- responds `404` when the requester and `:id` are not friends
+- unfriend a user: delete both `FriendListMember` rows of the pair (`deleteMany` with an `OR` over the two directions, in one transaction). `:id` is a *user* ID (`400` with `{ "error": "Invalid user id" }` when it is not a valid ID)
+- responds `204 No Content` with no body when the friendship was removed. Either friend can call it, and both rows go whoever does
+- responds `404` with `{ "error": "You are not friends with this user" }` when the requester and `:id` are not friends. Two users are friends when the *requester's own* row names `:id`, the same row `GET /friend` and `GET /friend/search/:tel` read. A user who does not exist, a stranger and the requester's own ID all get this same `404`, so nobody can probe which user IDs exist. A half-written friendship (only one of the two rows, which the API itself never produces) is therefore removed, both rows, by the user whose row exists, and answers `404` for the user whose row is missing
+- no rate limiter: it only works on the requester's own friend list, so it reveals nothing about other users
+- a double click or a second tab sending the same request twice at once, or both friends unfriending each other at the same instant, is answered with `204` and `204`, or `204` and `404`, never a `5xx` (unlike accepting, the two rows are removed by one `DELETE` statement, so no fixed row order is needed); either way the friendship is gone
+- does not touch pending friend requests (a pair that are friends has none, because accepting clears them), so after unfriending either user can send the other a new request
 - leaves any existing direct room between the two users, and its messages, untouched; unfriending only stops new conversations if friendship is made a requirement (see "Friendship and messaging" below)
 
 Friendship and messaging (decision needed)
@@ -861,6 +865,7 @@ message-app/
             ├── friendRequests.send.test.ts   // POST /friend/requests
             ├── friendRequests.get.test.ts    // GET /friend/requests
             ├── friendRequests.accept.test.ts // POST /friend/requests/:id/accept
+            ├── friends.remove.test.ts        // DELETE /friend/:id
             ├── friend.permissions.test.ts    // sign-in guard, per route
             └── friend.validator.unit.test.ts
 ```

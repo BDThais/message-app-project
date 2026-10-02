@@ -110,3 +110,21 @@ export function validateRequestIdParam(rawRequestId: unknown): RequestIdParamVal
     ? { valid: false, message: 'Invalid friend request id' }
     : { valid: true, data: { requestId } };
 }
+
+type UserIdParamValidation =
+  | { valid: true; data: { userId: number } }
+  | { valid: false; message: string };
+
+/**
+ * Validates the ':id' URL param of DELETE /friend/:id, which is a *user* ID
+ * (the friend to remove), unlike the /friend/requests/:id routes. Only plain
+ * digit strings between 1 and the Postgres integer maximum are accepted (see
+ * parseIdParam).
+ */
+export function validateUserIdParam(rawUserId: unknown): UserIdParamValidation {
+  const userId = parseIdParam(rawUserId);
+
+  return userId === null
+    ? { valid: false, message: 'Invalid user id' }
+    : { valid: true, data: { userId } };
+}

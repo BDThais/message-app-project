@@ -4,12 +4,14 @@ import {
   validateSendFriendRequestBody,
   validateGetFriendRequestsQuery,
   validateRequestIdParam,
+  validateUserIdParam,
 } from './friend.validator';
 import {
   findUserByTel,
   createFriendRequest,
   listFriendRequests,
   acceptPendingFriendRequest,
+  removeFriend,
 } from './friend.service';
 
 // Route chain (see friend.routes.ts): requireUserAuth -> friendSearchLimiter,
@@ -100,6 +102,30 @@ export async function acceptFriendRequest(req: Request, res: Response, next: Nex
         return res.status(201).json({ friend: result.friend });
       case 'not_found':
         return res.status(404).json({ error: 'Friend request not found' });
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Route chain (see friend.routes.ts): requireUserAuth only. Unfriending works
+// only on the requester's own friend list, so it tells them nothing about
+// anyone else and has no limiter. `:id` is a *user* ID. A user who does not
+// exist and one who is not a friend get the same 404.
+export async function unfriend(req: Request, res: Response, next: NextFunction) {
+  const validation = validateUserIdParam(req.params.id);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.message });
+  }
+
+  try {
+    const result = await removeFriend(req.user!.id, validation.data.userId);
+
+    switch (result.status) {
+      case 'removed':
+        return res.status(204).end();
+      case 'not_friends':
+        return res.status(404).json({ error: 'You are not friends with this user' });
     }
   } catch (err) {
     next(err);
