@@ -2,10 +2,11 @@ import type { Request, Response, NextFunction } from 'express';
 import {
   validateCreateChatRoomInput, validateUpdateChatRoomBody, validateAddMembersBody,
   validateUserIdParam, validateChangeMemberRoleBody, validateSendMessageBody,
-  validateGetMessagesQuery, validateMessageIdParam, validateEditMessageBody
+  validateGetMessagesQuery, validateMessageIdParam, validateEditMessageBody, validateMarkReadBody
 } from './chatRoom.validator';
 import {
-  addMembersToExistingChatRoom, removeMemberFromChatRoom, changeMemberRoleInChatRoom
+  addMembersToExistingChatRoom, removeMemberFromChatRoom, changeMemberRoleInChatRoom,
+  getMembersForChatRoom, markChatRoomRead
 } from './chatMember.service';
 import {
   createChatRoom as createChatRoomService, updateChatRoomById,
@@ -350,6 +351,52 @@ export async function editChatRoomMessage(req: Request, res: Response, next: Nex
         return res.status(404).json({ error: 'Message not found in this chat room' });
       case 'forbidden':
         return res.status(403).json({ error: 'You can only edit your own messages' });
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Route chain (see chatRoom.routes.ts): loadChatMembership only - listing the
+// members takes membership alone, in direct or group rooms alike, so there's no
+// requireGroupRoom / requireChatAdmin guard on this route. By the time this
+// runs the room exists and the requester is a member of it.
+export async function getChatRoomMembers(req: Request, res: Response, next: NextFunction) {
+  try {
+    const members = await getMembersForChatRoom(req.chatMembership!.chatId);
+
+    return res.status(200).json({ members });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Route chain (see chatRoom.routes.ts): loadChatMembership only - every member
+// has their own read marker, in direct or group rooms alike, so there's no
+// requireGroupRoom / requireChatAdmin guard on this route. By the time this
+// runs the room exists and the requester is a member of it.
+export async function markChatRoomAsRead(req: Request, res: Response, next: NextFunction) {
+  const validation = validateMarkReadBody(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.message });
+  }
+
+  try {
+    const result = await markChatRoomRead(
+      req.chatMembership!.chatId,
+      req.user!.id,
+      validation.data.messageId
+    );
+
+    switch (result.outcome) {
+      case 'marked':
+        return res.status(200).json({ lastReadMessageId: result.lastReadMessageId });
+      case 'message_not_found':
+        return res.status(404).json({ error: 'Message not found in this chat room' });
+      case 'not_a_member':
+        // Left the room while this request was running: same answer as
+        // loadChatMembership gives a user who is not in the room.
+        return res.status(404).json({ error: 'Chat room not found' });
     }
   } catch (err) {
     next(err);

@@ -6,6 +6,7 @@ import {
   validateCreateChatRoomInput,
   validateEditMessageBody,
   validateGetMessagesQuery,
+  validateMarkReadBody,
   validateMessageIdParam,
   validateSendMessageBody,
   validateUpdateChatRoomBody,
@@ -272,6 +273,32 @@ describe('validateMessageIdParam', () => {
     expect(validateMessageIdParam(rawMessageId)).toEqual({
       valid: false,
       message: 'Invalid message id',
+    });
+  });
+});
+
+describe('validateMarkReadBody', () => {
+  it('accepts a positive integer message_id', () => {
+    expect(validateMarkReadBody({ message_id: 42 })).toEqual({
+      valid: true,
+      data: { messageId: 42 },
+    });
+  });
+
+  it.each([
+    ['no body', undefined],
+    ['a missing message_id', {}],
+    ['a null message_id', { message_id: null }],
+    ['a numeric string', { message_id: '42' }],
+    ['a boolean', { message_id: true }],
+    ['a decimal id', { message_id: 1.5 }],
+    ['a zero id', { message_id: 0 }],
+    ['a negative id', { message_id: -3 }],
+    ['an id larger than a Postgres integer', { message_id: 2147483648 }],
+  ])('rejects %s', (_label, body) => {
+    expect(validateMarkReadBody(body)).toEqual({
+      valid: false,
+      message: "'message_id' must be a positive integer message id",
     });
   });
 });

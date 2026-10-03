@@ -188,6 +188,25 @@ export function validateSendMessageBody(body: unknown): SendMessageValidation {
   return { valid: true, data: { content: content.trim() } };
 }
 
+type MarkReadValidation =
+  | { valid: true; data: { messageId: number } }
+  | { valid: false; message: string };
+
+/**
+ * Validates the body of PUT /chat/:chatid/read. `message_id` is a JSON number
+ * (like the ids in `member_ids`) with the same rule as every other id:
+ * a positive integer within the Postgres integer range.
+ */
+export function validateMarkReadBody(body: unknown): MarkReadValidation {
+  const { message_id } = isRecord(body) ? body : {};
+
+  if (!Number.isInteger(message_id) || (message_id as number) < 1 || (message_id as number) > MAX_ID) {
+    return { valid: false, message: "'message_id' must be a positive integer message id" };
+  }
+
+  return { valid: true, data: { messageId: message_id as number } };
+}
+
 type EditMessageValidation = SendMessageValidation;
 
 /**

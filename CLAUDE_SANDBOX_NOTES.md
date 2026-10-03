@@ -1,6 +1,6 @@
 # Notes for Claude: working on this repo in the claude.ai chat sandbox
 
-Notes to self from earlier sessions, so a new session does not re-discover them. They describe the claude.ai chat sandbox only, not the developer's machine (there, `npm test` with Docker works as documented in `project-planning-doc.md`). Last verified 2026-10-02. If something below no longer matches reality, fix this file in the same patch.
+Notes to self from earlier sessions, so a new session does not re-discover them. They describe the claude.ai chat sandbox only, not the developer's machine (there, `npm test` with Docker works as documented in `project-planning-doc.md`). Last verified 2026-10-03. If something below no longer matches reality, fix this file in the same patch.
 
 ## What the sandbox can and cannot do
 
@@ -10,7 +10,7 @@ Notes to self from earlier sessions, so a new session does not re-discover them.
   - `prisma generate` never calls the schema engine, so stub it: `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true npx prisma generate`
   - apply the migrations yourself: run each `prisma/migrations/*/migration.sql` through `psql`, in folder-name order (below). This does not fill `_prisma_migrations`, which is irrelevant for tests.
   - run tests with `npx vitest run`, not `npm test`. `npm run test:unit` needs no database.
-- The Postgres process is gone between turns of the same conversation, although `/tmp/pgdata` is still there. Check `pg_isready -h /tmp -p 55432` at the start of every turn; if it does not answer, only restart it (do not redo `initdb`, that wipes the data): `su postgres -c "$PGBIN/pg_ctl -D /tmp/pgdata -o '-p 55432 -k /tmp' -l /tmp/pg.log -w start"`.
+- The Postgres process can be gone between turns of the same conversation, and on 2026-10-03 it also vanished between two tool calls inside one turn, although `/tmp/pgdata` is still there. So a check at the start of the turn is not enough: begin every command that touches the database with `pg_isready -h /tmp -p 55432 >/dev/null || su postgres -c "$PGBIN/pg_ctl -D /tmp/pgdata -o '-p 55432 -k /tmp' -l /tmp/pg.log -w start" >/dev/null 2>&1`. Only restart it, never redo `initdb`, that wipes the data. When a whole run fails with `Can't reach database server at 127.0.0.1:55432`, that is this, not your code.
 - The default shell is `/bin/sh`: `<( ... )` fails there. Wrap such commands in `bash -c '...'`.
 
 ## Setup (tested from a clean sandbox)
@@ -69,4 +69,6 @@ After a schema change: re-run step 3, and apply only the new `migration.sql`. To
 - Mutation-check new tests: break the code on purpose (wrong sort, wrong filter), confirm the test fails, restore.
 - Edit files with small `python3` scripts that `assert` the target text occurs exactly once.
 - Wrap anything that can block (raw `pg` sessions in a lock experiment, long loops) in `timeout 60`: a hung command costs the whole 300 s tool call. Never `pkill -f <pattern>` when the pattern is in your own command line, it kills your shell.
+- A failing `vitest run` prints every test of the file, which can be thousands of lines: pipe it, e.g. `npx vitest run <files> 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -E "×|FAIL|Tests |Error" | cut -c1-200 | head -40`.
+- Do not fire dozens of parallel requests through `request.agent(app)` / `request(app)`: each one starts its own ephemeral server and the run dies with `ECONNRESET` (and "Cannot use a pool after calling end" from requests still in flight). For a race test call the service function directly (that is where the atomic statement lives), or share one server: `const server = app.listen(0)`, `request(server)`, `server.close()` in a `finally`.
 - To see the SQL Prisma really sends, turn on statement logging, run one test and read `/tmp/pg.log`: `psql -h /tmp -p 55432 -U chatapp_test -d chatapp_test -c "ALTER SYSTEM SET log_statement='all'" -c "SELECT pg_reload_conf()"`, then `ALTER SYSTEM RESET log_statement`.

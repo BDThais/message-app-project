@@ -55,6 +55,7 @@ Completed:
 - GET /chat/:chatid
 - PATCH /chat/:chatid
 - DELETE /chat/:chatid
+- GET /chat/:chatid/member
 - POST /chat/:chatid/member
 - DELETE /chat/:chatid/member/:userid
 - PATCH /chat/:chatid/member/:userid
@@ -62,6 +63,7 @@ Completed:
 - GET /chat/:chatid/message
 - PATCH /chat/:chatid/message/:message_id
 - DELETE /chat/:chatid/message/:message_id
+- PUT /chat/:chatid/read
 - GET /friend/search/:tel
 - POST /friend/requests
 - GET /friend/requests
@@ -98,9 +100,10 @@ Note: In the database, the mutual friendship model stores two rows per friendshi
 | Add members             |  ✅   |   ❌   |
 | Remove other members    |  ✅   |   ❌   |
 | Leave the room          |  ✅   |   ✅   |
+| List members, mark read |  ✅   |   ✅   |
 | Promote/demote a member |  ✅   |   ❌   |
 
-Implemented so far: update, delete, add members, remove members, leave, promote/demote, sending messages, reading messages, and editing and deleting a message (sender only - no admin-moderation override for other members' messages).
+Implemented so far: update, delete, add members, remove members, leave, promote/demote, listing the members, marking a room as read (each member moves only their own marker), sending messages, reading messages, and editing and deleting a message (sender only - no admin-moderation override for other members' messages).
 
 ## API Status
 
@@ -230,7 +233,7 @@ POST /chat (implemented)
 - a group room can also be created without `member_ids` or with additional member IDs, for example `"member_ids": [2, 3]`
 - responds `201` when a new room is created and `200` when an existing direct room between the same two friends is reused
 - responds `400` on validation errors
-- each entry of `members` is `{ chatId, role, lastReadMessageId, member: { id, name, avatarUrl } }`. The user is only under `member`: there is no separate `memberId`, it would repeat `member.id`. `POST /chat/:chatid/member` and `PATCH /chat/:chatid/member/:userid` return entries of the same shape
+- each entry of `members` is `{ chatId, role, lastReadMessageId, member: { id, name, avatarUrl } }`. The user is only under `member`: there is no separate `memberId`, it would repeat `member.id`. `GET /chat/:chatid/member`, `POST /chat/:chatid/member` and `PATCH /chat/:chatid/member/:userid` return entries of the same shape
 - responds `403` with `{ "error": "Only your friends can be added to a chat room" }` when any `member_ids` entry is not a friend of the requester, or does not exist (the two are not told apart), and creates no room and no members. For a direct room this check comes before the lookup of an existing room, so two former friends get `403` here, not their old room back
 - return body:
 
@@ -351,6 +354,40 @@ DELETE /chat/:chatid (implemented)
 - only valid for type: group rooms
 - requires admin
 - no response body (`204 No Content`)
+
+GET /chat/:chatid/member (implemented)
+
+- list the room's members; membership alone is required, in direct or group rooms alike (no group-only or admin-only guard on this route). It is how the frontend shows who is in an existing room and builds the promote/remove screens: member lists otherwise only appear in the responses of room creation, add-members and change-role
+- admins first, then by name. Names are compared ignoring case and accents (`bea` comes before `Carl`), and the order does not depend on the database's collation because the sort is done in the service. Members whose names compare equal keep user-ID order
+- every member of the room is returned; there is no pagination
+- return body (`200`): `{ "members": [ ... ] }`, each entry in the member shape already used by `PATCH /chat/:chatid/member/:userid` (`chatId`, `role`, `lastReadMessageId`, `member: { id, name, avatarUrl }`):
+
+  ```json
+  {
+    "members": [
+      {
+        "chatId": 1,
+        "role": "admin",
+        "lastReadMessageId": 7,
+        "member": {
+          "id": 1,
+          "name": "Alice",
+          "avatarUrl": null
+        }
+      },
+      {
+        "chatId": 1,
+        "role": "member",
+        "lastReadMessageId": null,
+        "member": {
+          "id": 2,
+          "name": "Bob",
+          "avatarUrl": null
+        }
+      }
+    ]
+  }
+  ```
 
 POST /chat/:chatid/member (implemented)
 
@@ -564,6 +601,15 @@ DELETE /chat/:chatid/message/:message_id (implemented)
 - responds `404` when the message does not exist in this room, does not belong to this room, or was already deleted
 - deleting a message never deletes the underlying `ChatRoom` or affects other members' access to the room
 
+PUT /chat/:chatid/read (implemented)
+
+- mark the room as read up to a message, for the requester only: it sets the requester's own `ChatMember.lastReadMessageId`, which every member payload returns. Other members' markers are never touched. Membership alone is required, in direct or group rooms alike (no group-only or admin-only guard on this route)
+- incoming body: `{ "message_id": 42 }`. `message_id` is a JSON number (like the ids in `member_ids`): a positive integer within the Postgres integer range, otherwise `400`
+- responds `404` with `{ "error": "Message not found in this chat room" }` when no message with this id exists in this room; a message of another room gets the same answer. A soft-deleted message is still valid, because it keeps its place in the room's history
+- the marker only moves forward: a `message_id` at or below the current marker changes nothing and still returns `200`, so out-of-order requests from several tabs can't move it back. It is one conditional `updateMany` (`lastReadMessageId` is null or lower than the new value) rather than read-then-write, so requests racing each other end at the highest id. The marker is read afterwards only when the update changed nothing
+- return body (`200`): `{ "lastReadMessageId": 42 }` (the marker as it stands after the call, which is the later message when the marker was already ahead)
+- if the requester left the room while the request was running, it answers `404` with `{ "error": "Chat room not found" }`, the same as the membership check
+
 #### Friend endpoints (in progress: schema changes, search, sending, listing and accepting a request, and unfriending are implemented)
 
 Friend flows get their own module, `src/modules/friends/` (routes, controller, validator(s), service), mounted in `app.ts` behind `requireUserAuth` like the chat routes. A user is always returned to other users as `{ id, name, avatarUrl }`, never with `email` or `tel`.
@@ -732,19 +778,9 @@ Friendship is required to start a conversation. Before this rule `POST /chat` an
 
 Gaps found by checking the API against the schema and against what the frontend will need. Roughly in priority order.
 
-GET /chat/:chatid/member
+`unreadCount` on `GET /chat` and `GET /chat/:chatid`
 
-- list the room's members; membership alone is required, direct or group. Today member lists only appear in the responses of room creation, add-members and change-role, so the frontend has no way to show who is in an existing room or to build the promote/remove screens
-- admins first, then by name
-- return body (`200`): `{ "members": [ ... ] }`, each entry in the member shape already used by `PATCH /chat/:chatid/member/:userid` (`chatId`, `role`, `lastReadMessageId`, `member: { id, name, avatarUrl }`)
-
-PUT /chat/:chatid/read
-
-- mark the room as read up to a message; incoming body: `{ message_id }`. `ChatMember.lastReadMessageId` already exists and is returned in every member payload, but nothing can set it
-- `message_id` must be a valid ID of a message in this room (`400` for a bad ID, `404` otherwise; a soft-deleted message is still valid)
-- the marker only moves forward: a `message_id` at or below the current one changes nothing and still returns `200`, so out-of-order requests from several tabs can't move it back. Implement as one conditional `updateMany` (`lastReadMessageId` is null or lower than the new value) rather than read-then-write
-- return body (`200`): `{ "lastReadMessageId": 42 }` (the marker as it stands after the call)
-- follow-up: add `unreadCount` to the room summaries of `GET /chat` and `GET /chat/:chatid`: messages in the room with an ID above `lastReadMessageId`, not sent by the requester and not deleted. The `(chatId, id)` index already covers it. Other members' `lastReadMessageId` values are also what a "seen by" indicator would be built from
+- add `unreadCount` to the room summaries: messages in the room with an ID above the requester's `lastReadMessageId` (which `PUT /chat/:chatid/read` sets), not sent by the requester and not deleted. The `(chatId, id)` index already covers it. Other members' `lastReadMessageId` values (listed by `GET /chat/:chatid/member`) are also what a "seen by" indicator would be built from
 
 PATCH /account/me
 
@@ -856,6 +892,7 @@ message-app/
         ├── chatrooms/
         │   ├── chatRoom.test.ts              // create, list, get, update and delete a room
         │   ├── chatRoom.permissions.test.ts  // sign-in, membership, group-only and admin-only guards, per route
+        │   ├── chatRoomMembers.list.test.ts
         │   ├── chatRoomMembers.add.test.ts
         │   ├── chatRoomMembers.remove.test.ts
         │   ├── chatRoomMembers.role.test.ts
@@ -863,6 +900,7 @@ message-app/
         │   ├── chatRoomMessages.get.test.ts
         │   ├── chatRoomMessages.edit.test.ts
         │   ├── chatRoomMessages.delete.test.ts
+        │   ├── chatRoomRead.test.ts
         │   ├── chatRoom.validator.unit.test.ts
         │   ├── chatRoomCleanup.service.test.ts
         │   └── chatRoomCleanup.job.unit.test.ts
@@ -981,7 +1019,7 @@ HTTP request
 ## Roadmap
 
 1. Finish the friend flows (see "Friend endpoints"); friendship is already required to start a chat (see "Friendship and messaging")
-2. Close the REST gaps listed under "Proposed additional endpoints" (member list, mark as read and unread counts, profile update)
+2. Close the REST gaps listed under "Proposed additional endpoints" (unread counts on room summaries, profile update)
 3. Implement real-time communication with Socket.io (see "Real-time events")
 4. Build the React frontend and integrate with TanStack Query
 5. Add authentication-aware UI states and protected routes

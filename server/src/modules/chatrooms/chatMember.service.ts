@@ -7,8 +7,8 @@ import { findNonFriendIds } from '../friends/friend.service';
  * `lastReadMessageId`) plus the user as `member: { id, name, avatarUrl }`.
  * `memberId` is left out because it is the same value as `member.id`, so a
  * client reads the user from one place. Spread into every query whose result
- * is sent to the client (room creation, add members, change role) so the three
- * endpoints cannot drift apart. It only shapes the output: `memberId` is still
+ * is sent to the client (room creation, list members, add members, change role)
+ * so the four endpoints cannot drift apart. It only shapes the output: `memberId` is still
  * usable in `where` and `orderBy`.
  */
 export const memberResponseArgs = {
@@ -245,4 +245,95 @@ export async function changeMemberRoleInChatRoom(
 
     return { outcome: 'updated', member };
   });
+}
+
+/**
+ * Lists everyone in a room (GET /chat/:chatid/member): admins first, then by
+ * name. Membership is already guaranteed by loadChatMembership by the time
+ * this runs, and the list is the same for every member, so nothing here
+ * depends on who is asking.
+ *
+ * The sort is done here, not in the query, so the order does not depend on the
+ * database's collation: with a plain `ORDER BY name` a "C" collation puts
+ * every capital letter before every lowercase one ("Zed" before "alice").
+ * Names that differ only by case compare equal, and the query's order by user
+ * id decides between them (Array.prototype.sort is stable).
+ */
+export async function getMembersForChatRoom(chatId: number): Promise<ChatMemberWithUser[]> {
+  const members = await prisma.chatMember.findMany({
+    where: { chatId },
+    ...memberResponseArgs,
+    orderBy: { memberId: 'asc' },
+  });
+
+  const roleRank = (role: ChatMemberRole) => (role === ChatMemberRole.admin ? 0 : 1);
+
+  return members.sort(
+    (a, b) =>
+      roleRank(a.role) - roleRank(b.role) ||
+      a.member.name.localeCompare(b.member.name, 'en', { sensitivity: 'base' })
+  );
+}
+
+export type MarkChatRoomReadResult =
+  // `lastReadMessageId` is the marker as it stands after the call: the message
+  // that was asked for, or the later one that was already there.
+  | { outcome: 'marked'; lastReadMessageId: number | null }
+  // No message with this id in this room (a soft-deleted one still counts).
+  | { outcome: 'message_not_found' }
+  // The requester left the room between the membership check and this call.
+  | { outcome: 'not_a_member' };
+
+/**
+ * Marks a room as read up to a message (PUT /chat/:chatid/read) by moving the
+ * requester's `lastReadMessageId` forward.
+ *
+ * The marker only moves forward: asking for a message at or below the current
+ * marker changes nothing and is not an error, so out-of-order requests from
+ * several tabs cannot move it back. That rule is the `where` of one
+ * conditional `updateMany` (marker is null or lower than the new value), not a
+ * read followed by a write, so two requests racing each other cannot undo the
+ * later one. Only when the update changed nothing is the marker read, to
+ * report where it stands.
+ *
+ * The message must belong to this room, soft-deleted or not (a deleted message
+ * keeps its place in the history, so a client that has just loaded it can
+ * still be told it was read). Membership of the requester is already
+ * guaranteed by loadChatMembership.
+ */
+export async function markChatRoomRead(
+  chatId: number,
+  memberId: number,
+  messageId: number
+): Promise<MarkChatRoomReadResult> {
+  const message = await prisma.message.findFirst({
+    where: { id: messageId, chatId },
+    select: { id: true },
+  });
+  if (!message) {
+    return { outcome: 'message_not_found' };
+  }
+
+  const { count } = await prisma.chatMember.updateMany({
+    where: {
+      chatId,
+      memberId,
+      OR: [{ lastReadMessageId: null }, { lastReadMessageId: { lt: messageId } }],
+    },
+    data: { lastReadMessageId: messageId },
+  });
+  if (count > 0) {
+    return { outcome: 'marked', lastReadMessageId: messageId };
+  }
+
+  // Nothing moved: the marker is already at or past this message.
+  const current = await prisma.chatMember.findUnique({
+    where: { memberId_chatId: { memberId, chatId } },
+    select: { lastReadMessageId: true },
+  });
+  if (!current) {
+    return { outcome: 'not_a_member' };
+  }
+
+  return { outcome: 'marked', lastReadMessageId: current.lastReadMessageId };
 }
