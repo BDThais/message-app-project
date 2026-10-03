@@ -11,14 +11,14 @@ export type AccountBody = {
 
 const NAME_RE = /^[a-zA-Z0-9]+$/;
 
-function validateName(name: string): string | null {
+export function validateName(name: string): string | null {
      if (!NAME_RE.test(name)) {
         return 'Name must contain only letters and numbers';
     }
     return null;
 }
 
-function validatePassword(password: string): string | null {
+export function validatePassword(password: string): string | null {
     if (password.length < 8) {
         return 'Password must be at least 8 characters long';
     }

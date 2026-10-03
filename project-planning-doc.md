@@ -50,6 +50,8 @@ Completed:
 - POST /account/login
 - GET /account/me
 - POST /account/logout
+- PATCH /account/me
+- POST /account/password
 - POST /chat
 - GET /chat
 - GET /chat/:chatid
@@ -74,7 +76,7 @@ Completed:
 - Friendship requirement for creating a room and adding members (see "Friendship and messaging")
 - Basic room summaries with latest-message metadata
 - Automatic cleanup of chat rooms that stay empty (see "Empty chat room cleanup")
-- Integration tests for the account endpoints, the chat-room endpoints, the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
+- Integration tests for the account endpoints (including profile update and password change), the chat-room endpoints, the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
 
 Still planned or not yet implemented:
 
@@ -163,14 +165,15 @@ POST /account/login
       "id": 1,
       "name": "JohnDoe",
       "email": "john@example.com",
-      "tel": "+1234567890"
+      "tel": "+1234567890",
+      "avatarUrl": null
     }
   }
   ```
 
 GET /account/me
 
-- Returns the current authenticated user or null if there is no session
+- Returns the current authenticated user or null if there is no session. `avatarUrl` is `null` until `PATCH /account/me` sets it
 - return body:
 
   ```json
@@ -179,7 +182,8 @@ GET /account/me
       "id": 1,
       "name": "JohnDoe",
       "email": "john@example.com",
-      "tel": "+1234567890"
+      "tel": "+1234567890",
+      "avatarUrl": null
     }
   }
   ```
@@ -198,6 +202,37 @@ POST /account/logout
     "user": null
   }
   ```
+
+PATCH /account/me (implemented)
+
+- Updates the requester's own profile. Requires a session (`401 { "error": "Unauthorized Access" }` otherwise)
+- incoming body: `{ name?, avatar_url? }` with at least one, otherwise `400`. Only the fields that are sent change; unknown fields (`email`, `tel`, `password`...) are ignored
+- `name` follows signup's rule (letters and numbers only) and must be a non-empty string. `avatar_url` follows the rule on `PATCH /chat/:chatid`: an `http:` or `https:` URL, or `null` to clear it. The two checks that both validators need (`isValidHttpUrl`, `isRecord`) live in `src/lib/validation.ts`
+- return body (`200`), the same user shape that login and `GET /account/me` return:
+
+  ```json
+  {
+    "user": {
+      "id": 1,
+      "name": "JohnDoe2",
+      "email": "john@example.com",
+      "tel": "+1234567890",
+      "avatarUrl": "https://example.com/john.png"
+    }
+  }
+  ```
+
+- `avatarUrl` is now part of the user shape everywhere: `findSessionUser` selects it, so `GET /account/me` and `req.user` carry it, and login returns it. Changing `email` or `tel` is not supported
+- responds `400` with `{ "error": ... }` when validation fails. Validation lives in `profile.validator.ts`
+
+POST /account/password (implemented)
+
+- Changes the requester's password. Requires a session (`401 { "error": "Unauthorized Access" }` otherwise)
+- incoming body: `{ current_password, new_password }`, both non-empty strings (`400` otherwise). `new_password` follows the signup password rules (`400` with the same messages as signup). Validation lives in `password.validator.ts`
+- `401 { "error": "Current password is incorrect" }` when `current_password` is wrong; nothing changes. The same `401` is sent if the password was changed by another request between the check and the write: `changePassword` (`account.service.ts`) only writes when the stored hash is still the one that was verified, so a stale "current password" cannot overwrite a newer one
+- in one transaction, stores the new hash and deletes all the user's other sessions (expired ones too), so a leaked session stops working. The session making the request stays valid, and other users' sessions are untouched
+- responds `204` with no body. A new password equal to the current one is accepted (the other sessions are still signed out)
+- rate limited to 10 attempts per 15 minutes per user (`429 { "error": "Too many attempts, try again later" }` afterwards), because otherwise a stolen session cookie could guess the password here without the limit login has. `passwordChangeLimiter` lives in `modules/account/accountRateLimit.middleware.ts`, is keyed by user id, and so is mounted after `requireUserAuth`. Every request that gets past `requireUserAuth` counts, including ones answered with a `400`
 
 ### Implemented room and planned extension endpoints
 
@@ -782,15 +817,8 @@ Gaps found by checking the API against the schema and against what the frontend 
 
 - add `unreadCount` to the room summaries: messages in the room with an ID above the requester's `lastReadMessageId` (which `PUT /chat/:chatid/read` sets), not sent by the requester and not deleted. The `(chatId, id)` index already covers it. Other members' `lastReadMessageId` values (listed by `GET /chat/:chatid/member`) are also what a "seen by" indicator would be built from
 
-PATCH /account/me
+`DELETE /account/me` and password reset
 
-- update the requester's own profile; incoming body: `{ name?, avatar_url? }` with at least one. Same rules as signup's `name` and as `avatar_url` on `PATCH /chat/:chatid` (`null` clears it). `User.avatarUrl` is shown in every response but currently nothing can set it
-- return body (`200`): `{ "user": { id, name, email, tel, avatarUrl } }`. The user shape returned by login and `GET /account/me` (and `req.user`) has no `avatarUrl` today, so it needs adding there too for the client to read the avatar back
-
-POST /account/password
-
-- change the password; incoming body: `{ current_password, new_password }`. `new_password` follows the signup password rules; `401` when `current_password` is wrong
-- deletes the user's other sessions in the same transaction, so a leaked session stops working; the current session stays. Responds `204`
 - lower priority, both worth doing before deployment: `DELETE /account/me` (the empty-room cleanup already accounts for deleted accounts, but no endpoint deletes one) and a password reset flow, which needs email delivery and so belongs with production hardening
 
 Fixes to implemented endpoints:
@@ -847,7 +875,8 @@ message-app/
     │   │   ├── constants.ts
     │   │   ├── parseIdParam.ts      // numeric URL param -> ID or null (used by the chat and friend validators)
     │   │   ├── passwordHash.ts
-    │   │   └── prisma.ts
+    │   │   ├── prisma.ts
+    │   │   └── validation.ts        // isValidHttpUrl, isRecord (used by the chat and account validators)
     │   ├── middlewares/             // shared by several features
     │   │   ├── ErrorHandler.ts      // every error body is { error }; keeps the status of 4xx errors Express raises
     │   │   ├── SessionCookie.ts     // set/clear/read the session cookie
@@ -855,11 +884,13 @@ message-app/
     │   └── modules/
     │       ├── account/
     │       │   ├── account.routes.ts
-    │       │   ├── accountRateLimit.middleware.ts   // loginLimiter (per IP)
+    │       │   ├── accountRateLimit.middleware.ts   // loginLimiter (per IP), passwordChangeLimiter (per user)
     │       │   ├── account.controller.ts
     │       │   ├── account.service.ts
     │       │   ├── session.service.ts   // session database operations
     │       │   ├── login.validator.ts
+    │       │   ├── password.validator.ts   // POST /account/password body
+    │       │   ├── profile.validator.ts    // PATCH /account/me body
     │       │   └── signup.validator.ts
     │       ├── chatrooms/
     │       │   ├── chatRoom.routes.ts
@@ -885,7 +916,11 @@ message-app/
         │   └── friends.ts                    // makeFriends, createFriendRequest (optional createdAt)
         ├── account/
         │   ├── session.test.ts               // login, me, logout
-        │   └── signup.test.ts                // includes the canonical-number and duplicate-spelling cases
+        │   ├── signup.test.ts                // includes the canonical-number and duplicate-spelling cases
+        │   ├── profile.test.ts               // PATCH /account/me
+        │   ├── password.test.ts              // POST /account/password, and changePassword's stale-hash guard
+        │   ├── profile.validator.unit.test.ts
+        │   └── password.validator.unit.test.ts
         ├── middlewares/                      // mirrors src/middlewares/
         │   ├── errorHandler.unit.test.ts     // the handler alone, with a fake response
         │   └── errorHandler.test.ts          // errors Express raises itself (malformed JSON, bad percent-encoding)
@@ -921,7 +956,7 @@ Conventions:
 - All database operations are kept in the `*.service.ts` files and go through the shared Prisma client from `src/lib/prisma.ts`. There is no separate repositories layer, so a transaction (room creation, member removal) stays inside one service function.
 - A fixed technical limit shared by more than one module (for example the Postgres INTEGER max, reused as both an ID ceiling and a `setInterval`/`setTimeout` delay ceiling) is declared once in `src/lib/constants.ts` and imported everywhere it's needed, instead of being redeclared per file.
 - Services never import Express (no `req`, `res` or cookies). HTTP concerns live in controllers and middleware, so other entry points, such as the future Socket.io handlers, can call the same services.
-- Middleware used by a single feature lives in that feature's folder (for example `chatRoomAuth.middleware.ts`, `accountRateLimit.middleware.ts`, `friendRateLimit.middleware.ts`); `src/middlewares/` only holds middleware shared across features. Rate limiters follow the same rule: each feature keeps its own limiters, keyed by IP where nobody is signed in yet (`loginLimiter`) and by user id after `requireUserAuth` (`friendSearchLimiter`).
+- Middleware used by a single feature lives in that feature's folder (for example `chatRoomAuth.middleware.ts`, `accountRateLimit.middleware.ts`, `friendRateLimit.middleware.ts`); `src/middlewares/` only holds middleware shared across features. Rate limiters follow the same rule: each feature keeps its own limiters, keyed by IP where nobody is signed in yet (`loginLimiter`) and by user id after `requireUserAuth` (`friendSearchLimiter`, `passwordChangeLimiter`).
 - Error bodies: every `4xx` and `5xx` response has the shape `{ "error": "<text>" }`, whichever layer sends it (controller, feature middleware, rate limiter, `errorHandler`). `message` is not used for errors because it is already a success-body key for a chat message (`POST` and `PATCH /chat/:chatid/message` return `{ "message": { ... } }`), so a client could otherwise get a string and an object under the same key from one endpoint. Validators keep their own internal `{ valid: false, message }` result; the controller puts that text under `error`. A success body that only confirms an action (`201 { "message": "Account created successfully" }` from signup) is not an error body and is unchanged.
 - Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.
 - Background jobs live in the folder of the feature they belong to and are started from `server.ts`, never from `app.ts`, so tests that import the app do not start timers.
@@ -989,7 +1024,7 @@ The backend follows a layered request flow:
 5.**Service and database flow**
 
 - Services contain all database operations and use the shared Prisma client from `src/lib/prisma`. They do not import Express.
-- Account services create and find users. The session service creates, reads, and deletes sessions (rows only; cookies are handled in `middlewares/SessionCookie.ts`).
+- Account services create and find users, update a profile and change a password (`changePassword` also deletes the other sessions in the same transaction). The session service creates, reads, and deletes sessions (rows only; cookies are handled in `middlewares/SessionCookie.ts`).
 - Chat-room services check with `findNonFriendIds` (from the friend service) that everyone being added is a friend of the requester, create rooms and memberships in a Prisma transaction, load direct and group rooms, retrieve the latest message for room summaries, and update or delete rooms.
 - Direct-room responses derive the room name and avatar from the other member; group-room responses use the room's own name and avatar fields.
 - Friend services look up users and the friend-list and pending-request rows that connect them to the requester. Other users are returned as `{ id, name, avatarUrl }` only, never with `email` or `tel`.
@@ -1019,7 +1054,7 @@ HTTP request
 ## Roadmap
 
 1. Finish the friend flows (see "Friend endpoints"); friendship is already required to start a chat (see "Friendship and messaging")
-2. Close the REST gaps listed under "Proposed additional endpoints" (unread counts on room summaries, profile update)
+2. Close the REST gaps listed under "Proposed additional endpoints" (unread counts on room summaries)
 3. Implement real-time communication with Socket.io (see "Real-time events")
 4. Build the React frontend and integrate with TanStack Query
 5. Add authentication-aware UI states and protected routes

@@ -1,5 +1,6 @@
 import { MAX_INT32 as MAX_ID } from '../../lib/constants';
 import { parseIdParam } from '../../lib/parseIdParam';
+import { isRecord, isValidHttpUrl } from '../../lib/validation';
 
 type ValidRoomType = 'direct' | 'group';
 
@@ -301,17 +302,4 @@ export function validateMessageIdParam(rawMessageId: unknown): MessageIdParamVal
   return messageId === null
     ? { valid: false, message: 'Invalid message id' }
     : { valid: true, data: { messageId } };
-}
-
-function isValidHttpUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }

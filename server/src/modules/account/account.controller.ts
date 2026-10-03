@@ -1,9 +1,11 @@
 import type { Request, Response, NextFunction } from 'express';
-import { hashPassword } from '../../lib/passwordHash';
+import { hashPassword, verifyPassword } from '../../lib/passwordHash';
 import { validateAccountBody, checkDuplication, normalizeTel } from './signup.validator';
 import type { AccountBody } from './signup.validator';
 import { validateLogin } from './login.validator';
-import { createUser } from './account.service';
+import { validateUpdateProfileBody } from './profile.validator';
+import { validateChangePasswordBody } from './password.validator';
+import { createUser, updateUserProfile, findPasswordHash, changePassword } from './account.service';
 import { createSession, deleteSession } from './session.service';
 import { getSessionUser, setSessionCookie, clearSessionCookie } from '../../middlewares/SessionCookie';
 import config from '../../config/config';
@@ -67,7 +69,7 @@ export async function login(req: Request, res: Response, next: NextFunction) {
     setSessionCookie(res, session);
   
     res.status(200).json({
-      user: { id: user.id, name: user.name, email: user.email, tel: user.tel },
+      user: { id: user.id, name: user.name, email: user.email, tel: user.tel, avatarUrl: user.avatarUrl },
     });
   } catch (error) {
     console.error('Error during login:', error);
@@ -97,6 +99,53 @@ export async function logout(req: Request, res: Response, next: NextFunction) {
     res.status(200).json({ user: null });
   } catch (error) {
     console.error('Error during logout:', error);
+    next(error);
+  }
+}
+
+export async function updateMe(req: Request, res: Response, next: NextFunction) {
+  try {
+    const validation = validateUpdateProfileBody(req.body);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.message });
+    }
+
+    const user = await updateUserProfile(req.user!.id, validation.data);
+    res.status(200).json({ user });
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    next(error);
+  }
+}
+
+export async function updatePassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const validation = validateChangePasswordBody(req.body);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.message });
+    }
+    const { currentPassword, newPassword } = validation.data;
+
+    const userId = req.user!.id;
+    const currentHash = await findPasswordHash(userId);
+    if (!currentHash || !(await verifyPassword(currentHash, currentPassword))) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    // requireUserAuth found this session through the same cookie, so it exists.
+    const currentSessionId: string = req.cookies[config.SESSION_COOKIE];
+    const newHash = await hashPassword(newPassword);
+
+    const changed = await changePassword(userId, currentHash, newHash, currentSessionId);
+    if (!changed) {
+      // The password was changed by another request after we checked it, so
+      // what the client sent is no longer the current password.
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    res.status(204).end();
+  } catch (error) {
+    console.error('Error changing password:', error);
     next(error);
   }
 }

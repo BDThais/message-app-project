@@ -60,7 +60,7 @@ describe(`POST ${loginRoute}`, () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      user: { id: user.id, name: user.name, email: user.email, tel: user.tel },
+      user: { id: user.id, name: user.name, email: user.email, tel: user.tel, avatarUrl: null },
     });
     expect(res.body.user.passwordHash).toBeUndefined();
     expect(res.headers['set-cookie']).toEqual(
@@ -83,7 +83,13 @@ describe(`GET ${meRoute}`, () => {
     expect(login.status).toBe(200);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      user: { name: userData.name, email: userData.email, tel: userData.tel, id: expect.any(Number) },
+      user: {
+        name: userData.name,
+        email: userData.email,
+        tel: userData.tel,
+        avatarUrl: null,
+        id: expect.any(Number),
+      },
     });
   });
 

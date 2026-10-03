@@ -34,7 +34,7 @@ export function deleteSession(sessionId: string) {
  * the HTTP layer can tell the browser to drop its cookie.
  */
 export type SessionLookup =
-  | { status: 'valid'; user: { id: number; name: string; email: string; tel: string } }
+  | { status: 'valid'; user: { id: number; name: string; email: string; tel: string; avatarUrl: string | null } }
   | { status: 'expired' }
   | { status: 'missing' };
 
@@ -43,7 +43,7 @@ export async function findSessionUser(sessionId: string): Promise<SessionLookup>
     where: { id: sessionId },
     include: {
       user: {
-        select: { id: true, name: true, email: true, tel: true }, // no passwordHash
+        select: { id: true, name: true, email: true, tel: true, avatarUrl: true }, // no passwordHash
       },
     },
   });

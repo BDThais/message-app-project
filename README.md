@@ -86,6 +86,14 @@ Returns the current authenticated user or null when no valid session exists.
 
 Deletes the active session and clears the auth cookie.
 
+#### PATCH /account/me
+
+Updates the signed-in user's `name` and/or `avatar_url` (`null` clears the avatar) and returns the updated `{ user }`, which now includes `avatarUrl`.
+
+#### POST /account/password
+
+Changes the signed-in user's password. Body: `{ "current_password": "...", "new_password": "..." }`. Answers `204`, signs the account out of every other session, and answers `401` when the current password is wrong.
+
 ### Chatroom endpoints
 
 The protected chat routes are implemented on the server and include:
