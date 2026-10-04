@@ -4,7 +4,7 @@ import app from '../../src/app';
 import { hashPassword, verifyPassword } from '../../src/lib/passwordHash';
 import { prisma } from '../../src/lib/prisma';
 import { changePassword } from '../../src/modules/account/account.service';
-import { createUser, loginAs } from '../helpers/users';
+import { createSessionRow, createUser, loginAs } from '../helpers/users';
 
 const route = '/account/password';
 const currentPassword = 'Str0ng!Pass';
@@ -80,7 +80,7 @@ describe(`POST ${route}`, () => {
     const bob = await createUser('Bob');
     const agent = await loginAs(alice);
     const other = await loginAs(alice);
-    await prisma.session.create({ data: { userId: alice.id, expiresAt: new Date(Date.now() - 1000) } });
+    await createSessionRow(alice.id, new Date(Date.now() - 1000));
     const bobAgent = await loginAs(bob);
 
     const res = await agent.post(route).send({ current_password: currentPassword, new_password: newPassword });

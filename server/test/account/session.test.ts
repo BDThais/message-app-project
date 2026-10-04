@@ -4,6 +4,7 @@ import app from '../../src/app';
 import config from '../../src/config/config';
 import { hashPassword } from '../../src/lib/passwordHash';
 import { prisma } from '../../src/lib/prisma';
+import { createSessionRow } from '../helpers/users';
 
 const loginRoute = '/account/login';
 const meRoute = '/account/me';
@@ -68,6 +69,21 @@ describe(`POST ${loginRoute}`, () => {
     );
     expect(await prisma.session.count({ where: { userId: user.id } })).toBe(1);
   });
+
+  it('uses 32 random bytes as the session id, and that id is the cookie value', async () => {
+    await createUser();
+
+    const first = await request(app).post(loginRoute).send({ email: userData.email, password: userData.password });
+    const second = await request(app).post(loginRoute).send({ email: userData.email, password: userData.password });
+
+    const ids = (await prisma.session.findMany()).map((session) => session.id);
+    expect(ids).toHaveLength(2);
+    for (const id of ids) expect(id).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(new Set(ids).size).toBe(2);
+    const cookieValue = (res: request.Response) =>
+      new RegExp(`${config.SESSION_COOKIE}=([^;]+)`).exec(res.headers['set-cookie']![0]!)![1];
+    expect([cookieValue(first), cookieValue(second)].sort()).toEqual([...ids].sort());
+  });
 });
 
 describe(`GET ${meRoute}`, () => {
@@ -102,9 +118,7 @@ describe(`GET ${meRoute}`, () => {
 
   it('returns { user: null } and removes an expired session', async () => {
     const user = await createUser();
-    const session = await prisma.session.create({
-      data: { userId: user.id, expiresAt: new Date(Date.now() - 1000) },
-    });
+    const session = await createSessionRow(user.id, new Date(Date.now() - 1000));
 
     const res = await request(app)
       .get(meRoute)

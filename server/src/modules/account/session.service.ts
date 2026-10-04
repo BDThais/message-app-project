@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma';
 import config from '../../config/config';
+import { generateToken } from '../../lib/randomToken';
 
 // Database side of sessions. Nothing in this file knows about Express
 // (no req, res or cookies), so it can be reused by other entry points such as
@@ -9,6 +10,8 @@ import config from '../../config/config';
 /**
  * Creates a new session row for the user and returns it, so the caller can
  * decide how to hand the session id to the client (see setSessionCookie).
+ * The id is 256 random bits (generateToken): it is the only thing that proves
+ * who is calling, so it must not be guessable.
  * Deletes any expired session already on file for this account first, per spec.
  * Used by POST /account/login, after the email/password check passes.
  */
@@ -20,7 +23,7 @@ export async function createSession(userId: number) {
   });
 
   return prisma.session.create({
-    data: { userId, expiresAt },
+    data: { id: generateToken(), userId, expiresAt },
   });
 }
 

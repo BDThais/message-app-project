@@ -2,6 +2,7 @@ import request from 'supertest';
 import app from '../../src/app';
 import config from '../../src/config/config';
 import { prisma } from '../../src/lib/prisma';
+import { generateToken } from '../../src/lib/randomToken';
 
 let userCounter = 0;
 
@@ -24,6 +25,15 @@ export async function createUser(name: string) {
 }
 
 /**
+ * A session row for `userId`, with an id like the real ones. For tests that need
+ * a session in a particular state (for example already expired); loginAs uses
+ * it for the normal case.
+ */
+export function createSessionRow(userId: number, expiresAt: Date) {
+  return prisma.session.create({ data: { id: generateToken(), userId, expiresAt } });
+}
+
+/**
  * Returns a supertest agent that is already signed in as `user`.
  *
  * It writes the session row and sends its cookie directly instead of calling
@@ -31,9 +41,7 @@ export async function createUser(name: string) {
  * (that is tested in test/account/) and don't hit its rate limiter.
  */
 export async function loginAs(user: { id: number }) {
-  const session = await prisma.session.create({
-    data: { userId: user.id, expiresAt: new Date(Date.now() + 60 * 60 * 1000) },
-  });
+  const session = await createSessionRow(user.id, new Date(Date.now() + 60 * 60 * 1000));
 
   return request.agent(app).set('Cookie', `${config.SESSION_COOKIE}=${session.id}`);
 }

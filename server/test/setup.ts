@@ -21,6 +21,7 @@ beforeEach(async () => {
     prisma.chatMember.deleteMany(),
     prisma.message.deleteMany(),
     prisma.session.deleteMany(),
+    prisma.emailVerificationToken.deleteMany(),
     prisma.chatRoom.deleteMany(),
     prisma.user.deleteMany(),
   ]);

@@ -7,7 +7,7 @@ import { prisma } from '../../src/lib/prisma';
 import { deleteAccount } from '../../src/modules/account/account.service';
 import { createDirectRoom, createGroupRoom, memberIdsOf, promoteToAdmin } from '../helpers/chatRooms';
 import { createFriendRequest, makeFriends } from '../helpers/friends';
-import { createUser, loginAs } from '../helpers/users';
+import { createSessionRow, createUser, loginAs } from '../helpers/users';
 
 const route = '/account/me';
 const password = 'Str0ng!Pass';
@@ -56,7 +56,7 @@ describe(`DELETE ${route}`, () => {
     const bob = await createUser('Bob');
     const agent = await loginAs(alice);
     await loginAs(alice);
-    await prisma.session.create({ data: { userId: alice.id, expiresAt: new Date(Date.now() - 1000) } });
+    await createSessionRow(alice.id, new Date(Date.now() - 1000));
     const bobAgent = await loginAs(bob);
 
     const res = await agent.delete(route).send({ password });
