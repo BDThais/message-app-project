@@ -5,7 +5,8 @@ import type { AccountBody } from './signup.validator';
 import { validateLogin } from './login.validator';
 import { validateUpdateProfileBody } from './profile.validator';
 import { validateChangePasswordBody } from './password.validator';
-import { createUser, updateUserProfile, findPasswordHash, changePassword } from './account.service';
+import { validateDeleteAccountBody } from './deleteAccount.validator';
+import { createUser, updateUserProfile, findPasswordHash, changePassword, deleteAccount } from './account.service';
 import { createSession, deleteSession } from './session.service';
 import { getSessionUser, setSessionCookie, clearSessionCookie } from '../../middlewares/SessionCookie';
 import config from '../../config/config';
@@ -146,6 +147,40 @@ export async function updatePassword(req: Request, res: Response, next: NextFunc
     res.status(204).end();
   } catch (error) {
     console.error('Error changing password:', error);
+    next(error);
+  }
+}
+
+export async function deleteMe(req: Request, res: Response, next: NextFunction) {
+  try {
+    const validation = validateDeleteAccountBody(req.body);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.message });
+    }
+
+    const userId = req.user!.id;
+    const currentHash = await findPasswordHash(userId);
+    if (!currentHash || !(await verifyPassword(currentHash, validation.data.password))) {
+      return res.status(401).json({ error: 'Password is incorrect' });
+    }
+
+    const result = await deleteAccount(userId, currentHash);
+    if (result.status === 'only_admin') {
+      return res.status(409).json({
+        error: 'You are the only admin of a group room that still has other members. Make someone else an admin or delete the room first',
+        chatIds: result.chatIds,
+      });
+    }
+    if (result.status === 'stale_password') {
+      // The password was changed by another request after we checked it.
+      return res.status(401).json({ error: 'Password is incorrect' });
+    }
+
+    // The session row went with the user; the browser still holds the cookie.
+    clearSessionCookie(res);
+    res.status(204).end();
+  } catch (error) {
+    console.error('Error deleting account:', error);
     next(error);
   }
 }

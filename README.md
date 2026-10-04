@@ -94,6 +94,10 @@ Updates the signed-in user's `name` and/or `avatar_url` (`null` clears the avata
 
 Changes the signed-in user's password. Body: `{ "current_password": "...", "new_password": "..." }`. Answers `204`, signs the account out of every other session, and answers `401` when the current password is wrong.
 
+#### DELETE /account/me
+
+Deletes the signed-in user's account. Body: `{ "password": "..." }`. Answers `204` and clears the session cookie; the user's sessions, memberships, friendships and friend requests go with the account, while their messages stay in the rooms without a sender. Answers `401` when the password is wrong and `409` (with the room ids in `chatIds`) while the user is the only admin of a group room that still has other members.
+
 ### Chatroom endpoints
 
 The protected chat routes are implemented on the server and include:

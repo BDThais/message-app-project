@@ -52,6 +52,7 @@ Completed:
 - POST /account/logout
 - PATCH /account/me
 - POST /account/password
+- DELETE /account/me
 - POST /chat
 - GET /chat
 - GET /chat/:chatid
@@ -76,12 +77,13 @@ Completed:
 - Friendship requirement for creating a room and adding members (see "Friendship and messaging")
 - Basic room summaries with latest-message metadata
 - Automatic cleanup of chat rooms that stay empty (see "Empty chat room cleanup")
-- Integration tests for the account endpoints (including profile update and password change), the chat-room endpoints, the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
+- Integration tests for the account endpoints (including profile update, password change and account deletion), the chat-room endpoints, the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
 
 Still planned or not yet implemented:
 
 - Friend request flows (reject/cancel)
 - Friend list (`GET /friend`)
+- Password reset by email (see "Password reset (planned)")
 - Real-time socket communication
 - Frontend application screens and state management
 - Production deployment hardening
@@ -232,7 +234,28 @@ POST /account/password (implemented)
 - `401 { "error": "Current password is incorrect" }` when `current_password` is wrong; nothing changes. The same `401` is sent if the password was changed by another request between the check and the write: `changePassword` (`account.service.ts`) only writes when the stored hash is still the one that was verified, so a stale "current password" cannot overwrite a newer one
 - in one transaction, stores the new hash and deletes all the user's other sessions (expired ones too), so a leaked session stops working. The session making the request stays valid, and other users' sessions are untouched
 - responds `204` with no body. A new password equal to the current one is accepted (the other sessions are still signed out)
-- rate limited to 10 attempts per 15 minutes per user (`429 { "error": "Too many attempts, try again later" }` afterwards), because otherwise a stolen session cookie could guess the password here without the limit login has. `passwordChangeLimiter` lives in `modules/account/accountRateLimit.middleware.ts`, is keyed by user id, and so is mounted after `requireUserAuth`. Every request that gets past `requireUserAuth` counts, including ones answered with a `400`
+- rate limited to 10 attempts per 15 minutes per user (`429 { "error": "Too many attempts, try again later" }` afterwards), because otherwise a stolen session cookie could guess the password here without the limit login has. `passwordCheckLimiter` lives in `modules/account/accountRateLimit.middleware.ts`, is keyed by user id, and so is mounted after `requireUserAuth`. Every request that gets past `requireUserAuth` counts, including ones answered with a `400`. `DELETE /account/me` uses the same limiter instance, so the two routes share one budget
+
+DELETE /account/me (implemented)
+
+- Deletes the requester's own account. Requires a session (`401 { "error": "Unauthorized Access" }` otherwise)
+- incoming body: `{ password }`, the account's current password, a non-empty string (`400 { "error": "Password is required" }` otherwise). It is asked for the same reason `POST /account/password` asks for the current one: deleting is irreversible, so a session cookie alone (a stolen one, or a browser left signed in) must not be enough. Validation lives in `deleteAccount.validator.ts`
+- `401 { "error": "Password is incorrect" }` when the password is wrong; nothing changes. The same `401` is sent if the password was changed by another request between the check and the delete: `deleteAccount` (`account.service.ts`) only deletes when the stored hash is still the one that was verified, like `changePassword`
+- `409` when the requester is the only admin of a group room that still has other members: the only-admin rule of `DELETE /chat/:chatid/member/:userid`, applied to the whole account, so a room with members always keeps an admin. Nothing is deleted, not even the rooms where the requester is only a member. The user can make someone else an admin (`PATCH /chat/:chatid/member/:userid`) or delete the room (`DELETE /chat/:chatid`) and try again. The body lists the rooms so the client can send the user there (`chatIds` is the one extra key an error body carries):
+
+  ```json
+  {
+    "error": "You are the only admin of a group room that still has other members. Make someone else an admin or delete the room first",
+    "chatIds": [3, 8]
+  }
+  ```
+
+  Direct rooms are exempt (both members are admins), and so are group rooms where the requester is the only member
+- everything runs in one transaction. The foreign keys delete the user's sessions (all of them, expired ones too), room memberships, friend-list entries (in both directions) and friend requests (sent and received). The user's messages stay in their rooms with `senderId` and `sender` set to `null`, so the other members keep the conversation; nobody can edit or delete such a message afterwards, because both are sender-only. A direct room stays with its remaining member, who still lists and reads it (its `name` and `avatarUrl` are `null`, as when the other member leaves)
+- a room whose only member was the requester gets `emptied_at` in the same transaction, so the retention clock of the cleanup job starts right away (see "Empty chat room cleanup")
+- every room the requester is in is locked (`SELECT ... FOR UPDATE`, in id order so two deletions that share rooms cannot deadlock) before the admin check, for the same reason as on `DELETE /chat/:chatid/member/:userid`: two admins of one room deleting their accounts at the same moment could otherwise both pass the check and leave the room with members but no admin
+- responds `204` with no body and clears the session cookie. The email and phone number can be used to sign up again
+- rate limited with `POST /account/password`: the two routes share one budget of 10 attempts per 15 minutes per user (`429 { "error": "Too many attempts, try again later" }` afterwards), because both let whoever holds a session guess the password
 
 ### Implemented room and planned extension endpoints
 
@@ -817,14 +840,49 @@ Gaps found by checking the API against the schema and against what the frontend 
 
 - add `unreadCount` to the room summaries: messages in the room with an ID above the requester's `lastReadMessageId` (which `PUT /chat/:chatid/read` sets), not sent by the requester and not deleted. The `(chatId, id)` index already covers it. Other members' `lastReadMessageId` values (listed by `GET /chat/:chatid/member`) are also what a "seen by" indicator would be built from
 
-`DELETE /account/me` and password reset
-
-- lower priority, both worth doing before deployment: `DELETE /account/me` (the empty-room cleanup already accounts for deleted accounts, but no endpoint deletes one) and a password reset flow, which needs email delivery and so belongs with production hardening
-
 Fixes to implemented endpoints:
 
 - `lastMessage.content` in the room summaries is `""` when the latest message was deleted, so the room list would show a blank preview. Add `deletedAt` to `lastMessage` and let the client show a placeholder such as "Message deleted" (dropping deleted messages from the lookup instead would make a room jump down the list after a delete)
 - signup controller's P2002 handler reports any unique violation as "Phone number already exists", even when the email is the cause
+
+### Password reset (planned)
+
+A signed-out user who forgot their password asks for a link by email, opens it, and sets a new password. The plan is two endpoints, one table and a mailer. Nothing here is implemented yet.
+
+Decisions to confirm before starting:
+
+- **Email provider.** The server has no way to send mail yet. Proposal: `nodemailer` over SMTP, so the provider stays a configuration choice (Resend, Postmark, SES and others all offer SMTP) and development can use a local catcher such as Mailpit. In development and tests nothing is really sent: `MAIL_TRANSPORT=console` (the default outside production) logs the message, and tests read an in-memory outbox.
+- **Where the link points.** `PASSWORD_RESET_URL` is the frontend page (`http://localhost:5173/reset-password` in development) and the token is appended as a URL fragment, `.../reset-password#token=...`. Browsers never send a fragment to a server, so the token stays out of access logs and `Referer` headers; the page reads it and clears it from the address bar. The frontend does not exist yet, so until it does the endpoints are exercised with the token from the logged email.
+- **Email addresses are not verified.** Signup never checks that the address belongs to the user, so a reset email can reach someone who does not own the account, and a mistyped address can never receive one. Acceptable for a first version; email verification (an `emailVerifiedAt` column and a second token flow like this one) is the proper fix.
+- **Email matching is exact**, like login (`findUnique({ where: { email } })`, and signup does not lowercase). Asking for `john@x.com` when the account was created as `John@x.com` sends nothing. Normalizing the case at signup and login is a separate fix, with a migration for the addresses already stored.
+
+Schema: one new model, `PasswordResetToken`, with `userId` (unique, cascade on delete), `tokenHash` (unique), `expiresAt` and `createdAt`. `userId` being unique means an account has at most one outstanding link: asking again replaces it, so the table never grows past one row per user and needs no cleanup job.
+
+- the token is `crypto.randomBytes(32).toString('base64url')` (256 bits) and only its SHA-256 is stored, so a leaked table gives nobody a working link. A fast hash is right here (unlike for passwords) because the token is random, not guessable. Time to live: `PASSWORD_RESET_TTL_MS`, default 30 minutes
+- new settings: `PASSWORD_RESET_URL`, `PASSWORD_RESET_TTL_MS`, `MAIL_TRANSPORT` (`console` | `smtp`), `SMTP_URL`, `MAIL_FROM`. Like the cleanup job's settings, they are validated when the server starts, and `smtp` without `SMTP_URL` stops it
+- `src/lib/mailer.ts` holds a small `Mailer` interface (`send({ to, subject, text })`), the console and SMTP implementations, and `setMailer` so tests can swap in the outbox (`test/helpers/mailer.ts`). Services never send mail themselves: they return what is needed and the controller sends it
+
+`POST /account/password/reset-request` (signed out)
+
+- incoming body: `{ email }`, a string accepted by `validator.isEmail`, otherwise `400`
+- answers `202 { "message": "If an account exists for that email, a reset link is on its way" }` for every well-formed email, whether or not an account has it, so this endpoint cannot be used to find out who is registered. (Signup still answers `409` for a registered email, so registration is not hidden as long as that stays.)
+- for a known email: store a new token in place of the old one (an upsert on `userId`), respond, and only then send the email without waiting for it, so the response time does not depend on the mail server or on whether the account exists. A crash or a provider error loses that one email (logged); the user can ask again. If that proves too unreliable, the next step is an outbox table drained by a job like the cleanup job
+- if the account's token was created less than 60 seconds ago, nothing is stored or sent and the answer is the same `202`: it stops anyone from filling a victim's inbox or from replacing their link over and over
+- two limiters in `accountRateLimit.middleware.ts`, both answering `429 { "error": ... }`: per IP (10 per 15 minutes) and per email (3 per hour, keyed on the lower-cased email from the body, and on the IP when there is none). Both count every request, known email or not, so a `429` reveals nothing either
+
+`POST /account/password/reset` (signed out)
+
+- incoming body: `{ token, new_password }`, both non-empty strings. `new_password` follows the signup rules (`validatePassword`) and is checked first, so a weak password is a `400` that does not use up the link
+- claims the token and changes the password in one transaction: `DELETE FROM password_reset_tokens WHERE token_hash = $1 AND expires_at > now() RETURNING user_id`, then store the new hash and delete all of the user's sessions (expired ones too). Only one of two simultaneous requests with the same token can delete the row, so a link works once, and a failure rolls everything back, so the link survives it
+- `400 { "error": "This reset link is invalid or has expired" }` for an unknown, used or expired token, one message for all three
+- responds `204` and does not sign the user in: they log in with the new password, so `loginLimiter` stays in the path. Afterwards an email "your password was changed" goes to the account's address, so a takeover does not go unnoticed
+- rate limited per IP (10 per 15 minutes)
+
+Changes to existing code: `changePassword` also deletes the account's reset token in its transaction (a link asked for earlier must not outlive a deliberate password change). `deleteAccount` needs nothing, the token goes with the user.
+
+Tests, once built (with the in-memory outbox): both endpoints answer the same for a known and an unknown email and only the known one sends exactly one email; the emailed token works once, not twice (including two requests at the same moment, called on the service), not after it expires and not after a newer one replaced it; a weak password is a `400` and the token still works afterwards; a reset signs out every session and the new password logs in while the old one does not; `changePassword` kills an outstanding token; the cooldown and the limiters; a table of bad bodies in the validators' unit tests.
+
+Build order: schema and migration; mailer, settings and the outbox helper; service and validators; controller, routes and limiters; tests; this document and the README. The two frontend pages (a form that asks for the email and shows the `202` message, and a page that reads the fragment, asks for the new password and sends the user to the login) belong to the frontend milestone. Out of scope: reset by SMS through `tel`, security questions, locking an account after failed logins.
 
 ### Real-time events (planned)
 
@@ -884,11 +942,12 @@ message-app/
     │   └── modules/
     │       ├── account/
     │       │   ├── account.routes.ts
-    │       │   ├── accountRateLimit.middleware.ts   // loginLimiter (per IP), passwordChangeLimiter (per user)
+    │       │   ├── accountRateLimit.middleware.ts   // loginLimiter (per IP), passwordCheckLimiter (per user; POST /account/password and DELETE /account/me share it)
     │       │   ├── account.controller.ts
     │       │   ├── account.service.ts
     │       │   ├── session.service.ts   // session database operations
     │       │   ├── login.validator.ts
+    │       │   ├── deleteAccount.validator.ts   // DELETE /account/me body
     │       │   ├── password.validator.ts   // POST /account/password body
     │       │   ├── profile.validator.ts    // PATCH /account/me body
     │       │   └── signup.validator.ts
@@ -919,7 +978,9 @@ message-app/
         │   ├── signup.test.ts                // includes the canonical-number and duplicate-spelling cases
         │   ├── profile.test.ts               // PATCH /account/me
         │   ├── password.test.ts              // POST /account/password, and changePassword's stale-hash guard
+        │   ├── deleteAccount.test.ts         // DELETE /account/me, and deleteAccount's stale-hash guard and room lock
         │   ├── profile.validator.unit.test.ts
+        │   ├── deleteAccount.validator.unit.test.ts
         │   └── password.validator.unit.test.ts
         ├── middlewares/                      // mirrors src/middlewares/
         │   ├── errorHandler.unit.test.ts     // the handler alone, with a fake response
@@ -956,7 +1017,7 @@ Conventions:
 - All database operations are kept in the `*.service.ts` files and go through the shared Prisma client from `src/lib/prisma.ts`. There is no separate repositories layer, so a transaction (room creation, member removal) stays inside one service function.
 - A fixed technical limit shared by more than one module (for example the Postgres INTEGER max, reused as both an ID ceiling and a `setInterval`/`setTimeout` delay ceiling) is declared once in `src/lib/constants.ts` and imported everywhere it's needed, instead of being redeclared per file.
 - Services never import Express (no `req`, `res` or cookies). HTTP concerns live in controllers and middleware, so other entry points, such as the future Socket.io handlers, can call the same services.
-- Middleware used by a single feature lives in that feature's folder (for example `chatRoomAuth.middleware.ts`, `accountRateLimit.middleware.ts`, `friendRateLimit.middleware.ts`); `src/middlewares/` only holds middleware shared across features. Rate limiters follow the same rule: each feature keeps its own limiters, keyed by IP where nobody is signed in yet (`loginLimiter`) and by user id after `requireUserAuth` (`friendSearchLimiter`, `passwordChangeLimiter`).
+- Middleware used by a single feature lives in that feature's folder (for example `chatRoomAuth.middleware.ts`, `accountRateLimit.middleware.ts`, `friendRateLimit.middleware.ts`); `src/middlewares/` only holds middleware shared across features. Rate limiters follow the same rule: each feature keeps its own limiters, keyed by IP where nobody is signed in yet (`loginLimiter`) and by user id after `requireUserAuth` (`friendSearchLimiter`, `passwordCheckLimiter`).
 - Error bodies: every `4xx` and `5xx` response has the shape `{ "error": "<text>" }`, whichever layer sends it (controller, feature middleware, rate limiter, `errorHandler`). `message` is not used for errors because it is already a success-body key for a chat message (`POST` and `PATCH /chat/:chatid/message` return `{ "message": { ... } }`), so a client could otherwise get a string and an object under the same key from one endpoint. Validators keep their own internal `{ valid: false, message }` result; the controller puts that text under `error`. A success body that only confirms an action (`201 { "message": "Account created successfully" }` from signup) is not an error body and is unchanged.
 - Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.
 - Background jobs live in the folder of the feature they belong to and are started from `server.ts`, never from `app.ts`, so tests that import the app do not start timers.
@@ -966,12 +1027,12 @@ Conventions:
 
 ## Empty chat room cleanup
 
-A room whose last member has left is not deleted on the spot. `DELETE /chat/:chatid/member/:userid` stamps the room's `emptied_at` column in the same transaction as the removal, and a job running inside the API process deletes the room once it has stayed empty for the retention period. Deleting the room cascades to its messages.
+A room whose last member has left is not deleted on the spot. `DELETE /chat/:chatid/member/:userid` stamps the room's `emptied_at` column in the same transaction as the removal (`DELETE /account/me` does the same for a room whose only member was the deleted user), and a job running inside the API process deletes the room once it has stayed empty for the retention period. Deleting the room cascades to its messages.
 The job is `modules/chatrooms/chatRoomCleanup.job.ts` (timer, validation of the two settings below) and the database work is `chatRoomCleanup.service.ts` (`purgeExpiredEmptyChatRooms`).
 
 - `EMPTY_ROOM_RETENTION_MS`: how long a room stays empty before it is deleted (default 7 days)
 - `EMPTY_ROOM_CLEANUP_INTERVAL_MS`: how often the job looks for expired rooms (default 1 hour); it also sweeps once when the server starts
-- each sweep first stamps any empty room that has no `emptied_at` yet (for example when every member's account was deleted), so its retention clock starts then, and then deletes rooms whose stamp is older than the retention period
+- each sweep first stamps any empty room that has no `emptied_at` yet (a safety net: the two endpoints above already stamp the room themselves), so its retention clock starts then, and then deletes rooms whose stamp is older than the retention period
 - a room that has members is never deleted, whatever its `emptied_at` says
 - the job is started from `server.ts`, not `app.ts`, so tests that import the app do not start a timer
 - a room with no members cannot be reached through the API (every `/chat/:chatid` route requires membership), so nothing can add members back to a room that is waiting for cleanup
@@ -1024,7 +1085,7 @@ The backend follows a layered request flow:
 5.**Service and database flow**
 
 - Services contain all database operations and use the shared Prisma client from `src/lib/prisma`. They do not import Express.
-- Account services create and find users, update a profile and change a password (`changePassword` also deletes the other sessions in the same transaction). The session service creates, reads, and deletes sessions (rows only; cookies are handled in `middlewares/SessionCookie.ts`).
+- Account services create and find users, update a profile, change a password (`changePassword` also deletes the other sessions in the same transaction) and delete an account (`deleteAccount` locks the rooms the user is in, refuses while the user is the only admin of a group room that still has other members, and leaves the rest to the foreign keys). The session service creates, reads, and deletes sessions (rows only; cookies are handled in `middlewares/SessionCookie.ts`).
 - Chat-room services check with `findNonFriendIds` (from the friend service) that everyone being added is a friend of the requester, create rooms and memberships in a Prisma transaction, load direct and group rooms, retrieve the latest message for room summaries, and update or delete rooms.
 - Direct-room responses derive the room name and avatar from the other member; group-room responses use the room's own name and avatar fields.
 - Friend services look up users and the friend-list and pending-request rows that connect them to the requester. Other users are returned as `{ id, name, avatarUrl }` only, never with `email` or `tel`.
@@ -1058,7 +1119,7 @@ HTTP request
 3. Implement real-time communication with Socket.io (see "Real-time events")
 4. Build the React frontend and integrate with TanStack Query
 5. Add authentication-aware UI states and protected routes
-6. Add deployment configuration and production hardening
+6. Add deployment configuration and production hardening, including the password reset flow (see "Password reset (planned)")
 
 ## Notes
 
