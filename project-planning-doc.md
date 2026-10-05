@@ -3,7 +3,7 @@
 ## Overview
 
 This project is a real-time messaging application built with PostgreSQL, Prisma, TypeScript, Express.js, and a React frontend.
-The backend has grown beyond the original account/session MVP and now includes a working chat-room foundation with direct and group room support, while the remaining friend and realtime features are still planned work.
+The backend has grown beyond the original account/session MVP and now includes a working chat-room foundation with direct and group room support, while the realtime features are still planned work.
 
 ## Tech Stack
 
@@ -71,24 +71,24 @@ Completed:
 - POST /friend/requests
 - GET /friend/requests
 - POST /friend/requests/:id/accept
+- DELETE /friend/requests/:id
+- GET /friend
 - DELETE /friend/:id
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Friendship requirement for creating a room and adding members (see "Friendship and messaging")
 - Basic room summaries with latest-message metadata
 - Automatic cleanup of chat rooms that stay empty (see "Empty chat room cleanup")
-- Integration tests for the account endpoints (including profile update, password change and account deletion), the chat-room endpoints, the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
+- Integration tests for the account endpoints (including profile update, password change and account deletion), the chat-room endpoints, the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the reject/cancel-friend-request endpoint, the list-friends endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
 
 Still planned or not yet implemented:
 
-- Friend request flows (reject/cancel)
-- Friend list (`GET /friend`)
 - Email delivery, email verification and password reset by email (see "Email delivery (planned)", "Email verification (planned)" and "Password reset (planned)"); the database tables for verification already exist
 - Real-time socket communication
 - Frontend application screens and state management
 - Production deployment hardening
 
-The room and auth systems are now acting as the current working backend foundation. The rest of the friend features (everything under "Friend endpoints" except search, sending, listing and accepting a request, and unfriending) and realtime remain future work and should be treated as the next milestone rather than as missing pieces of the current baseline.
+The room and auth systems are now acting as the current working backend foundation. The friend endpoints are all in place, so realtime is the next milestone and remains future work rather than a missing piece of the current baseline.
 
 Note: In the database, the mutual friendship model stores two rows per friendship pair, one for each user, as described in the project requirements.
 
@@ -668,7 +668,7 @@ PUT /chat/:chatid/read (implemented)
 - return body (`200`): `{ "lastReadMessageId": 42 }` (the marker as it stands after the call, which is the later message when the marker was already ahead)
 - if the requester left the room while the request was running, it answers `404` with `{ "error": "Chat room not found" }`, the same as the membership check
 
-#### Friend endpoints (in progress: schema changes, search, sending, listing and accepting a request, and unfriending are implemented)
+#### Friend endpoints (implemented)
 
 Friend flows get their own module, `src/modules/friends/` (routes, controller, validator(s), service), mounted in `app.ts` behind `requireUserAuth` like the chat routes. A user is always returned to other users as `{ id, name, avatarUrl }`, never with `email` or `tel`.
 
@@ -782,17 +782,25 @@ POST /friend/requests/:id/accept (implemented)
   }
   ```
 
-DELETE /friend/requests/:id
+DELETE /friend/requests/:id (implemented)
 
-- delete a pending friend request; `:id` is the request ID
+- delete a pending friend request; `:id` is the request ID (`400` with `{ "error": "Invalid friend request id" }` when it is not a valid ID)
 - either party may call it: the receiver rejects, the sender cancels. Same effect, so one endpoint
-- responds `204 No Content` when the request was deleted
-- responds `404` when the request does not exist or the requester is neither its sender nor its receiver
-- the other party is not notified of a rejection
+- responds `204 No Content` with no body when the request was deleted
+- responds `404` with `{ "error": "Friend request not found" }` when the request does not exist or the requester is neither its sender nor its receiver. The two are not told apart, so nobody can probe other users' requests (the same answer `POST /friend/requests/:id/accept` gives)
+- it deletes only the request `:id` names. When two users sent each other a request at the same instant, the other request of the pair stays: it is a different request (which is why `:id` is a request ID and not a user ID), and accepting it still clears the pair
+- the permission check and the delete are one `deleteMany` statement narrowed to requests the requester is a party to, not a lookup followed by a delete. A double click or a second tab sending the same call twice at once, or the sender cancelling while the receiver rejects, is therefore answered with `204` and `404`, never a `5xx`; either way the request is gone
+- no rate limiter: it only works on a request the requester is a party to, so it reveals nothing about other users
+- the other party is not notified of a rejection, and nothing is recorded about it: there is no "rejected" state and no block, so afterwards either user can send the other a new request
 
-GET /friend
+GET /friend (implemented)
 
-- retrieve the requester's friends list, sorted by name (case-insensitive)
+- retrieve the requester's friends list, sorted by name (case-insensitive). Names that differ only in case (`bob` and `Bob`) are ordered by user ID, so the order never changes from one call to the next
+- it reads the requester's *own* friend-list rows, the same rows `GET /friend/search/:tel`, `DELETE /friend/:id` and the friendship check of the chat-room endpoints read, so every endpoint agrees on who is a friend. A half-written friendship (only one of the two rows, which the API itself never produces) is therefore listed for the user whose row exists and not for the other
+- each friend is selected down to `{ id, name, avatarUrl }` in the query itself, so `email` and `tel` are never read
+- the sort is done in `listFriends`, not by the database: Prisma cannot order by `lower(name)`, and a plain `orderBy` follows the database's collation, which differs between installations (a case-sensitive one puts every capitalised name before every lower-case one). Names are letters and digits only, so lower-casing them is enough. When the list gets `limit`/`before`, the order has to move into the query (a raw `ORDER BY lower(name), id`)
+- an empty list is a normal outcome: `200` with `friends: []`
+- no rate limiter: it only lists the requester's own friends, so it reveals nothing about other users
 - no pagination yet (friend lists are small); add `limit`/`before` in the style of `GET /chat/:chatid/message` if that stops being true
 - return body (`200`):
 
@@ -1053,6 +1061,8 @@ message-app/
             ├── friendRequests.send.test.ts   // POST /friend/requests
             ├── friendRequests.get.test.ts    // GET /friend/requests
             ├── friendRequests.accept.test.ts // POST /friend/requests/:id/accept
+            ├── friendRequests.delete.test.ts // DELETE /friend/requests/:id
+            ├── friends.list.test.ts          // GET /friend
             ├── friends.remove.test.ts        // DELETE /friend/:id
             ├── friend.permissions.test.ts    // sign-in guard, per route
             └── friend.validator.unit.test.ts
@@ -1162,12 +1172,11 @@ HTTP request
 
 ## Roadmap
 
-1. Finish the friend flows (see "Friend endpoints"); friendship is already required to start a chat (see "Friendship and messaging")
-2. Close the REST gaps listed under "Proposed additional endpoints" (unread counts on room summaries)
-3. Implement real-time communication with Socket.io (see "Real-time events")
-4. Build the React frontend and integrate with TanStack Query
-5. Add authentication-aware UI states and protected routes
-6. Add deployment configuration and production hardening, including email delivery, email verification and the password reset flow (see "Email delivery (planned)", "Email verification (planned)" and "Password reset (planned)")
+1. Close the REST gaps listed under "Proposed additional endpoints" (unread counts on room summaries)
+2. Implement real-time communication with Socket.io (see "Real-time events")
+3. Build the React frontend and integrate with TanStack Query
+4. Add authentication-aware UI states and protected routes
+5. Add deployment configuration and production hardening, including email delivery, email verification and the password reset flow (see "Email delivery (planned)", "Email verification (planned)" and "Password reset (planned)")
 
 ## Notes
 

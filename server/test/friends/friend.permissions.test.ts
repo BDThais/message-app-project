@@ -6,12 +6,14 @@ import app from '../../src/app';
 // per route so a route added without it gets caught. What the routes do once
 // the guard lets a request through is tested in the other files.
 
-// Add new routes here (e.g. GET /friend, DELETE /friend/requests/:id) so they are covered too.
+// Add new routes here so they are covered too.
 const allRoutes = [
+  ['get', '/friend'],
   ['get', '/friend/search/+14155552671'],
   ['post', '/friend/requests'],
   ['get', '/friend/requests'],
   ['post', '/friend/requests/1/accept'],
+  ['delete', '/friend/requests/1'],
   ['delete', '/friend/1'],
 ] as const;
 

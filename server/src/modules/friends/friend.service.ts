@@ -294,6 +294,77 @@ export async function acceptPendingFriendRequest(
   }
 }
 
+export type DeleteFriendRequestResult = { status: 'deleted' } | { status: 'not_found' };
+
+/**
+ * Behind DELETE /friend/requests/:id: the receiver rejects the request, the
+ * sender cancels it, and either way the row is simply deleted. `requestId` is
+ * expected to be validated already (see validateRequestIdParam).
+ *
+ * One `deleteMany` statement, narrowed to requests the requester is a party to,
+ * rather than a lookup followed by a delete. The statement is the permission
+ * check and the delete at once, so there is no gap for a second tab to slip
+ * through: of two concurrent calls one deletes the row (`deleted`) and the other
+ * finds nothing (`not_found`), never an error. A request that does not exist
+ * and one between two other users are not told apart (both match zero rows), so
+ * nobody can probe other users' requests.
+ *
+ * Only the request row goes. The other party is not notified and nothing else
+ * changes, so after a rejection or a cancellation either user can send a new
+ * request.
+ */
+export async function removePendingFriendRequest(
+  requesterId: number,
+  requestId: number
+): Promise<DeleteFriendRequestResult> {
+  const { count } = await prisma.pendingFriendRequest.deleteMany({
+    where: {
+      id: requestId,
+      OR: [{ senderId: requesterId }, { receiverId: requesterId }],
+    },
+  });
+
+  return count > 0 ? { status: 'deleted' } : { status: 'not_found' };
+}
+
+/**
+ * Behind GET /friend: the requester's friends as `{ id, name, avatarUrl }`,
+ * sorted by name without regard to case, with the user ID breaking ties so the
+ * order never changes from one call to the next. There is no pagination yet.
+ *
+ * It reads the requester's *own* friend-list rows, the same rows
+ * GET /friend/search/:tel, DELETE /friend/:id and `findNonFriendIds` use, so
+ * every endpoint agrees on who is a friend. The friend is selected down to
+ * the public fields in the query itself, so email and tel are never read.
+ * The rows are served by the primary key `(userId, friendId)`, and friend-list
+ * rows cascade with their users, so the friend always exists.
+ *
+ * The sort happens here and not in the query on purpose: Prisma cannot order
+ * by `lower(name)`, and a plain `orderBy` follows the database's collation,
+ * which differs between installations (a case-sensitive order puts every
+ * capitalised name before every lower-case one). Names are letters and digits
+ * only (see signup.validator.ts), so lower-casing them is enough. When the
+ * list gets a `limit`/`before`, the order has to move into the query (a raw
+ * `ORDER BY lower(name), id`).
+ */
+export async function listFriends(requesterId: number): Promise<PublicUser[]> {
+  const rows = await prisma.friendListMember.findMany({
+    where: { userId: requesterId },
+    select: { friend: { select: publicUserSelect } },
+  });
+
+  return rows
+    .map((row) => row.friend)
+    .sort((a, b) => {
+      const nameA = a.name.toLowerCase();
+      const nameB = b.name.toLowerCase();
+
+      if (nameA !== nameB) return nameA < nameB ? -1 : 1;
+
+      return a.id - b.id;
+    });
+}
+
 /**
  * Which of `userIds` are not friends of the requester. Used by the chat-room
  * endpoints, which only let people start a conversation with their friends

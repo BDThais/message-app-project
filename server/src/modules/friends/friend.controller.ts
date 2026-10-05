@@ -11,6 +11,8 @@ import {
   createFriendRequest,
   listFriendRequests,
   acceptPendingFriendRequest,
+  removePendingFriendRequest,
+  listFriends,
   removeFriend,
 } from './friend.service';
 
@@ -103,6 +105,44 @@ export async function acceptFriendRequest(req: Request, res: Response, next: Nex
       case 'not_found':
         return res.status(404).json({ error: 'Friend request not found' });
     }
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Route chain (see friend.routes.ts): requireUserAuth only. Either party can
+// delete a request: the receiver rejects it, the sender cancels it. It only
+// works on a request the requester is a party to, so it tells them nothing
+// about anyone else and has no limiter. A request that does not exist and one
+// between two other users get the same 404. `:id` is a *request* ID.
+export async function deleteFriendRequest(req: Request, res: Response, next: NextFunction) {
+  const validation = validateRequestIdParam(req.params.id);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.message });
+  }
+
+  try {
+    const result = await removePendingFriendRequest(req.user!.id, validation.data.requestId);
+
+    switch (result.status) {
+      case 'deleted':
+        return res.status(204).end();
+      case 'not_found':
+        return res.status(404).json({ error: 'Friend request not found' });
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Route chain (see friend.routes.ts): requireUserAuth only. The list is the
+// requester's own, so it tells them nothing about anyone else and has no
+// limiter. No friends is a normal outcome: 200 with friends: [].
+export async function getFriends(req: Request, res: Response, next: NextFunction) {
+  try {
+    const friends = await listFriends(req.user!.id);
+
+    return res.status(200).json({ friends });
   } catch (err) {
     next(err);
   }
