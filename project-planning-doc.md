@@ -850,7 +850,7 @@ Gaps found by checking the API against the schema and against what the frontend 
 
 Fixes to implemented endpoints:
 
-- `lastMessage.content` in the room summaries is `""` when the latest message was deleted, so the room list would show a blank preview. Add `deletedAt` to `lastMessage` and let the client show a placeholder such as "Message deleted" (dropping deleted messages from the lookup instead would make a room jump down the list after a delete)
+- `lastMessage.content` in the room summaries is `""` when the latest message was deleted, so the room list would show a blank preview. Drop deleted messages from the lookup instead so the preview will show the message before the deleted message
 - signup controller's P2002 handler reports any unique violation as "Phone number already exists", even when the email is the cause
 
 ### Email delivery (planned)
