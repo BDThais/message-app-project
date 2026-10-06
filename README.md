@@ -13,7 +13,7 @@ The application is currently in an active backend MVP phase. Implemented feature
 - Protected route middleware for chat access
 - Direct and group chat room creation, listing, update, and deletion
 - Chat membership and role checks with admin-only protections
-- Room summary and latest-message aggregation
+- Room summaries with the latest message and the unread count
 - Prisma models for users, sessions, chat rooms, messages, and friendship flows
 - Vitest integration tests for the account/session flow
 

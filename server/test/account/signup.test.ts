@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import app from '../../src/app';
 import { prisma } from '../../src/lib/prisma';
 import { verifyPassword } from '../../src/lib/passwordHash';
+import * as accountService from '../../src/modules/account/account.service';
 
 const signUpRoute = '/account/signup';
 
@@ -129,5 +130,34 @@ describe(`POST ${signUpRoute}`, () => {
     expect(res.status).toBe(409);
     expect(res.body.error).toBe('Phone number already exists');
     expect(await prisma.user.count()).toBe(1);
+  });
+
+  // The duplicate check and the insert are two statements, so two signups for
+  // the same address can both pass the check and the database refuses the
+  // second insert. Pretending the check found nothing is that situation, and
+  // the 409 must name the column that really collided.
+  describe('when the database refuses the insert after the duplicate check passed', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    // The existing account has validBody's email and phone number; each case
+    // changes one of them, so only the other one collides.
+    it.each([
+      ['email', { tel: '+14155552672' }, 'Email already exists'],
+      ['phone number', { email: 'other@example.com' }, 'Phone number already exists'],
+    ])('names the %s as the cause', async (_label, changedField, expectedError) => {
+      await prisma.user.create({
+        data: { name: 'existing-user', email: validBody.email, tel: validBody.tel, passwordHash: 'existing-hash' },
+      });
+      // This request's check ran before the user above was inserted.
+      vi.spyOn(accountService, 'findExistingUser').mockResolvedValueOnce(null);
+
+      const res = await request(app).post(signUpRoute).send({ ...validBody, ...changedField });
+
+      expect(res.status).toBe(409);
+      expect(res.body).toEqual({ error: expectedError });
+      expect(await prisma.user.count()).toBe(1);
+    });
   });
 });

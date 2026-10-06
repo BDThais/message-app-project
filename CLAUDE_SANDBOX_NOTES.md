@@ -1,6 +1,6 @@
 # Notes for Claude: working on this repo in the claude.ai chat sandbox
 
-Notes to self from earlier sessions, so a new session does not re-discover them. They describe the claude.ai chat sandbox only, not the developer's machine (there, `npm test` with Docker works as documented in `project-planning-doc.md`). Last verified 2026-10-05. If something below no longer matches reality, fix this file in the same patch.
+Notes to self from earlier sessions, so a new session does not re-discover them. They describe the claude.ai chat sandbox only, not the developer's machine (there, `npm test` with Docker works as documented in `project-planning-doc.md`). Last verified 2026-10-06. If something below no longer matches reality, fix this file in the same patch.
 
 ## What the sandbox can and cannot do
 
@@ -72,3 +72,5 @@ After a schema change: re-run step 3, and apply only the new `migration.sql`. To
 - A failing `vitest run` prints every test of the file, which can be thousands of lines: pipe it, e.g. `npx vitest run <files> 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -E "×|FAIL|Tests |Error" | cut -c1-200 | head -40`.
 - Do not fire dozens of parallel requests through `request.agent(app)` / `request(app)`: each one starts its own ephemeral server and the run dies with `ECONNRESET` (and "Cannot use a pool after calling end" from requests still in flight). For a race test call the service function directly (that is where the atomic statement lives), or share one server: `const server = app.listen(0)`, `request(server)`, `server.close()` in a `finally`.
 - To see the SQL Prisma really sends, turn on statement logging, run one test and read `/tmp/pg.log`: `psql -h /tmp -p 55432 -U chatapp_test -d chatapp_test -c "ALTER SYSTEM SET log_statement='all'" -c "SELECT pg_reload_conf()"`, then `ALTER SYSTEM RESET log_statement`.
+- A check-then-insert race (signup's duplicate check) can be tested deterministically: seed the row that "won", make the check miss with `vi.spyOn(accountService, 'findExistingUser').mockResolvedValueOnce(null)` (spying on a service's exports works in vitest, and `afterEach(vi.restoreAllMocks)`), and let the real insert hit the real constraint.
+- Prisma errors differ by setup: with the `PrismaPg` adapter a `P2002` has no `meta.target`, the column is in `meta.driverAdapterError.cause.constraint.fields`. When a handler depends on an error's shape, print the real error once in a throwaway test (`console.log(e.code, JSON.stringify(e.meta))`) instead of trusting the docs. Also, a Prisma `not` filter on a nullable column (`senderId: { not: x }`) drops the NULL rows, as SQL `<>` does; messages whose author deleted their account have `sender_id` NULL.

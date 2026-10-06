@@ -1,5 +1,7 @@
 import validator from 'validator';
 import { isValidPhoneNumber, parsePhoneNumberFromString } from 'libphonenumber-js';
+import { Prisma } from '../../generated/prisma/client';
+import { isRecord } from '../../lib/validation';
 import { findExistingUser } from './account.service';
 
 export type AccountBody = {
@@ -86,14 +88,67 @@ export function validateAccountBody(body: AccountBody): string | null {
     );
 }
 
+const EMAIL_EXISTS = 'Email already exists';
+const TEL_EXISTS = 'Phone number already exists';
+
 export async function checkDuplication(email: string, tel: string): Promise<string | null> {
     // Check for duplication in email or phone number
     const existingUser = await findExistingUser(email, tel);
 
     if (existingUser) {
-        const field = existingUser.email === email ? 'Email' : 'Phone number';
-        return `${field} already exists`;
+        return existingUser.email === email ? EMAIL_EXISTS : TEL_EXISTS;
     }
 
     return null;
+}
+
+/**
+ * The names the database gives for the column(s) or constraint of a unique
+ * violation. Where Prisma puts them depends on how the client is set up: with
+ * a driver adapter (this project's PrismaPg) in
+ * meta.driverAdapterError.cause.constraint, as `fields` (column names) or
+ * `index` (the constraint's name, e.g. users_email_key); without one in
+ * meta.target, a list of columns or a constraint name. All of them are read,
+ * so a change of setup does not silently turn every answer into one message.
+ */
+function uniqueViolationNames(meta: unknown): string[] {
+    if (!isRecord(meta)) return [];
+
+    const names: string[] = [];
+    const collect = (value: unknown) => {
+        if (typeof value === 'string') names.push(value);
+        else if (Array.isArray(value)) value.forEach(collect);
+    };
+
+    collect(meta.target);
+    const cause = isRecord(meta.driverAdapterError) ? meta.driverAdapterError.cause : undefined;
+    const constraint = isRecord(cause) ? cause.constraint : undefined;
+    if (isRecord(constraint)) {
+        collect(constraint.fields);
+        collect(constraint.index);
+    }
+
+    return names;
+}
+
+/**
+ * The 409 message for a unique violation raised by the insert in signup, or
+ * null when `error` is something else. checkDuplication runs before the
+ * insert and is not atomic with it: two requests with the same email or phone
+ * number can both pass it, and the database then refuses the second insert.
+ * The message names the column that really collided, the same wording
+ * checkDuplication uses. When the error does not say which one it was (`users`
+ * has only these two unique columns besides its id), the message names both
+ * instead of guessing one.
+ */
+export function uniqueViolationMessage(error: unknown): string | null {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+        return null;
+    }
+
+    const names = uniqueViolationNames(error.meta);
+    if (names.some((name) => name.includes('email'))) return EMAIL_EXISTS;
+    if (names.some((name) => name.includes('tel'))) return TEL_EXISTS;
+
+    return 'Email or phone number already exists';
 }

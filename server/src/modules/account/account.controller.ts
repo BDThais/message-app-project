@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { hashPassword, verifyPassword } from '../../lib/passwordHash';
-import { validateAccountBody, checkDuplication, normalizeTel } from './signup.validator';
+import { validateAccountBody, checkDuplication, normalizeTel, uniqueViolationMessage } from './signup.validator';
 import type { AccountBody } from './signup.validator';
 import { validateLogin } from './login.validator';
 import { validateUpdateProfileBody } from './profile.validator';
@@ -40,12 +40,11 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
     
         res.status(201).json({ message: 'Account created successfully'});
     } catch (error: unknown) {
-        // Handle Prisma unique constraint violation error
-        const prismaError = error as { code?: string; meta?: { target?: string[] } };
-        if (prismaError.code === 'P2002') {
-          const target = prismaError.meta?.target ?? [];
-          const field = target.includes('email') ? 'Email' : 'Phone number';
-          return res.status(409).json({ error: `${field} already exists` });
+        // A concurrent signup took the email or phone number between the
+        // duplicate check and the insert: the database refuses this one.
+        const duplicationError = uniqueViolationMessage(error);
+        if (duplicationError) {
+          return res.status(409).json({ error: duplicationError });
         }
 
         console.error('Error creating account:', error);

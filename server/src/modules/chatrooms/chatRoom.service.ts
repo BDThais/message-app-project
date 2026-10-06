@@ -128,7 +128,47 @@ export interface ChatRoomSummary {
   name: string | null;
   avatarUrl: string | null;
   createdAt: Date;
+  // The newest message that has not been deleted; null when the room has none.
   lastMessage: { content: string; createdAt: Date } | null;
+  // Messages from other people that the requester has not read yet, see countUnreadMessages.
+  unreadCount: number;
+}
+
+/**
+ * How many unread messages the user has in each of the given rooms, in one
+ * query. A message is unread when it is in the room, has an id above the
+ * user's own `lastReadMessageId` for that room (every message when the marker
+ * is still null), was not sent by the user and has not been deleted. Rooms
+ * with nothing unread are absent from the map, so read it with `?? 0`.
+ *
+ * Written as SQL because the threshold is a column of each room's own
+ * chat_members row, which a Prisma relation filter cannot refer to; the
+ * alternative is one count query per room. `sender_id` is NULL for messages
+ * whose author deleted their account: those are still somebody else's
+ * messages, so the test is `IS NULL OR <>` (a plain `<>` would drop them).
+ * The (chat_id, id) index serves the lookup, and `COUNT(*)::int` keeps the
+ * result a number rather than a BigInt.
+ */
+export async function countUnreadMessages(
+  userId: number,
+  chatIds: number[]
+): Promise<Map<number, number>> {
+  if (chatIds.length === 0) {
+    return new Map();
+  }
+
+  const rows = await prisma.$queryRaw<{ chatId: number; unreadCount: number }[]>`
+    SELECT m.chat_id AS "chatId", COUNT(*)::int AS "unreadCount"
+    FROM messages m
+    JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.member_id = ${userId}
+    WHERE m.chat_id IN (${Prisma.join(chatIds)})
+      AND m.deleted_at IS NULL
+      AND (m.sender_id IS NULL OR m.sender_id <> ${userId})
+      AND (cm.last_read_message_id IS NULL OR m.id > cm.last_read_message_id)
+    GROUP BY m.chat_id
+  `;
+
+  return new Map(rows.map((row) => [row.chatId, row.unreadCount]));
 }
  
 /**
@@ -154,12 +194,16 @@ export async function getDirectChatRoomsForUser(
         include: { member: { select: { name: true, avatarUrl: true } } },
       },
       messages: {
+        // A deleted message has no content left to preview, so the preview
+        // falls back to the message before it (or to none).
+        where: { deletedAt: null },
         orderBy: { id: 'desc' },
         take: 1,
         select: { content: true, createdAt: true },
       },
     },
   });
+  const unreadCounts = await countUnreadMessages(userId, rooms.map((room) => room.id));
  
   return rooms.map((room) => {
     // otherMember can be missing if they've since left the room (a direct
@@ -175,6 +219,7 @@ export async function getDirectChatRoomsForUser(
       avatarUrl: otherMember?.avatarUrl ?? null,
       createdAt: room.createdAt,
       lastMessage,
+      unreadCount: unreadCounts.get(room.id) ?? 0,
     };
   });
 }
@@ -195,12 +240,14 @@ export async function getGroupChatRoomsForUser(
     },
     include: {
       messages: {
+        where: { deletedAt: null },
         orderBy: { id: 'desc' },
         take: 1,
         select: { content: true, createdAt: true },
       },
     },
   });
+  const unreadCounts = await countUnreadMessages(userId, rooms.map((room) => room.id));
  
   return rooms.map((room) => ({
     id: room.id,
@@ -209,11 +256,12 @@ export async function getGroupChatRoomsForUser(
     avatarUrl: room.avatarUrl,
     createdAt: room.createdAt,
     lastMessage: room.messages[0] ?? null,
+    unreadCount: unreadCounts.get(room.id) ?? 0,
   }));
 }
  
-// Most recent activity first: last message time if there is one,
-// otherwise the room's creation time.
+// Most recent activity first: the time of the last message that has not been
+// deleted if there is one, otherwise the room's creation time.
 export function activityTimestamp(room: ChatRoomSummary): number {
   return (room.lastMessage?.createdAt ?? room.createdAt).getTime();
 }

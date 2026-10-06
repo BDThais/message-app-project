@@ -72,6 +72,69 @@ describe('POST /chat/:chatid/member', () => {
     ]);
   });
 
+  // What was said before someone joined counts as read for them. The marker
+  // is the newest message that is not deleted; a deleted one above it never
+  // counted as unread anyway.
+  it('starts a new member with the existing messages counted as read, and leaves an existing member\'s marker alone', async () => {
+    const admin = await createUser('Alice');
+    const bob = await createUser('Bob');
+    const dave = await createUser('Dave');
+    await makeFriends(admin.id, bob.id);
+    const room = await createGroupRoom(admin.id, [dave.id]);
+    const first = await prisma.message.create({ data: { chatId: room.id, senderId: admin.id, content: 'First' } });
+    const second = await prisma.message.create({ data: { chatId: room.id, senderId: admin.id, content: 'Second' } });
+    await prisma.message.create({
+      data: { chatId: room.id, senderId: admin.id, content: '', deletedAt: new Date() },
+    });
+    await prisma.chatMember.update({
+      where: { memberId_chatId: { memberId: dave.id, chatId: room.id } },
+      data: { lastReadMessageId: first.id },
+    });
+    const adminAgent = await loginAs(admin);
+
+    const res = await adminAgent.post(`/chat/${room.id}/member`).send({ member_ids: [bob.id, dave.id] });
+
+    expect(res.status).toBe(201);
+    expect(res.body.addedMembers).toEqual([
+      expect.objectContaining({ lastReadMessageId: second.id, member: expect.objectContaining({ id: bob.id }) }),
+    ]);
+    const bobAgent = await loginAs(bob);
+    const daveAgent = await loginAs(dave);
+    // The summary of this room from the list and from the single-room route.
+    const summariesFor = async (agent: typeof bobAgent) => [
+      (await agent.get('/chat')).body.chatRooms.find((r: { id: number }) => r.id === room.id),
+      (await agent.get(`/chat/${room.id}`)).body.chatRoom,
+    ];
+    for (const summary of await summariesFor(bobAgent)) {
+      expect(summary).toMatchObject({ unreadCount: 0, lastMessage: { content: 'Second' } });
+    }
+    // Dave never read the second message, and being named in the request changed nothing for him.
+    for (const summary of await summariesFor(daveAgent)) {
+      expect(summary).toMatchObject({ unreadCount: 1 });
+    }
+
+    // Only what is sent after they joined is unread for the new member.
+    await adminAgent.post(`/chat/${room.id}/message`).send({ content: 'Third' });
+    const after = await bobAgent.get(`/chat/${room.id}`);
+    expect(after.body.chatRoom.unreadCount).toBe(1);
+  });
+
+  it('starts a new member without a marker when the room has no message that is still there', async () => {
+    const admin = await createUser('Alice');
+    const bob = await createUser('Bob');
+    await makeFriends(admin.id, bob.id);
+    const room = await createGroupRoom(admin.id);
+    await prisma.message.create({
+      data: { chatId: room.id, senderId: admin.id, content: '', deletedAt: new Date() },
+    });
+
+    const res = await (await loginAs(admin)).post(`/chat/${room.id}/member`).send({ member_ids: [bob.id] });
+
+    expect(res.status).toBe(201);
+    expect(res.body.addedMembers[0].lastReadMessageId).toBeNull();
+    expect((await (await loginAs(bob)).get(`/chat/${room.id}`)).body.chatRoom.unreadCount).toBe(0);
+  });
+
   it('returns 200 with nothing added when everyone is already a member', async () => {
     const admin = await createUser('Alice');
     const bob = await createUser('Bob');

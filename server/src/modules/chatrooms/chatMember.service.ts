@@ -25,7 +25,7 @@ export const memberResponseArgs = {
 interface ChatMemberWriteClient {
   chatMember: {
     createMany: (args: {
-      data: { chatId: number; memberId: number; role: ChatMemberRole }[];
+      data: { chatId: number; memberId: number; role: ChatMemberRole; lastReadMessageId: number | null }[];
       skipDuplicates?: boolean;
     }) => Promise<{ count: number }>;
   };
@@ -33,6 +33,9 @@ interface ChatMemberWriteClient {
 
 /**
  * Adds one or more users to a chat room as chat members with the given role.
+ * `lastReadMessageId` is the read marker they start with: null for a room that
+ * has no messages yet (room creation), or the message that counts as read for
+ * them when the room already has some (see addMembersToExistingChatRoom).
  *
  * Reused by:
  * - POST /chat (room creation) — called inside a transaction alongside
@@ -46,14 +49,15 @@ export async function addChatRoomMembers(
   client: ChatMemberWriteClient,
   chatId: number,
   memberIds: number[],
-  role: ChatMemberRole = ChatMemberRole.member
+  role: ChatMemberRole = ChatMemberRole.member,
+  lastReadMessageId: number | null = null
 ) {
   if (memberIds.length === 0) {
     return { count: 0 };
   }
 
   return client.chatMember.createMany({
-    data: memberIds.map((memberId) => ({ chatId, memberId, role })),
+    data: memberIds.map((memberId) => ({ chatId, memberId, role, lastReadMessageId })),
     skipDuplicates: true,
   });
 }
@@ -71,6 +75,14 @@ export async function addChatRoomMembers(
  * the room. If any of the others is not a friend (or does not exist, which is
  * not told apart) the result is `not_friends` and *nobody* from this request
  * is added.
+ *
+ * Messages that exist when someone joins count as read for them: their read
+ * marker starts at the room's newest message that has not been deleted (null
+ * when there is none), so their unreadCount is 0 and only what is sent
+ * afterwards is unread. Users who are already members keep their own marker.
+ * The newest message is looked up just before the insert, not in the same
+ * statement: a message sent in between is above the marker and so stays unread
+ * for the new member, which is right because it was sent after they joined.
  *
  * The insert is a single statement, so if a user is deleted after the friend
  * check the foreign-key error (see isForeignKeyConstraintError) is thrown and
@@ -93,7 +105,16 @@ export async function addMembersToExistingChatRoom(
     return { status: 'not_friends' } as const;
   }
 
-  await addChatRoomMembers(prisma, chatId, newMemberIds);
+  const newestMessage =
+    newMemberIds.length > 0
+      ? await prisma.message.findFirst({
+          where: { chatId, deletedAt: null },
+          orderBy: { id: 'desc' },
+          select: { id: true },
+        })
+      : null;
+
+  await addChatRoomMembers(prisma, chatId, newMemberIds, ChatMemberRole.member, newestMessage?.id ?? null);
 
   const addedMembers = await prisma.chatMember.findMany({
     where: { chatId, memberId: { in: newMemberIds } },

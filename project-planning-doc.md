@@ -77,9 +77,9 @@ Completed:
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Friendship requirement for creating a room and adding members (see "Friendship and messaging")
-- Basic room summaries with latest-message metadata
+- Room summaries with the latest message that has not been deleted and the requester's unread count
 - Automatic cleanup of chat rooms that stay empty (see "Empty chat room cleanup")
-- Integration tests for the account endpoints (including profile update, password change and account deletion), the chat-room endpoints, the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the reject/cancel-friend-request endpoint, the list-friends endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
+- Integration tests for the account endpoints (including profile update, password change and account deletion), the chat-room endpoints (including the `lastMessage` and `unreadCount` of the room summaries), the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the reject/cancel-friend-request endpoint, the list-friends endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
 
 Still planned or not yet implemented:
 
@@ -141,6 +141,7 @@ POST /account/signup
   ```
 
 - responds `400` with `{ "error": ... }` when validation fails and `409` when the email or phone number is already taken (in any spelling of the number)
+- the duplicate check and the insert are two statements, so two simultaneous signups for the same email or number can both pass the check. The database then refuses the second insert (a unique violation, Prisma `P2002`) and the answer is the same `409`, naming the column that really collided: `Email already exists` or `Phone number already exists`. Where Prisma reports that column depends on its setup: with the `PrismaPg` driver adapter this project uses, `meta.target` is absent and the column is in `meta.driverAdapterError.cause.constraint` (`fields`, or `index` for the constraint's name), so a handler that only reads `meta.target` never finds it (the old one answered `Phone number already exists` whatever the cause). `uniqueViolationMessage` in `signup.validator.ts` reads both places, and says `Email or phone number already exists` when the error names neither
 
 POST /account/login
 
@@ -257,7 +258,7 @@ DELETE /account/me (implemented)
 - responds `204` with no body and clears the session cookie. The email and phone number can be used to sign up again
 - rate limited with `POST /account/password`: the two routes share one budget of 10 attempts per 15 minutes per user (`429 { "error": "Too many attempts, try again later" }` afterwards), because both let whoever holds a session guess the password
 
-### Implemented room and planned extension endpoints
+### Room, message and friend endpoints (implemented)
 
 All of these endpoints are routed after auth middleware so they can access the current user's data through `req.user`.
 `req.user` shape = {
@@ -334,6 +335,9 @@ GET /chat (implemented)
   as member (with datas of the last message in that room like it's content, time created) when it's not supplied with a specific chatid.
   The function responsible for retrieving direct chat room return the other user'name as the room's name and use their avatar url (if it's not null)
   as the room's avatar url
+- `lastMessage` is the newest message of the room that has not been deleted, or `null` when there is none. A deleted message has no content left, so showing it would give the room list a blank preview: the lookup skips deleted messages, and the preview shows the message before the deleted one (so `content` is never `""`). Deleting the latest message therefore also moves the room down the list, because the order below follows the message that is shown
+- `unreadCount` is the number of messages in the room that the requester has not read: messages with an id above the requester's own `lastReadMessageId` (the marker `PUT /chat/:chatid/read` moves; every message counts while it is still `null`), not sent by the requester and not deleted. A message whose author has since deleted their account (`senderId` is `null`) is still somebody else's message and counts. It is `0` when nothing is unread, never absent. The rooms' counts come from one query for the whole list (`countUnreadMessages`, raw SQL because the threshold is a column of each room's own membership row; the `(chat_id, id)` index serves it), not one per room. Only the requester's own marker matters: the other members' markers (listed by `GET /chat/:chatid/member`) are what a "seen by" indicator would be built from
+- a member added to a room that already has messages starts with those messages counted as read, so their `unreadCount` is `0` and only what is sent after they join is unread (the rule is under `POST /chat/:chatid/member`). `PUT /chat/:chatid/read` moves the marker on from there
 - the success response return the chat rooms sorted by how recent is the last message, the rooms that doesn't have last message is sorted by time created
 - return body:
 
@@ -349,7 +353,8 @@ GET /chat (implemented)
         "lastMessage": {
           "content": "Hello",
           "createdAt": "2026-09-13T12:05:00.000Z"
-        }
+        },
+        "unreadCount": 3
       }
     ]
   }
@@ -357,7 +362,7 @@ GET /chat (implemented)
 
 GET /chat/:chatid (implemented)
 
-- retrieve data about a specific room
+- retrieve data about a specific room, in the same summary shape as `GET /chat` (`lastMessage` and `unreadCount` follow the rules given there) plus the requester's `role`
 - return body:
 
   ```json
@@ -372,6 +377,7 @@ GET /chat/:chatid (implemented)
         "content": "Hello",
         "createdAt": "2026-09-13T12:05:00.000Z"
       },
+      "unreadCount": 3,
       "role": "admin"
     }
   }
@@ -454,6 +460,7 @@ POST /chat/:chatid/member (implemented)
 - requires admin
 - incoming body: { member_ids }
 - new members are inserted with role: member
+- the messages that already exist count as read for a new member: they start with `lastReadMessageId` set to the room's newest message that has not been deleted (`null` when it has none), so their `unreadCount` is `0`, their `lastMessage` is that same message, and only messages sent after they join are unread. A deleted message above that marker never counted as unread anyway. Everyone added by one request gets the same marker, and a user who left and is added again starts fresh, because leaving deleted their marker. The newest message is looked up just before the insert, not in the same statement, so a message sent in between stays unread for the new member, which is right because it was sent after they joined
 - `member_ids` is required: a non-empty array of positive integer user IDs (duplicates are ignored)
 - users who are already members (including the requester) are skipped and left unchanged, so an existing admin is never demoted; their IDs are returned in `alreadyMemberIds`
 - every user who would be *added* must be a friend of the requester (see "Friendship and messaging"). If any of them is not a friend, or does not exist (the two are not told apart), respond `403` with `{ "error": "Only your friends can be added to a chat room" }` and add nobody from that request. Users who are already members are not checked, so they are skipped even if they are no longer friends
@@ -474,7 +481,7 @@ POST /chat/:chatid/member (implemented)
       {
         "chatId": 1,
         "role": "member",
-        "lastReadMessageId": null,
+        "lastReadMessageId": 7,
         "member": {
           "id": 3,
           "name": "Carol",
@@ -658,6 +665,7 @@ DELETE /chat/:chatid/message/:message_id (implemented)
 - responds `403` when the requester is not the message's sender
 - responds `404` when the message does not exist in this room, does not belong to this room, or was already deleted
 - deleting a message never deletes the underlying `ChatRoom` or affects other members' access to the room
+- a deleted message drops out of the room summaries: `lastMessage` shows the message before it, and it no longer counts in anyone's `unreadCount`
 
 PUT /chat/:chatid/read (implemented)
 
@@ -840,19 +848,6 @@ Friendship is required to start a conversation. Before this rule `POST /chat` an
 - the check is not locked against a concurrent unfriend: a friendship removed at the same instant counts as the friendship it was when checked. A user deleted after the check but before the insert fails the foreign key and gets the same `403`
 - the check lives in `findNonFriendIds` (`friend.service.ts`), which the chat-room services call; it is the only place where the chat-room module reads the friend list
 
-### Proposed additional endpoints (not yet implemented)
-
-Gaps found by checking the API against the schema and against what the frontend will need. Roughly in priority order.
-
-`unreadCount` on `GET /chat` and `GET /chat/:chatid`
-
-- add `unreadCount` to the room summaries: messages in the room with an ID above the requester's `lastReadMessageId` (which `PUT /chat/:chatid/read` sets), not sent by the requester and not deleted. The `(chatId, id)` index already covers it. Other members' `lastReadMessageId` values (listed by `GET /chat/:chatid/member`) are also what a "seen by" indicator would be built from
-
-Fixes to implemented endpoints:
-
-- `lastMessage.content` in the room summaries is `""` when the latest message was deleted, so the room list would show a blank preview. Drop deleted messages from the lookup instead so the preview will show the message before the deleted message
-- signup controller's P2002 handler reports any unique violation as "Phone number already exists", even when the email is the cause
-
 ### Email delivery (planned)
 
 Shared by email verification and password reset. Nothing here is implemented yet.
@@ -1028,7 +1023,7 @@ message-app/
         │   └── friends.ts                    // makeFriends, createFriendRequest (optional createdAt)
         ├── account/
         │   ├── session.test.ts               // login, me, logout
-        │   ├── signup.test.ts                // includes the canonical-number and duplicate-spelling cases
+        │   ├── signup.test.ts                // includes the canonical-number and duplicate-spelling cases, and the 409 when the insert loses a race
         │   ├── profile.test.ts               // PATCH /account/me
         │   ├── password.test.ts              // POST /account/password, and changePassword's stale-hash guard
         │   ├── emailVerificationToken.schema.test.ts   // the hand-written migration's rules: one token per user, unique hash, deleted with the user
@@ -1053,6 +1048,7 @@ message-app/
         │   ├── chatRoomMessages.edit.test.ts
         │   ├── chatRoomMessages.delete.test.ts
         │   ├── chatRoomRead.test.ts
+        │   ├── chatRoomSummary.test.ts       // lastMessage and unreadCount of GET /chat and GET /chat/:chatid
         │   ├── chatRoom.validator.unit.test.ts
         │   ├── chatRoomCleanup.service.test.ts
         │   └── chatRoomCleanup.job.unit.test.ts
@@ -1144,7 +1140,7 @@ The backend follows a layered request flow:
 
 - Services contain all database operations and use the shared Prisma client from `src/lib/prisma`. They do not import Express.
 - Account services create and find users, update a profile, change a password (`changePassword` also deletes the other sessions in the same transaction) and delete an account (`deleteAccount` locks the rooms the user is in, refuses while the user is the only admin of a group room that still has other members, and leaves the rest to the foreign keys). The session service creates, reads, and deletes sessions (rows only; cookies are handled in `middlewares/SessionCookie.ts`).
-- Chat-room services check with `findNonFriendIds` (from the friend service) that everyone being added is a friend of the requester, create rooms and memberships in a Prisma transaction, load direct and group rooms, retrieve the latest message for room summaries, and update or delete rooms.
+- Chat-room services check with `findNonFriendIds` (from the friend service) that everyone being added is a friend of the requester, create rooms and memberships in a Prisma transaction, load direct and group rooms, retrieve the latest message that has not been deleted and the requester's unread count for room summaries, and update or delete rooms.
 - Direct-room responses derive the room name and avatar from the other member; group-room responses use the room's own name and avatar fields.
 - Friend services look up users and the friend-list and pending-request rows that connect them to the requester. Other users are returned as `{ id, name, avatarUrl }` only, never with `email` or `tel`.
 
@@ -1172,11 +1168,10 @@ HTTP request
 
 ## Roadmap
 
-1. Close the REST gaps listed under "Proposed additional endpoints" (unread counts on room summaries)
-2. Implement real-time communication with Socket.io (see "Real-time events")
-3. Build the React frontend and integrate with TanStack Query
-4. Add authentication-aware UI states and protected routes
-5. Add deployment configuration and production hardening, including email delivery, email verification and the password reset flow (see "Email delivery (planned)", "Email verification (planned)" and "Password reset (planned)")
+1. Implement real-time communication with Socket.io (see "Real-time events")
+2. Build the React frontend and integrate with TanStack Query
+3. Add authentication-aware UI states and protected routes
+4. Add deployment configuration and production hardening, including email delivery, email verification and the password reset flow (see "Email delivery (planned)", "Email verification (planned)" and "Password reset (planned)")
 
 ## Notes
 
