@@ -31,6 +31,7 @@ Next priorities:
 - Database: PostgreSQL + Prisma ORM
 - Authentication: session cookies with protected middleware
 - Testing: Vitest + Supertest
+- Email: Resend behind a replaceable `Mailer` (mails are only printed to the server log unless `MAIL_TRANSPORT=resend`)
 - Frontend: React planned
 - Data fetching: TanStack Query planned
 - Real-time communication: Socket.io planned

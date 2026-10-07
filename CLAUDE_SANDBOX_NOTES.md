@@ -1,6 +1,6 @@
 # Notes for Claude: working on this repo in the claude.ai chat sandbox
 
-Notes to self from earlier sessions, so a new session does not re-discover them. They describe the claude.ai chat sandbox only, not the developer's machine (there, `npm test` with Docker works as documented in `project-planning-doc.md`). Last verified 2026-10-06. If something below no longer matches reality, fix this file in the same patch.
+Notes to self from earlier sessions, so a new session does not re-discover them. They describe the claude.ai chat sandbox only, not the developer's machine (there, `npm test` with Docker works as documented in `project-planning-doc.md`). Last verified 2026-10-07. If something below no longer matches reality, fix this file in the same patch.
 
 ## What the sandbox can and cannot do
 
@@ -51,7 +51,7 @@ After a schema change: re-run step 3, and apply only the new `migration.sql`. To
 
 ## Working from the user's uploads
 
-- The uploaded `project-planning-doc.md` and `schema.prisma` have CRLF line endings (a Windows checkout); the repo has LF. Compare with `tr -d '\r'`, and never copy an upload over a repo file. On 2026-09-30, 2026-10-02 and 2026-10-05 both matched the remote's HEAD exactly, so cloning is enough; still diff them once.
+- The uploaded `project-planning-doc.md` and `schema.prisma` have CRLF line endings (a Windows checkout); the repo has LF. Compare with `tr -d '\r'`, and never copy an upload over a repo file. On 2026-09-30, 2026-10-02, 2026-10-05 and 2026-10-07 both matched the remote's HEAD exactly, so cloning is enough; still diff them once.
 - Read the doc with `grep -n -i friend`/`sed -n` on the relevant section; it is ~970 lines and the viewer truncates it. "Friend endpoints" is the spec for the friend routes, "Project structure" lists files and tests, and the conventions (file names, layering, tests per file, error bodies `{ error }`) are stated there. Follow them; do not re-derive them from the code.
 - The user has each time asked for the result **as a patch file**, and for the planning doc to be updated alongside the code. Per implemented endpoint, the doc needs: the "Completed" list, the "Integration tests for ..." bullet, the "Still planned" list, the "rest of the friend features" sentence, the section heading of "Friend endpoints", the endpoint's own heading marked `(implemented)` with any new rules, and the test-file tree.
 
@@ -65,6 +65,9 @@ After a schema change: re-run step 3, and apply only the new `migration.sql`. To
 
 ## Habits that paid off
 
+- Adding a dependency: the sandbox's `npm install <pkg>` also rewrites unrelated lockfile lines (drops `libc` fields, adds `"dev": true`) and re-indents `overrides` in `package.json`. Back up the new lockfile, `git checkout package.json package-lock.json`, then copy only the new package entries (the package and its new transitive dependencies, plus the root `dependencies` line) into the old lockfile with a small `python3` script (`json.dumps(indent=2) + "\n"` reproduces the file byte for byte), add the one line to `package.json`, and check the diff only has additions. `npm ci` on the fresh clone proves the two files agree.
+- Testing code that wraps a third-party SDK: run the real SDK against `vi.stubGlobal('fetch', ...)` (and `vi.unstubAllGlobals()` in `afterEach`) instead of mocking the SDK module, so the test sees the request it really builds and how it really reports errors (the Resend SDK resolves `{ data, error }` rather than throwing, and prints API errors itself outside production, so silence `console.error`). No key or network is needed.
+- Startup checks that live in `server.ts` can be tried for real: `npm run build`, then `bash -c 'env NODE_ENV=production node dist/server.js'` with `DATABASE_URL` and `PORT` set; a server that starts keeps running, so wrap it in `timeout 6` (exit 124 means it started, 1 means it refused). Delete `dist/` afterwards (ignored, but it is clutter).
 - Baseline first: run `tsc` and the existing tests before changing anything, so a later failure is clearly mine.
 - Mutation-check new tests: break the code on purpose (wrong sort, wrong filter), confirm the test fails, restore. A test of a sort or tie-break only bites if the rows go in in a different order than the expected one: on a tiny table Postgres hands rows back in insertion/primary-key order, so a test that inserts in the expected order passes even with the tie-break removed.
 - Edit files with small `python3` scripts that `assert` the target text occurs exactly once.

@@ -8,6 +8,9 @@ interface Config {
   SESSION_TTL_MS: number;
   EMPTY_ROOM_RETENTION_MS: number;
   EMPTY_ROOM_CLEANUP_INTERVAL_MS: number;
+  MAIL_TRANSPORT: string;
+  RESEND_API_KEY: string;
+  MAIL_FROM: string;
 }
 const config: Config = {
   PORT: parseInt(process.env.PORT || '3000', 10),
@@ -17,5 +20,8 @@ const config: Config = {
   SESSION_TTL_MS: parseInt(process.env.SESSION_TTL_MS || '604800000', 10),
   EMPTY_ROOM_RETENTION_MS: parseInt(process.env.EMPTY_ROOM_RETENTION_MS || '604800000', 10), // How long a room with no members is kept before it (and its messages) is deleted. Default: 7 days.
   EMPTY_ROOM_CLEANUP_INTERVAL_MS: parseInt(process.env.EMPTY_ROOM_CLEANUP_INTERVAL_MS || '3600000', 10), // How often the server looks for rooms that have been empty long enough. Default: 1 hour.
+  MAIL_TRANSPORT: process.env.MAIL_TRANSPORT || 'console', // 'console' (only logs mails) or 'resend'. Must be 'resend' when NODE_ENV=production. Validated at startup by createMailerFromConfig.
+  RESEND_API_KEY: process.env.RESEND_API_KEY || '', // Required when MAIL_TRANSPORT=resend.
+  MAIL_FROM: process.env.MAIL_FROM || '', // Sender of every mail, e.g. 'Message App <no-reply@yourdomain.com>'. Required when MAIL_TRANSPORT=resend.
 };
 export default config;

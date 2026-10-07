@@ -16,6 +16,7 @@ The backend has grown beyond the original account/session MVP and now includes a
 - Socket.io
 - TanStack Router
 - Argon2 (password hashing), cookie-parser, express-rate-limit
+- Resend (email delivery, behind the `Mailer` interface in `src/lib/mailer.ts`)
 - Vitest + Supertest (tests), Docker Compose (test database)
 
 ## Test database setup
@@ -25,7 +26,7 @@ Backend tests are integration tests (Vitest + Supertest) that run against a sepa
 `server/.env.test` once, then run `npm test` from `server/`. The test command
 starts the container, deploys the existing Prisma migrations, and runs Vitest.
 `test/setup.ts` refuses to run unless `NODE_ENV=test` and the database is `chatapp_test`, and it empties every table
-before each test. It does not use the development database configured in `server/.env`.
+before each test. It also installs the in-memory mail outbox (`test/helpers/mailer.ts`) as the app's mailer and empties it before each test, so no test sends or logs a mail. It does not use the development database configured in `server/.env`.
 
 Scripts (run from `server/`):
 
@@ -79,11 +80,13 @@ Completed:
 - Friendship requirement for creating a room and adding members (see "Friendship and messaging")
 - Room summaries with the latest message that has not been deleted and the requester's unread count
 - Automatic cleanup of chat rooms that stay empty (see "Empty chat room cleanup")
+- Email delivery: the `Mailer` in `src/lib/mailer.ts` with a console transport and a Resend transport, chosen by `MAIL_TRANSPORT` and checked when the server starts (see "Email delivery"). Nothing sends mail yet: email verification is the first feature that will
 - Integration tests for the account endpoints (including profile update, password change and account deletion), the chat-room endpoints (including the `lastMessage` and `unreadCount` of the room summaries), the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the reject/cancel-friend-request endpoint, the list-friends endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
+- Unit tests for the mailer (the startup checks of the mail settings, the console transport, and the Resend transport run through the real Resend SDK with a stubbed `fetch`), and a test that guards the mail outbox wiring of the test setup
 
 Still planned or not yet implemented:
 
-- Email delivery, email verification and password reset by email (see "Email delivery (planned)", "Email verification (planned)" and "Password reset (planned)"); the database tables for verification already exist
+- Email verification and password reset by email (see "Email verification (planned)" and "Password reset (planned)"); the database tables for verification and the mailer they will send with (see "Email delivery") already exist
 - Real-time socket communication
 - Frontend application screens and state management
 - Production deployment hardening
@@ -848,17 +851,21 @@ Friendship is required to start a conversation. Before this rule `POST /chat` an
 - the check is not locked against a concurrent unfriend: a friendship removed at the same instant counts as the friendship it was when checked. A user deleted after the check but before the insert fails the foreign key and gets the same `403`
 - the check lives in `findNonFriendIds` (`friend.service.ts`), which the chat-room services call; it is the only place where the chat-room module reads the friend list
 
-### Email delivery (planned)
+### Email delivery
 
-Shared by email verification and password reset. Nothing here is implemented yet.
+Shared by email verification and password reset. The mailer, its settings and the test outbox are implemented; nothing sends mail yet, because email verification is the first feature that does.
 
 - **Provider: Resend**, through its official `resend` package (`new Resend(apiKey).emails.send({ from, to, subject, text })`). It is one API key and one HTTPS call, with no SMTP host, port or TLS settings, and no trouble on hosts that block outbound SMTP. Its free plan (3,000 emails a month, at most 100 a day, one domain, per Resend's pricing page when this was written) is far above what a personal project sends. Nodemailer was the alternative, but it is only a library for talking SMTP, so choosing it would still mean choosing an SMTP provider; the `Mailer` interface below keeps the provider replaceable (a Nodemailer implementation would be one more file).
 - **What it costs:** sending to real users needs a domain you own, verified in Resend by adding the DNS records it lists (SPF and DKIM). Until then `onboarding@resend.dev` can only deliver to the address of the Resend account itself and answers `403` for anyone else, so real emails can be tried end to end only with your own address.
 - The Resend SDK does not throw on API errors: `emails.send` resolves to `{ data, error }`. The Resend mailer must check `error` and throw, otherwise failed sends disappear silently.
 - `src/lib/mailer.ts` holds the `Mailer` interface (`send({ to, subject, text }): Promise<void>`), a console mailer that only logs (the default outside production), the Resend mailer, and `getMailer` / `setMailer` so tests can swap in an in-memory outbox (`test/helpers/mailer.ts`, emptied in `setup.ts`'s `beforeEach`).
-- New settings in `config.ts`, validated when the server starts like the cleanup job's: `MAIL_TRANSPORT` (`console` | `resend`; default `console`, and `resend` is required when `NODE_ENV=production`), `RESEND_API_KEY` and `MAIL_FROM` (for example `Message App <no-reply@yourdomain.com>`). `resend` without a key or a `MAIL_FROM` stops the server at start.
-- A request never waits for the mail: the controller responds first, then sends inside a `try/catch` that logs a failure. The response time must not show whether a mail was sent (the reset flow depends on that), and a provider outage must not turn signup into a `500`. The price is that a failed mail is lost and the user asks again; if that proves too unreliable, the next step is an outbox table drained by a job like the cleanup job.
+- `server.ts` installs the real mailer with `setMailer(createMailerFromConfig(config))` before `app.listen`, never `app.ts`, like the cleanup job, so tests that import the app do not build one. `getMailer()` throws when nothing was installed instead of falling back to the console mailer, so a process that forgot the setup cannot print tokens to its log. The test setup installs the outbox, so `outbox.sent` holds exactly the mails a test's own requests caused.
+- The console mailer prints the recipient, the subject and the whole text between two marker lines, so a link or token can be copied from the server log in development. It refuses to run in production for that reason.
+- A refused or failed Resend call rejects with `Resend could not send the email (<error name>, HTTP <status>): <Resend's message>` (no status for a network failure; the recipient is not in the message, so logging it does not log an address), and the SDK's own error object is its `cause`. The SDK prints API errors itself outside production, so a failure shows up twice in a development log.
+- New settings in `config.ts`, validated when the server starts like the cleanup job's: `MAIL_TRANSPORT` (`console` | `resend`; default `console`, and `resend` is required when `NODE_ENV=production`), `RESEND_API_KEY` and `MAIL_FROM` (for example `Message App <no-reply@yourdomain.com>`). `resend` without a key or a `MAIL_FROM` stops the server at start, as do an unknown `MAIL_TRANSPORT` and `console` in production (the message says which setting is wrong). Nothing needs configuring in development. To try Resend for real, create an API key in the Resend dashboard and put `MAIL_TRANSPORT=resend`, `RESEND_API_KEY=re_...` and `MAIL_FROM=Message App <onboarding@resend.dev>` in `server/.env`; until a domain is verified, the only recipient that works is the Resend account's own address.
+- A request never waits for the mail (a rule for the controllers that send, not for the mailer; the first one arrives with email verification): the controller responds first, then sends inside a `try/catch` that logs a failure. The response time must not show whether a mail was sent (the reset flow depends on that), and a provider outage must not turn signup into a `500`. The price is that a failed mail is lost and the user asks again; if that proves too unreliable, the next step is an outbox table drained by a job like the cleanup job.
 - Mails are plain text: one sentence of context and the link.
+- Tests: `test/lib/mailer.unit.test.ts` (no database: the settings checks, the console mailer, `getMailer` / `setMailer`, and the Resend mailer through the real SDK with `fetch` stubbed, so the request it builds and its handling of a `403`, a non-JSON `502` and a network failure are checked without a key or network) and `test/lib/mailerOutbox.test.ts` (the outbox is the app's mailer and is emptied between tests). Not covered, because it needs a real key and a verified domain: an actual delivery.
 
 ### Email verification (planned)
 
@@ -892,11 +899,11 @@ Account deletion needs no change: the token row is deleted with the user (covere
 
 Tests, once built (with the in-memory outbox): signup sends exactly one mail with a working link; verifying sets the timestamp and works once, not after it expires, not after a newer link replaced it and not when the user's address has changed; resend answers `409` when verified and `429` inside the cooldown, and replaces the old link; the limiters; `emailVerified` in the three user bodies; a table of bad bodies in the validator's unit test; for the address change, the pending row, the `409`s and the mail to the old address.
 
-Build order: mailer, settings and outbox helper (shared with password reset); verification service and validator; controller, routes and limiters, the signup hook and `emailVerified` in the user shape; tests; this document and the README. The two frontend pieces (the banner with a resend button, and the page that reads the fragment and posts it) belong to the frontend milestone.
+Build order: mailer, settings and outbox helper (shared with password reset; done, see "Email delivery"); verification service and validator; controller, routes and limiters, the signup hook and `emailVerified` in the user shape; tests; this document and the README. The two frontend pieces (the banner with a resend button, and the page that reads the fragment and posts it) belong to the frontend milestone.
 
 ### Password reset (planned)
 
-A signed-out user who forgot their password asks for a link by email, opens it, and sets a new password. The plan is two endpoints and one table, on top of the mailer from "Email delivery (planned)" and the verified addresses from "Email verification (planned)". Nothing here is implemented yet.
+A signed-out user who forgot their password asks for a link by email, opens it, and sets a new password. The plan is two endpoints and one table, on top of the mailer from "Email delivery" and the verified addresses from "Email verification (planned)". Nothing here is implemented yet.
 
 Decisions:
 
@@ -929,7 +936,7 @@ Changes to existing code: `changePassword` also deletes the account's reset toke
 
 Tests, once built (with the in-memory outbox): both endpoints answer the same for a known and an unknown email and only a verified one gets exactly one reset mail; an unverified account gets the verification mail instead; the mailed token works once, not twice (including two requests at the same moment, called on the service), not after it expires and not after a newer one replaced it; a weak password is a `400` and the token still works afterwards; a reset signs out every session and the new password logs in while the old one does not; `changePassword` kills an outstanding token; the cooldown and the limiters; a table of bad bodies in the validators' unit tests.
 
-Build order: email delivery; email verification; then the reset schema and migration, service and validators, controller, routes and limiters, tests, and this document and the README. The two frontend pages (a form that asks for the email and shows the `202` message, and a page that reads the fragment, asks for the new password and sends the user to the login) belong to the frontend milestone. Out of scope: reset by SMS through `tel`, security questions, locking an account after failed logins.
+Build order: email delivery (done); email verification; then the reset schema and migration, service and validators, controller, routes and limiters, tests, and this document and the README. The two frontend pages (a form that asks for the email and shows the `202` message, and a page that reads the fragment, asks for the new password and sends the user to the login) belong to the frontend milestone. Out of scope: reset by SMS through `tel`, security questions, locking an account after failed logins.
 
 ### Real-time events (planned)
 
@@ -978,6 +985,7 @@ message-app/
     │   │   └── config.ts
     │   ├── lib/
     │   │   ├── constants.ts
+    │   │   ├── mailer.ts            // Mailer interface; console and Resend mailers; createMailerFromConfig, getMailer / setMailer
     │   │   ├── randomToken.ts       // generateToken: 32 random bytes as base64url (session ids now; emailed tokens later)
     │   │   ├── parseIdParam.ts      // numeric URL param -> ID or null (used by the chat and friend validators)
     │   │   ├── passwordHash.ts
@@ -1020,7 +1028,8 @@ message-app/
         ├── helpers/                          // shared fixtures, not test files
         │   ├── users.ts                      // createUser, loginAs (session cookie without going through /account/login), createSessionRow
         │   ├── chatRooms.ts                  // createGroupRoom, createDirectRoom, promoteToAdmin, memberIdsOf
-        │   └── friends.ts                    // makeFriends, createFriendRequest (optional createdAt)
+        │   ├── friends.ts                    // makeFriends, createFriendRequest (optional createdAt)
+        │   └── mailer.ts                     // InMemoryMailer and the shared `outbox` (installed as the app's mailer and emptied before each test by setup.ts)
         ├── account/
         │   ├── session.test.ts               // login, me, logout
         │   ├── signup.test.ts                // includes the canonical-number and duplicate-spelling cases, and the 409 when the insert loses a race
@@ -1032,6 +1041,8 @@ message-app/
         │   ├── deleteAccount.validator.unit.test.ts
         │   └── password.validator.unit.test.ts
         ├── lib/                              // mirrors src/lib/
+        │   ├── mailer.unit.test.ts           // settings checks, console mailer, getMailer / setMailer, Resend mailer (real SDK, stubbed fetch)
+        │   ├── mailerOutbox.test.ts          // the test setup's outbox is the app's mailer and is emptied between tests
         │   └── randomToken.unit.test.ts
         ├── middlewares/                      // mirrors src/middlewares/
         │   ├── errorHandler.unit.test.ts     // the handler alone, with a fake response
@@ -1075,6 +1086,7 @@ Conventions:
 - Error bodies: every `4xx` and `5xx` response has the shape `{ "error": "<text>" }`, whichever layer sends it (controller, feature middleware, rate limiter, `errorHandler`). `message` is not used for errors because it is already a success-body key for a chat message (`POST` and `PATCH /chat/:chatid/message` return `{ "message": { ... } }`), so a client could otherwise get a string and an object under the same key from one endpoint. Validators keep their own internal `{ valid: false, message }` result; the controller puts that text under `error`. A success body that only confirms an action (`201 { "message": "Account created successfully" }` from signup) is not an error body and is unchanged.
 - Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.
 - Background jobs live in the folder of the feature they belong to and are started from `server.ts`, never from `app.ts`, so tests that import the app do not start timers.
+- Mail goes out through `getMailer()` from `src/lib/mailer.ts` and nowhere else: a feature never imports a mail provider's SDK, and services never send mail themselves. The real mailer is installed from `server.ts`, never `app.ts`; the tests install the outbox in `test/setup.ts`.
 - Tests live in `server/test/`, in a folder per feature that mirrors `src/modules/` (`test/account/`, `test/chatrooms/`, `test/friends/`; `test/middlewares/` mirrors `src/middlewares/` and `test/lib/` mirrors `src/lib/`), and import from `../../src/...`. Shared fixtures live in `test/helpers/`. `loginAs(user)` creates the session row and sends its cookie directly, so no test outside `test/account/` depends on `/account/login` or its rate limiter.
 - Each test file covers what its part of the code owns: an endpoint file covers that endpoint's business rules plus one bad-input case to prove the validator is wired in; the full list of bad inputs is a table in `chatRoom.validator.unit.test.ts` (no database); `chatRoom.permissions.test.ts` covers the shared guards once per route, so a new route should be added to its lists. Keep a new test only if it guards a rule that is not already covered by another one.
 - `npm run build` runs `tsc` and then `scripts/fix-esm-imports.mjs`. The source keeps extensionless imports, but Node's ESM loader needs real file names, so the script rewrites the relative imports in `dist/` (`./app` becomes `./app.js`, a folder import becomes `./dir/index.js`) and fails the build if an import points at nothing. `npm start` runs `node dist/server.js`.
@@ -1171,7 +1183,7 @@ HTTP request
 1. Implement real-time communication with Socket.io (see "Real-time events")
 2. Build the React frontend and integrate with TanStack Query
 3. Add authentication-aware UI states and protected routes
-4. Add deployment configuration and production hardening, including email delivery, email verification and the password reset flow (see "Email delivery (planned)", "Email verification (planned)" and "Password reset (planned)")
+4. Add deployment configuration and production hardening, including email verification and the password reset flow, and the Resend account and verified domain that production mail needs (see "Email delivery", "Email verification (planned)" and "Password reset (planned)")
 
 ## Notes
 

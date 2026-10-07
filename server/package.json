@@ -39,15 +39,16 @@
     "express-rate-limit": "^8.6.2",
     "libphonenumber-js": "^1.13.10",
     "pg": "^8.22.0",
+    "resend": "^6.32.1",
     "validator": "^13.15.35"
   },
   "allowScripts": {
     "esbuild@0.28.1": true,
     "argon2@0.45.1": true,
-    "@prisma/engines@7.9.1": true,
-    "prisma@7.9.1": true
+    "@prisma/engines@7.10.0": true,
+    "prisma@7.10.0": true
   },
   "overrides": {
-  "deepmerge-ts": "^8.0.0"
+    "deepmerge-ts": "^8.0.0"
   }
 }
