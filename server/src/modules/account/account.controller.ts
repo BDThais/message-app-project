@@ -6,7 +6,10 @@ import { validateLogin } from './login.validator';
 import { validateUpdateProfileBody } from './profile.validator';
 import { validateChangePasswordBody } from './password.validator';
 import { validateDeleteAccountBody } from './deleteAccount.validator';
-import { createUser, updateUserProfile, findPasswordHash, changePassword, deleteAccount } from './account.service';
+import { validateVerifyEmailBody } from './emailVerification.validator';
+import { createUser, updateUserProfile, findPasswordHash, changePassword, deleteAccount, toPublicUser } from './account.service';
+import { newVerificationToken, issueEmailVerification, verifyEmailToken } from './emailVerification.service';
+import { sendVerificationEmail } from './emailVerification.mail';
 import { createSession, deleteSession } from './session.service';
 import { getSessionUser, setSessionCookie, clearSessionCookie } from '../../middlewares/SessionCookie';
 import config from '../../config/config';
@@ -31,14 +34,21 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
     
         const passwordHash = await hashPassword(password);
     
+        // The link's token row is stored with the user, in one statement.
+        const verification = newVerificationToken();
         await createUser({
           name,
           email,
           tel: normalizedTel,
-          passwordHash
+          passwordHash,
+          emailVerification: verification
         });
     
         res.status(201).json({ message: 'Account created successfully'});
+
+        // After responding, so the request never waits for the mail (see sendVerificationEmail,
+        // which does not throw). Signup does not log in; the link is only mailed here.
+        await sendVerificationEmail(email, verification.token);
     } catch (error: unknown) {
         // A concurrent signup took the email or phone number between the
         // duplicate check and the insert: the database refuses this one.
@@ -68,9 +78,7 @@ export async function login(req: Request, res: Response, next: NextFunction) {
     const session = await createSession(user.id);
     setSessionCookie(res, session);
   
-    res.status(200).json({
-      user: { id: user.id, name: user.name, email: user.email, tel: user.tel, avatarUrl: user.avatarUrl },
-    });
+    res.status(200).json({ user: toPublicUser(user) });
   } catch (error) {
     console.error('Error during login:', error);
     next(error);
@@ -180,6 +188,50 @@ export async function deleteMe(req: Request, res: Response, next: NextFunction) 
     res.status(204).end();
   } catch (error) {
     console.error('Error deleting account:', error);
+    next(error);
+  }
+}
+
+export async function verifyEmail(req: Request, res: Response, next: NextFunction) {
+  try {
+    const validation = validateVerifyEmailBody(req.body);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.message });
+    }
+
+    const result = await verifyEmailToken(validation.data.token);
+    if (result.status === 'invalid') {
+      // The same answer for an unknown, used, replaced or expired link.
+      return res.status(400).json({ error: 'This verification link is invalid or has expired' });
+    }
+
+    res.status(204).end();
+  } catch (error) {
+    console.error('Error verifying email:', error);
+    next(error);
+  }
+}
+
+export async function resendEmailVerification(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await issueEmailVerification(req.user!.id);
+    if (result.status === 'no_user') {
+      // The account was deleted after requireUserAuth found the session.
+      return res.status(401).json({ error: 'Unauthorized Access' });
+    }
+    if (result.status === 'already_verified') {
+      return res.status(409).json({ error: 'Email is already verified' });
+    }
+    if (result.status === 'cooldown') {
+      return res.status(429).json({ error: 'Please wait a minute before asking for another email' });
+    }
+
+    res.status(204).end();
+
+    // After responding, as in signup.
+    await sendVerificationEmail(result.email, result.token);
+  } catch (error) {
+    console.error('Error requesting a verification email:', error);
     next(error);
   }
 }

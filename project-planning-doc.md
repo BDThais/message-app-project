@@ -26,7 +26,7 @@ Backend tests are integration tests (Vitest + Supertest) that run against a sepa
 `server/.env.test` once, then run `npm test` from `server/`. The test command
 starts the container, deploys the existing Prisma migrations, and runs Vitest.
 `test/setup.ts` refuses to run unless `NODE_ENV=test` and the database is `chatapp_test`, and it empties every table
-before each test. It also installs the in-memory mail outbox (`test/helpers/mailer.ts`) as the app's mailer and empties it before each test, so no test sends or logs a mail. It does not use the development database configured in `server/.env`.
+before each test. It also installs the in-memory mail outbox (`test/helpers/mailer.ts`) as the app's mailer and empties it before each test, so no test sends or logs a mail. Every test connection also runs in the `Asia/Ho_Chi_Minh` time zone (UTC+7), set through `PGOPTIONS` in `setup.ts` whatever the database server's own setting is: the `timestamp` columns hold UTC, so code that compares one with the database's `now()` is off by seven hours there and its test fails, instead of the bug showing up only on a server whose time zone is not UTC (`test/lib/testTimeZone.test.ts` guards this). It does not use the development database configured in `server/.env`.
 
 Scripts (run from `server/`):
 
@@ -54,6 +54,8 @@ Completed:
 - PATCH /account/me
 - POST /account/password
 - DELETE /account/me
+- POST /account/email/verify
+- POST /account/email/verification
 - POST /chat
 - GET /chat
 - GET /chat/:chatid
@@ -80,13 +82,16 @@ Completed:
 - Friendship requirement for creating a room and adding members (see "Friendship and messaging")
 - Room summaries with the latest message that has not been deleted and the requester's unread count
 - Automatic cleanup of chat rooms that stay empty (see "Empty chat room cleanup")
-- Email delivery: the `Mailer` in `src/lib/mailer.ts` with a console transport and a Resend transport, chosen by `MAIL_TRANSPORT` and checked when the server starts (see "Email delivery"). Nothing sends mail yet: email verification is the first feature that will
-- Integration tests for the account endpoints (including profile update, password change and account deletion), the chat-room endpoints (including the `lastMessage` and `unreadCount` of the room summaries), the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the reject/cancel-friend-request endpoint, the list-friends endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
+- Email delivery: the `Mailer` in `src/lib/mailer.ts` with a console transport and a Resend transport, chosen by `MAIL_TRANSPORT` and checked when the server starts (see "Email delivery").
+- Email verification (see "Email verification (implemented)"): a link is mailed at signup and on request, `POST /account/email/verify` uses it, and the user shape carries `emailVerified`. It is the first feature that sends mail
+- Integration tests for the account endpoints (including profile update, password change, account deletion and email verification), the chat-room endpoints (including the `lastMessage` and `unreadCount` of the room summaries), the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the reject/cancel-friend-request endpoint, the list-friends endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
 - Unit tests for the mailer (the startup checks of the mail settings, the console transport, and the Resend transport run through the real Resend SDK with a stubbed `fetch`), and a test that guards the mail outbox wiring of the test setup
+- Unit tests for email verification (the settings checks, the link and the send helper, the body validator), for `hashToken`, and for how `EMAIL_VERIFICATION_TTL_MS` is read
 
 Still planned or not yet implemented:
 
-- Email verification and password reset by email (see "Email verification (planned)" and "Password reset (planned)"); the database tables for verification and the mailer they will send with (see "Email delivery") already exist
+- Password reset by email (see "Password reset (planned)"); the verified addresses and the mailer it needs are in place (see "Email verification (implemented)" and "Email delivery")
+- Changing the email address (optional, see "Changing the address" under "Email verification (implemented)")
 - Real-time socket communication
 - Frontend application screens and state management
 - Production deployment hardening
@@ -124,6 +129,7 @@ POST /account/signup
 - Stores `tel` in its canonical E.164 spelling (`+` and digits only), not as typed: `isValidPhoneNumber` accepts spaces, dashes, parentheses, non-ASCII digits and extensions, and the unique constraint compares raw strings, so `+1 (415) 555-2671` and `+14155552671` would otherwise both register, and `GET /friend/search/:tel` (an exact match) could never find the first. `normalizeTel` in `signup.validator.ts` validates with `isValidPhoneNumber` (so the set of accepted numbers is unchanged) and then takes `parsePhoneNumberFromString(tel).number`; an extension is dropped. The duplicate check and the insert both use the normalized number, so another spelling of a registered number answers `409`
 - Numbers stored before this change are rewritten by `npm run db:normalize-tels` (`scripts/normalize-tels.mjs`, run from `server/` against the database in `DATABASE_URL`). It is a dry run that lists the changes; add `-- --apply` to write them, in one transaction. It never touches a number that is no longer valid or accounts that would end up with the same number: it lists them, exits with code `1`, and leaves the merge or delete to you
 - Hashes the password before saving
+- Mails a verification link to the new address after responding (see "Email verification (implemented)"): the account starts unverified, signup does not log in, and a mail that cannot be sent does not fail the signup (it is logged, and the user asks again with `POST /account/email/verification`)
 - incoming body:
 
   ```json
@@ -172,14 +178,15 @@ POST /account/login
       "name": "JohnDoe",
       "email": "john@example.com",
       "tel": "+1234567890",
-      "avatarUrl": null
+      "avatarUrl": null,
+      "emailVerified": false
     }
   }
   ```
 
 GET /account/me
 
-- Returns the current authenticated user or null if there is no session. `avatarUrl` is `null` until `PATCH /account/me` sets it
+- Returns the current authenticated user or null if there is no session. `avatarUrl` is `null` until `PATCH /account/me` sets it, and `emailVerified` is `false` until the address is verified (see "Email verification (implemented)")
 - return body:
 
   ```json
@@ -189,7 +196,8 @@ GET /account/me
       "name": "JohnDoe",
       "email": "john@example.com",
       "tel": "+1234567890",
-      "avatarUrl": null
+      "avatarUrl": null,
+      "emailVerified": false
     }
   }
   ```
@@ -223,12 +231,13 @@ PATCH /account/me (implemented)
       "name": "JohnDoe2",
       "email": "john@example.com",
       "tel": "+1234567890",
-      "avatarUrl": "https://example.com/john.png"
+      "avatarUrl": "https://example.com/john.png",
+      "emailVerified": false
     }
   }
   ```
 
-- `avatarUrl` is now part of the user shape everywhere: `findSessionUser` selects it, so `GET /account/me` and `req.user` carry it, and login returns it. Changing `email` or `tel` is not supported
+- `avatarUrl` is now part of the user shape everywhere: `findSessionUser` selects it, so `GET /account/me` and `req.user` carry it, and login returns it. `emailVerified` is part of the user shape everywhere too (login, `GET /account/me`, `PATCH /account/me`, `req.user`): `true` once the address is verified, and the timestamp itself (`email_verified_at`) is never sent. Changing `email` or `tel` is not supported
 - responds `400` with `{ "error": ... }` when validation fails. Validation lives in `profile.validator.ts`
 
 POST /account/password (implemented)
@@ -260,6 +269,23 @@ DELETE /account/me (implemented)
 - every room the requester is in is locked (`SELECT ... FOR UPDATE`, in id order so two deletions that share rooms cannot deadlock) before the admin check, for the same reason as on `DELETE /chat/:chatid/member/:userid`: two admins of one room deleting their accounts at the same moment could otherwise both pass the check and leave the room with members but no admin
 - responds `204` with no body and clears the session cookie. The email and phone number can be used to sign up again
 - rate limited with `POST /account/password`: the two routes share one budget of 10 attempts per 15 minutes per user (`429 { "error": "Too many attempts, try again later" }` afterwards), because both let whoever holds a session guess the password
+
+POST /account/email/verify (implemented)
+
+- Confirms an email address with the token from a verification mail. No session is needed: the token is the credential, and the link is often opened on another device than the one that is signed in
+- incoming body: `{ token }`, a non-empty string (`400 { "error": "Token is required" }` otherwise). Validation lives in `emailVerification.validator.ts`
+- `400 { "error": "This verification link is invalid or has expired" }` for a token that is unknown, already used, expired, replaced by a newer link, or issued for an address the account no longer has: one message for all of them, so the answer says nothing about which it was
+- responds `204` with no body, and the account's `emailVerified` is `true` from then on. A link works once, even for two simultaneous requests
+- rate limited per IP, 10 requests per 15 minutes (`429 { "error": "Too many attempts, try again later" }` afterwards). `emailVerifyLimiter` lives in `modules/account/accountRateLimit.middleware.ts`; every request counts, including ones answered with a `400`
+- how links are made, stored and mailed is under "Email verification (implemented)"
+
+POST /account/email/verification (implemented)
+
+- Mails a new verification link to the signed-in user's current address and replaces the old link, which stops working. Requires a session (`401 { "error": "Unauthorized Access" }` otherwise). No body. This is the "resend" button, and how accounts created before email verification verify
+- `409 { "error": "Email is already verified" }` when it is
+- `429 { "error": "Please wait a minute before asking for another email" }` while the stored link is younger than 60 seconds; nothing is sent and the stored link stays valid
+- responds `204` with no body, and the mail goes out after the response
+- rate limited to 5 requests per hour per user (`429 { "error": "Too many verification emails requested, try again later" }`). `emailVerificationRequestLimiter` is keyed by user id, so it is mounted after `requireUserAuth`; every request that gets past it counts, including ones answered with a `409` or the cooldown's `429`
 
 ### Room, message and friend endpoints (implemented)
 
@@ -853,7 +879,7 @@ Friendship is required to start a conversation. Before this rule `POST /chat` an
 
 ### Email delivery
 
-Shared by email verification and password reset. The mailer, its settings and the test outbox are implemented; nothing sends mail yet, because email verification is the first feature that does.
+Shared by email verification and password reset. The mailer, its settings and the test outbox are implemented; email verification is the first feature that sends mail (its mail is composed in `modules/account/emailVerification.mail.ts`), and password reset will be the second.
 
 - **Provider: Resend**, through its official `resend` package (`new Resend(apiKey).emails.send({ from, to, subject, text })`). It is one API key and one HTTPS call, with no SMTP host, port or TLS settings, and no trouble on hosts that block outbound SMTP. Its free plan (3,000 emails a month, at most 100 a day, one domain, per Resend's pricing page when this was written) is far above what a personal project sends. Nodemailer was the alternative, but it is only a library for talking SMTP, so choosing it would still mean choosing an SMTP provider; the `Mailer` interface below keeps the provider replaceable (a Nodemailer implementation would be one more file).
 - **What it costs:** sending to real users needs a domain you own, verified in Resend by adding the DNS records it lists (SPF and DKIM). Until then `onboarding@resend.dev` can only deliver to the address of the Resend account itself and answers `403` for anyone else, so real emails can be tried end to end only with your own address.
@@ -863,51 +889,65 @@ Shared by email verification and password reset. The mailer, its settings and th
 - The console mailer prints the recipient, the subject and the whole text between two marker lines, so a link or token can be copied from the server log in development. It refuses to run in production for that reason.
 - A refused or failed Resend call rejects with `Resend could not send the email (<error name>, HTTP <status>): <Resend's message>` (no status for a network failure; the recipient is not in the message, so logging it does not log an address), and the SDK's own error object is its `cause`. The SDK prints API errors itself outside production, so a failure shows up twice in a development log.
 - New settings in `config.ts`, validated when the server starts like the cleanup job's: `MAIL_TRANSPORT` (`console` | `resend`; default `console`, and `resend` is required when `NODE_ENV=production`), `RESEND_API_KEY` and `MAIL_FROM` (for example `Message App <no-reply@yourdomain.com>`). `resend` without a key or a `MAIL_FROM` stops the server at start, as do an unknown `MAIL_TRANSPORT` and `console` in production (the message says which setting is wrong). Nothing needs configuring in development. To try Resend for real, create an API key in the Resend dashboard and put `MAIL_TRANSPORT=resend`, `RESEND_API_KEY=re_...` and `MAIL_FROM=Message App <onboarding@resend.dev>` in `server/.env`; until a domain is verified, the only recipient that works is the Resend account's own address.
-- A request never waits for the mail (a rule for the controllers that send, not for the mailer; the first one arrives with email verification): the controller responds first, then sends inside a `try/catch` that logs a failure. The response time must not show whether a mail was sent (the reset flow depends on that), and a provider outage must not turn signup into a `500`. The price is that a failed mail is lost and the user asks again; if that proves too unreliable, the next step is an outbox table drained by a job like the cleanup job.
+- A request never waits for the mail (a rule for the controllers that send, not for the mailer; signup and `POST /account/email/verification` follow it, through `sendVerificationEmail`, which never rejects): the controller responds first, then sends inside a `try/catch` that logs a failure. The response time must not show whether a mail was sent (the reset flow depends on that), and a provider outage must not turn signup into a `500`. The price is that a failed mail is lost and the user asks again; if that proves too unreliable, the next step is an outbox table drained by a job like the cleanup job.
 - Mails are plain text: one sentence of context and the link.
 - Tests: `test/lib/mailer.unit.test.ts` (no database: the settings checks, the console mailer, `getMailer` / `setMailer`, and the Resend mailer through the real SDK with `fetch` stubbed, so the request it builds and its handling of a `403`, a non-JSON `502` and a network failure are checked without a key or network) and `test/lib/mailerOutbox.test.ts` (the outbox is the app's mailer and is emptied between tests). Not covered, because it needs a real key and a verified domain: an actual delivery.
 
-### Email verification (planned)
+### Email verification (implemented)
 
-Goal: prove that the owner of an account can read mail sent to its address. An unverified address can be a typo or someone else's, and a password reset link takes over an account, so reset must not be sent to an address nobody has proven. Of this section, only the database changes exist so far.
+Goal: prove that the owner of an account can read mail sent to its address. An unverified address can be a typo or someone else's, and a password reset link takes over an account, so reset must not be sent to an address nobody has proven. The two endpoints are specified under "Auth endpoints (implemented)" (`POST /account/email/verify` and `POST /account/email/verification`); this section is the design behind them. The code is `modules/account/emailVerification.service.ts` (the database work), `emailVerification.mail.ts` (the link, the mail and the settings check) and `emailVerification.validator.ts`; the two handlers are in `account.controller.ts`.
 
-Database (in place, migration `20261004120000_add_email_verification`):
+Database (migration `20261004120000_add_email_verification`):
 
 - `users.email_verified_at`, a nullable timestamp: `null` means unverified. Existing accounts are not backfilled, because that would claim proof nobody gave: they start unverified and verify by asking for an email after logging in.
 - `email_verification_tokens`: `user_id` (primary key, so one row per user, and deleted with the user), `email`, `token_hash` (unique), `expires_at`, `created_at`. Asking again replaces the row. `email` is the address the link was issued for: confirming only counts while it is still the user's address, and the same row can carry a pending change of address (see "Changing the address"), so no second table is needed. Expired rows stay until replaced or until the user is deleted; there is at most one per user, so no cleanup job.
-- The token is `generateToken()` (the generator behind session ids); only its SHA-256 is stored, so a leaked table gives nobody a working link. Time to live: `EMAIL_VERIFICATION_TTL_MS`, default 24 hours.
+- The token is `generateToken()` (the generator behind session ids); only its SHA-256 (`hashToken`, `src/lib/randomToken.ts`) is stored, so a leaked table gives nobody a working link.
+
+Settings in `config.ts`, checked when the server starts by `checkEmailVerificationSettings` (called from `server.ts`, like the mailer's settings); a bad one stops the server and the message names it:
+
+- `EMAIL_VERIFICATION_TTL_MS`: how long a link works. A whole number of milliseconds from 1 to 365 days, default 24 hours (`86400000`). Like every number in `config.ts` it is read with `Number`, not `parseInt` (see "Conventions"): `24h` is `NaN` and stops the server, instead of becoming a link that dies after 24 milliseconds.
+- `EMAIL_VERIFICATION_URL`: the frontend page the link opens, an absolute `http` or `https` URL with no `#` in it (a query string is fine). Default `http://localhost:5173/verify-email` outside production; required when `NODE_ENV=production`, so a mail can never point at localhost.
 
 Flow:
 
-1. `POST /account/signup` creates the user as it does now (same `201` and body, `email_verified_at` null) and, after responding, sends the verification email. Signup does not log in.
-2. The mail links to `EMAIL_VERIFICATION_URL` (the frontend page, `http://localhost:5173/verify-email` in development) with the token as a URL fragment, `...#token=...`. A fragment is never sent to a server, so the token stays out of access logs and `Referer` headers. The page reads it and sends it to the API as a `POST`, not as a link straight to a `GET` endpoint, because mail scanners and link previewers open links on their own and would use up the token before the user does.
-3. `POST /account/email/verify`, no session needed (the token is the credential). Body `{ token }`, a non-empty string (`400` otherwise). In one transaction: `DELETE FROM email_verification_tokens WHERE token_hash = $1 AND expires_at > now() RETURNING user_id, email`, then `UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE id = $user_id AND email = $email`. Only one of two simultaneous requests can delete the row, so a link works once. If either step finds no row, the answer is `400 { "error": "This verification link is invalid or has expired" }`, the same for an unknown, used or expired token and for a link issued for an address the user no longer has. Success is `204`. Rate limited per IP, 10 per 15 minutes.
-4. `POST /account/email/verification`, signed in: sends a new link to the account's current address and replaces the old one. `409 { "error": "Email is already verified" }` when it is; `429 { "error": "Please wait a minute before asking for another email" }` while the stored token is younger than 60 seconds; a per-user limiter of 5 per hour; `204` otherwise. The caller is signed in, so there is nothing to hide and the answers can be explicit. This is the "resend" button, and how existing accounts verify.
-5. The user shape (login, `GET /account/me`, `PATCH /account/me`) gains `emailVerified: boolean`, so the frontend can show a "verify your email" banner. The timestamp itself is not sent. `userSelect`, `findSessionUser` and login's body change, and the tests that compare a whole user object get the new key.
+1. `POST /account/signup` creates the user as it does now (same `201` and body, `email_verified_at` null) and stores the token row in the same statement (`createUser` does a nested create), so an account never exists without the link that was mailed for it. After responding, the controller mails the link through `sendVerificationEmail`. Signup does not log in. A refused signup (`400`, `409`, including the one that loses a race for the address) stores and mails nothing.
+2. The mail is plain text, subject `Confirm your email address`, one sentence and the link `EMAIL_VERIFICATION_URL#token=...`. A fragment is never sent to a server, so the token stays out of access logs and `Referer` headers. The frontend page reads it and sends it to the API as a `POST`, not as a link straight to a `GET` endpoint, because mail scanners and link previewers open links on their own and would use up the token before the user does. `sendVerificationEmail` never rejects: a request does not wait for its mail (see "Email delivery"), so a failed send is logged (without the address or the token) and the mail is lost. The user asks again with `POST /account/email/verification`.
+3. `POST /account/email/verify` (`verifyEmailToken`) runs in one transaction: it finds the row by the token's hash, deletes it only while `expires_at` is still in the future, and then sets `email_verified_at` on the user only if the user still has the row's address and is not verified yet. Only one of two simultaneous requests can delete the row (the other waits for the first transaction, then finds it gone), so a link works once. If any step finds nothing, the answer is the same `400`, for an unknown, used, expired or replaced token and for a link issued for an address the user no longer has. An account that is verified already keeps its first timestamp and the answer is still `204`. An expired row is left where it is; a link for another address is consumed, since nothing could use it.
+4. `POST /account/email/verification` (`issueEmailVerification`) locks the user's row (`SELECT ... FOR UPDATE`) before it looks at the stored link. Without the lock two simultaneous requests could both find the link older than a minute and both send a mail; with it the second waits, sees the link the first one stored, and is told to wait. The new link replaces the old one in the same row (an upsert on `user_id`, which also resets `created_at`, the start of the next cooldown). The caller is signed in, so there is nothing to hide and the answers are explicit. This is the "resend" button, and how accounts created before email verification verify.
+5. The user shape (login, `GET /account/me`, `PATCH /account/me`, and `req.user`) gains `emailVerified: boolean`, so the frontend can show a "verify your email" banner. The timestamp itself is never sent. `toPublicUser` (`account.service.ts`) builds the shape from `userSelect`, and `findSessionUser`, `updateUserProfile` and login all use it, so the three bodies cannot drift apart.
 
-What verification gates (to decide):
+All the times in the service are JS `Date`s handed to Prisma (the same as everywhere else in the project), never the database's `now()` and never a column default: `created_at` is set from the same `now` as `expires_at`, so a link lives exactly `EMAIL_VERIFICATION_TTL_MS`. The columns are `timestamp` without a time zone, so comparing one with `now()` is off by the session's UTC offset on any connection whose `TimeZone` is not UTC. The tests run in such a zone (see "Test database setup"), which is what makes that mistake fail in them. The service functions take `now` as an optional argument, which is how the tests check the expiry and the cooldown to the millisecond.
+
+What verification gates:
 
 - Required: password reset sends only to verified addresses (see "Password reset (planned)").
 - Not gated: login, chat and friends. Blocking login until verified would lock out someone who mistyped the address, who can never receive the link and has no way yet to change the address.
 - Optional later: a `requireVerifiedEmail` middleware on the actions spammers want (for example `POST /friend/requests` and `POST /chat`), so throwaway accounts are less useful. Best added once the frontend can prompt for verification.
 
-Changing the address (optional, but it is the way out of a typo): `POST /account/email`, signed in, body `{ email, password }` (the password like `DELETE /account/me` asks for it; the email follows signup's rules; `409` when it belongs to another account). It writes a token row whose `email` is the new address, replacing any pending one, and sends the link to the new address only. Confirming through `POST /account/email/verify` then sets the user's `email` from the row and `email_verified_at` in one transaction (a unique violation there is `409 { "error": "Email already in use" }`), and the old address gets a "your email was changed" mail. Until then the old address stays the login.
+Changing the address (optional and not built; it is the way out of a typo): `POST /account/email`, signed in, body `{ email, password }` (the password like `DELETE /account/me` asks for it; the email follows signup's rules; `409` when it belongs to another account). It writes a token row whose `email` is the new address, replacing any pending one, and sends the link to the new address only. Confirming through `POST /account/email/verify` then sets the user's `email` from the row and `email_verified_at` in one transaction (a unique violation there is `409 { "error": "Email already in use" }`), and the old address gets a "your email was changed" mail. Until then the old address stays the login. Building it changes step 3 above: the update there currently requires the user to still have the row's address, and would instead apply the row's address.
 
 Known limit: signup answers `409` for a registered address even when it was never verified, so someone can register an address they do not own and keep its real owner out. If that matters, a signup for an address held by an unverified account older than some number of days could take the account over. Out of scope here.
 
 Account deletion needs no change: the token row is deleted with the user (covered by `emailVerificationToken.schema.test.ts`).
 
-Tests, once built (with the in-memory outbox): signup sends exactly one mail with a working link; verifying sets the timestamp and works once, not after it expires, not after a newer link replaced it and not when the user's address has changed; resend answers `409` when verified and `429` inside the cooldown, and replaces the old link; the limiters; `emailVerified` in the three user bodies; a table of bad bodies in the validator's unit test; for the address change, the pending row, the `409`s and the mail to the old address.
+Tests (all with the in-memory outbox):
 
-Build order: mailer, settings and outbox helper (shared with password reset; done, see "Email delivery"); verification service and validator; controller, routes and limiters, the signup hook and `emailVerified` in the user shape; tests; this document and the README. The two frontend pieces (the banner with a resend button, and the page that reads the fragment and posts it) belong to the frontend milestone.
+- `emailVerification.service.test.ts`: a link works until the moment it expires and not at that moment, once even for two simultaneous requests, and not after a newer link replaced it; a verified account keeps its first timestamp; a link for another address is refused; the cooldown lasts exactly 60 seconds; two simultaneous resends issue one link; `409` and a missing account.
+- `emailVerify.test.ts` and `emailVerifyLimiter.test.ts` for `POST /account/email/verify`, and `emailVerificationResend.test.ts` for `POST /account/email/verification` (`401`, `204` and the mail, replacing the old link, `409`, `429`, a failing or hanging mailer, the per-user limiter).
+- `signup.test.ts`: signup mails exactly one working link and stores only its hash, does not log in, mails nothing when refused, and does not fail or wait when the mail does.
+- `emailVerified` in the three user bodies (`session.test.ts`, `profile.test.ts`); a table of bad bodies in `emailVerification.validator.unit.test.ts`; the settings checks, the link and the send helper in `emailVerification.mail.unit.test.ts`; `hashToken` in `randomToken.unit.test.ts`; how every numeric setting is read in `config.unit.test.ts`, and `checkSessionSettings` in `session.settings.unit.test.ts`.
+
+Not covered, because it needs a real key and a verified domain: an actual delivery (see "Email delivery").
+
+The two frontend pieces (the banner with a resend button, and the page that reads the fragment and posts it) belong to the frontend milestone. Until then the link is tried with the token from the console mailer's log.
 
 ### Password reset (planned)
 
-A signed-out user who forgot their password asks for a link by email, opens it, and sets a new password. The plan is two endpoints and one table, on top of the mailer from "Email delivery" and the verified addresses from "Email verification (planned)". Nothing here is implemented yet.
+A signed-out user who forgot their password asks for a link by email, opens it, and sets a new password. The plan is two endpoints and one table, on top of the mailer from "Email delivery" and the verified addresses from "Email verification (implemented)". Nothing here is implemented yet.
 
 Decisions:
 
-- **Only verified addresses get a reset link.** A reset link takes over the account, so it goes only to accounts with `email_verified_at` set. For an unverified account, `reset-request` sends the verification email instead (under the verification cooldown) and gives the same `202`, so someone who never verified is not locked out: they verify, then ask again. This makes email verification a prerequisite, so build it first.
+- **Only verified addresses get a reset link.** A reset link takes over the account, so it goes only to accounts with `email_verified_at` set. For an unverified account, `reset-request` sends the verification email instead (under the verification cooldown) and gives the same `202`, so someone who never verified is not locked out: they verify, then ask again. This makes email verification a prerequisite, and it is built.
 - **Where the link points.** `PASSWORD_RESET_URL` is the frontend page (`http://localhost:5173/reset-password` in development) and the token is appended as a URL fragment, `...#token=...`, for the reasons given under email verification. The frontend does not exist yet, so until it does the endpoints are exercised with the token from the logged mail.
 - **Email matching is exact**, like login (`findUnique({ where: { email } })`, and signup does not lowercase). Asking for `john@x.com` when the account was created as `John@x.com` sends nothing. Normalizing the case at signup and login is a separate fix, with a migration for the addresses already stored.
 
@@ -927,7 +967,7 @@ Schema: one new model, `PasswordResetToken`, shaped like `EmailVerificationToken
 `POST /account/password/reset` (signed out)
 
 - incoming body: `{ token, new_password }`, both non-empty strings. `new_password` follows the signup rules (`validatePassword`) and is checked first, so a weak password is a `400` that does not use up the link
-- claims the token and changes the password in one transaction: `DELETE FROM password_reset_tokens WHERE token_hash = $1 AND expires_at > now() RETURNING user_id`, then store the new hash and delete all of the user's sessions (expired ones too). Only one of two simultaneous requests with the same token can delete the row, so a link works once, and a failure rolls everything back, so the link survives it
+- claims the token and changes the password in one transaction: delete the row whose `token_hash` matches while `expires_at` is still in the future (`deleteMany` with `expiresAt: { gt: now }`, `now` a JS `Date` and not the database's `now()`, for the reason given under "Email verification (implemented)"; a count of `1` means this request claimed the token), then store the new hash and delete all of the user's sessions (expired ones too). Only one of two simultaneous requests with the same token can delete the row, so a link works once, and a failure rolls everything back, so the link survives it
 - `400 { "error": "This reset link is invalid or has expired" }` for an unknown, used or expired token, one message for all three
 - responds `204` and does not sign the user in: they log in with the new password, so `loginLimiter` stays in the path. Afterwards a "your password was changed" mail goes to the account's address, so a takeover does not go unnoticed
 - rate limited per IP (10 per 15 minutes)
@@ -936,7 +976,7 @@ Changes to existing code: `changePassword` also deletes the account's reset toke
 
 Tests, once built (with the in-memory outbox): both endpoints answer the same for a known and an unknown email and only a verified one gets exactly one reset mail; an unverified account gets the verification mail instead; the mailed token works once, not twice (including two requests at the same moment, called on the service), not after it expires and not after a newer one replaced it; a weak password is a `400` and the token still works afterwards; a reset signs out every session and the new password logs in while the old one does not; `changePassword` kills an outstanding token; the cooldown and the limiters; a table of bad bodies in the validators' unit tests.
 
-Build order: email delivery (done); email verification; then the reset schema and migration, service and validators, controller, routes and limiters, tests, and this document and the README. The two frontend pages (a form that asks for the email and shows the `202` message, and a page that reads the fragment, asks for the new password and sends the user to the login) belong to the frontend milestone. Out of scope: reset by SMS through `tel`, security questions, locking an account after failed logins.
+Build order: email delivery (done); email verification (done); then the reset schema and migration, service and validators, controller, routes and limiters, tests, and this document and the README. The two frontend pages (a form that asks for the email and shows the `202` message, and a page that reads the fragment, asks for the new password and sends the user to the login) belong to the frontend milestone. Out of scope: reset by SMS through `tel`, security questions, locking an account after failed logins.
 
 ### Real-time events (planned)
 
@@ -982,11 +1022,11 @@ message-app/
     │   ├── app.ts
     │   ├── server.ts
     │   ├── config/
-    │   │   └── config.ts
+    │   │   └── config.ts            // every number is read by numberSetting: Number(), blank = not set, never parseInt
     │   ├── lib/
     │   │   ├── constants.ts
     │   │   ├── mailer.ts            // Mailer interface; console and Resend mailers; createMailerFromConfig, getMailer / setMailer
-    │   │   ├── randomToken.ts       // generateToken: 32 random bytes as base64url (session ids now; emailed tokens later)
+    │   │   ├── randomToken.ts       // generateToken: 32 random bytes as base64url (session ids, emailed tokens); hashToken: its SHA-256, the only form of an emailed token that is stored
     │   │   ├── parseIdParam.ts      // numeric URL param -> ID or null (used by the chat and friend validators)
     │   │   ├── passwordHash.ts
     │   │   ├── prisma.ts
@@ -998,10 +1038,13 @@ message-app/
     │   └── modules/
     │       ├── account/
     │       │   ├── account.routes.ts
-    │       │   ├── accountRateLimit.middleware.ts   // loginLimiter (per IP), passwordCheckLimiter (per user; POST /account/password and DELETE /account/me share it)
+    │       │   ├── accountRateLimit.middleware.ts   // loginLimiter and emailVerifyLimiter (per IP), passwordCheckLimiter (per user; POST /account/password and DELETE /account/me share it), emailVerificationRequestLimiter (per user)
     │       │   ├── account.controller.ts
     │       │   ├── account.service.ts
-    │       │   ├── session.service.ts   // session database operations
+    │       │   ├── session.service.ts   // session database operations; checkSessionSettings (SESSION_TTL_MS, checked at startup)
+    │       │   ├── emailVerification.service.ts   // newVerificationToken, issueEmailVerification (resend), verifyEmailToken
+    │       │   ├── emailVerification.mail.ts      // settings check, the link, sendVerificationEmail (never rejects)
+    │       │   ├── emailVerification.validator.ts // POST /account/email/verify body
     │       │   ├── login.validator.ts
     │       │   ├── deleteAccount.validator.ts   // DELETE /account/me body
     │       │   ├── password.validator.ts   // POST /account/password body
@@ -1028,22 +1071,33 @@ message-app/
         ├── helpers/                          // shared fixtures, not test files
         │   ├── users.ts                      // createUser, loginAs (session cookie without going through /account/login), createSessionRow
         │   ├── chatRooms.ts                  // createGroupRoom, createDirectRoom, promoteToAdmin, memberIdsOf
+        │   ├── emailVerification.ts          // tokenFromMail (the token in a mailed link), createVerificationLink (stores a link in a chosen state)
         │   ├── friends.ts                    // makeFriends, createFriendRequest (optional createdAt)
         │   └── mailer.ts                     // InMemoryMailer and the shared `outbox` (installed as the app's mailer and emptied before each test by setup.ts)
         ├── account/
-        │   ├── session.test.ts               // login, me, logout
-        │   ├── signup.test.ts                // includes the canonical-number and duplicate-spelling cases, and the 409 when the insert loses a race
-        │   ├── profile.test.ts               // PATCH /account/me
+        │   ├── session.test.ts               // login, me, logout (and emailVerified in their bodies)
+        │   ├── signup.test.ts                // includes the canonical-number and duplicate-spelling cases, the 409 when the insert loses a race, and the verification mail
+        │   ├── profile.test.ts               // PATCH /account/me (and emailVerified in its body)
         │   ├── password.test.ts              // POST /account/password, and changePassword's stale-hash guard
         │   ├── emailVerificationToken.schema.test.ts   // the hand-written migration's rules: one token per user, unique hash, deleted with the user
+        │   ├── emailVerification.service.test.ts       // expiry, one use, cooldown, row lock: the service called directly, with the races
+        │   ├── emailVerify.test.ts           // POST /account/email/verify (keep it under the IP limiter's 10 requests)
+        │   ├── emailVerifyLimiter.test.ts    // its per-IP limiter, in a file of its own because the test uses the whole budget
+        │   ├── emailVerificationResend.test.ts   // POST /account/email/verification
         │   ├── deleteAccount.test.ts         // DELETE /account/me, and deleteAccount's stale-hash guard and room lock
         │   ├── profile.validator.unit.test.ts
         │   ├── deleteAccount.validator.unit.test.ts
-        │   └── password.validator.unit.test.ts
+        │   ├── password.validator.unit.test.ts
+        │   ├── emailVerification.validator.unit.test.ts
+        │   ├── emailVerification.mail.unit.test.ts   // settings checks, link, send helper (no database)
+        │   └── session.settings.unit.test.ts         // checkSessionSettings (no database)
+        ├── config/                           // mirrors src/config/
+        │   └── config.unit.test.ts           // every numeric setting: the number that was set, blank = default, "7d" and the like = NaN
         ├── lib/                              // mirrors src/lib/
         │   ├── mailer.unit.test.ts           // settings checks, console mailer, getMailer / setMailer, Resend mailer (real SDK, stubbed fetch)
         │   ├── mailerOutbox.test.ts          // the test setup's outbox is the app's mailer and is emptied between tests
-        │   └── randomToken.unit.test.ts
+        │   ├── testTimeZone.test.ts          // the test connections run in a time zone that is not UTC (see "Test database setup")
+        │   └── randomToken.unit.test.ts          // generateToken and hashToken
         ├── middlewares/                      // mirrors src/middlewares/
         │   ├── errorHandler.unit.test.ts     // the handler alone, with a fake response
         │   └── errorHandler.test.ts          // errors Express raises itself (malformed JSON, bad percent-encoding)
@@ -1086,8 +1140,11 @@ Conventions:
 - Error bodies: every `4xx` and `5xx` response has the shape `{ "error": "<text>" }`, whichever layer sends it (controller, feature middleware, rate limiter, `errorHandler`). `message` is not used for errors because it is already a success-body key for a chat message (`POST` and `PATCH /chat/:chatid/message` return `{ "message": { ... } }`), so a client could otherwise get a string and an object under the same key from one endpoint. Validators keep their own internal `{ valid: false, message }` result; the controller puts that text under `error`. A success body that only confirms an action (`201 { "message": "Account created successfully" }` from signup) is not an error body and is unchanged.
 - Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.
 - Background jobs live in the folder of the feature they belong to and are started from `server.ts`, never from `app.ts`, so tests that import the app do not start timers.
-- Mail goes out through `getMailer()` from `src/lib/mailer.ts` and nowhere else: a feature never imports a mail provider's SDK, and services never send mail themselves. The real mailer is installed from `server.ts`, never `app.ts`; the tests install the outbox in `test/setup.ts`.
-- Tests live in `server/test/`, in a folder per feature that mirrors `src/modules/` (`test/account/`, `test/chatrooms/`, `test/friends/`; `test/middlewares/` mirrors `src/middlewares/` and `test/lib/` mirrors `src/lib/`), and import from `../../src/...`. Shared fixtures live in `test/helpers/`. `loginAs(user)` creates the session row and sends its cookie directly, so no test outside `test/account/` depends on `/account/login` or its rate limiter.
+- Mail goes out through `getMailer()` from `src/lib/mailer.ts` and nowhere else: a feature never imports a mail provider's SDK, and services never send mail themselves. The real mailer is installed from `server.ts`, never `app.ts`; the tests install the outbox in `test/setup.ts`. A feature's mail (subject, text, link, and the send helper that logs a failure instead of throwing) is composed in its own `<feature>.mail.ts`, for example `emailVerification.mail.ts`.
+- Tests live in `server/test/`, in a folder per feature that mirrors `src/modules/` (`test/account/`, `test/chatrooms/`, `test/friends/`; `test/middlewares/` mirrors `src/middlewares/`, `test/lib/` mirrors `src/lib/` and `test/config/` mirrors `src/config/`), and import from `../../src/...`. Shared fixtures live in `test/helpers/`. `loginAs(user)` creates the session row and sends its cookie directly, so no test outside `test/account/` depends on `/account/login` or its rate limiter.
+- A rate limiter keeps its count for as long as its module is loaded, which in a test is the whole test file. Per-user limiters need no care (every test makes new users, with new ids), but a per-IP limiter (`loginLimiter`, `emailVerifyLimiter`) is shared by every request the file sends from the test client: keep such a file under the limiter's budget, and put the test that uses the budget up in a file of its own (`emailVerifyLimiter.test.ts`).
+- Numeric settings in `config.ts` (`PORT`, `SESSION_TTL_MS`, the cleanup job's two, `EMAIL_VERIFICATION_TTL_MS`) are read by `numberSetting`, which uses `Number()` and treats a blank value as not set (`0` is a value). Never `parseInt`: `parseInt('7d')` is `7`, a session that lasts 7 milliseconds, with nothing at startup to say so, while `Number('7d')` is `NaN`, which the startup check of the feature that owns the setting refuses (`checkSessionSettings`, `checkEmailVerificationSettings`, `startEmptyChatRoomCleanup`; `listen` refuses a `NaN` `PORT`). A new setting gets a check like those, and a case in `config.unit.test.ts`.
+- Times are JS `Date`s handed to Prisma (`expiresAt: { gt: now }`), never the database's `now()` in SQL: the `timestamp` columns hold UTC without a zone, so `now()` is off by the session's UTC offset wherever the database is not in UTC. A time that the code later compares with the JS clock is set explicitly instead of left to a column default. The `@default(now())` columns are filled by Prisma Client with the JS clock (checked on `email_verification_tokens.created_at` with the database in UTC+7), and the tests run in UTC+7 so a mistake here fails them (see "Test database setup").
 - Each test file covers what its part of the code owns: an endpoint file covers that endpoint's business rules plus one bad-input case to prove the validator is wired in; the full list of bad inputs is a table in `chatRoom.validator.unit.test.ts` (no database); `chatRoom.permissions.test.ts` covers the shared guards once per route, so a new route should be added to its lists. Keep a new test only if it guards a rule that is not already covered by another one.
 - `npm run build` runs `tsc` and then `scripts/fix-esm-imports.mjs`. The source keeps extensionless imports, but Node's ESM loader needs real file names, so the script rewrites the relative imports in `dist/` (`./app` becomes `./app.js`, a folder import becomes `./dir/index.js`) and fails the build if an import points at nothing. `npm start` runs `node dist/server.js`.
 
@@ -1132,9 +1189,9 @@ The backend follows a layered request flow:
 
 2.**Authentication**
 
-- Account signup and login validate the incoming body in their controllers before calling the account services.
+- Account signup and login validate the incoming body in their controllers before calling the account services. Signup also makes the verification token (`newVerificationToken`), stores it with the user, and mails the link after it has responded.
 - Login verifies the password, then `createSession` (`session.service.ts`) deletes the user's expired sessions and stores a new one (with a random 256-bit id from `generateToken`), and `setSessionCookie` (`middlewares/SessionCookie.ts`) sends the session cookie in the response.
-- Protected chat-room and friend routes run `requireUserAuth`, which calls `getSessionUser` in `middlewares/SessionCookie.ts`: it reads the session cookie, resolves it through `findSessionUser` in `session.service.ts`, clears the cookie when the session has expired, and returns the user, which `requireUserAuth` attaches to `req.user`.
+- Protected chat-room and friend routes run `requireUserAuth`, which calls `getSessionUser` in `middlewares/SessionCookie.ts`: it reads the session cookie, resolves it through `findSessionUser` in `session.service.ts`, clears the cookie when the session has expired, and returns the user (the public shape, with `emailVerified`), which `requireUserAuth` attaches to `req.user`.
 - `/account/me` uses the same `getSessionUser` lookup but returns `user: null` when no valid session exists. Logout deletes the session when present and clears the cookie.
 
 3.**Route-level authorization**
@@ -1151,7 +1208,7 @@ The backend follows a layered request flow:
 5.**Service and database flow**
 
 - Services contain all database operations and use the shared Prisma client from `src/lib/prisma`. They do not import Express.
-- Account services create and find users, update a profile, change a password (`changePassword` also deletes the other sessions in the same transaction) and delete an account (`deleteAccount` locks the rooms the user is in, refuses while the user is the only admin of a group room that still has other members, and leaves the rest to the foreign keys). The session service creates, reads, and deletes sessions (rows only; cookies are handled in `middlewares/SessionCookie.ts`).
+- Account services create and find users, update a profile, change a password (`changePassword` also deletes the other sessions in the same transaction) and delete an account (`deleteAccount` locks the rooms the user is in, refuses while the user is the only admin of a group room that still has other members, and leaves the rest to the foreign keys). The session service creates, reads, and deletes sessions (rows only; cookies are handled in `middlewares/SessionCookie.ts`). The email verification service makes a token, replaces the account's link (`issueEmailVerification`, under a row lock) and uses a link (`verifyEmailToken`); it returns the token to mail and never sends it, the controller does that after responding.
 - Chat-room services check with `findNonFriendIds` (from the friend service) that everyone being added is a friend of the requester, create rooms and memberships in a Prisma transaction, load direct and group rooms, retrieve the latest message that has not been deleted and the requester's unread count for room summaries, and update or delete rooms.
 - Direct-room responses derive the room name and avatar from the other member; group-room responses use the room's own name and avatar fields.
 - Friend services look up users and the friend-list and pending-request rows that connect them to the requester. Other users are returned as `{ id, name, avatarUrl }` only, never with `email` or `tel`.
@@ -1183,7 +1240,7 @@ HTTP request
 1. Implement real-time communication with Socket.io (see "Real-time events")
 2. Build the React frontend and integrate with TanStack Query
 3. Add authentication-aware UI states and protected routes
-4. Add deployment configuration and production hardening, including email verification and the password reset flow, and the Resend account and verified domain that production mail needs (see "Email delivery", "Email verification (planned)" and "Password reset (planned)")
+4. Add deployment configuration and production hardening, including the password reset flow, and the Resend account and verified domain that production mail needs (see "Email delivery", "Email verification (implemented)" and "Password reset (planned)")
 
 ## Notes
 

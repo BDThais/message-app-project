@@ -61,13 +61,26 @@ describe(`POST ${loginRoute}`, () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      user: { id: user.id, name: user.name, email: user.email, tel: user.tel, avatarUrl: null },
+      user: { id: user.id, name: user.name, email: user.email, tel: user.tel, avatarUrl: null, emailVerified: false },
     });
     expect(res.body.user.passwordHash).toBeUndefined();
     expect(res.headers['set-cookie']).toEqual(
       expect.arrayContaining([expect.stringContaining(`${config.SESSION_COOKIE}=`)])
     );
     expect(await prisma.session.count({ where: { userId: user.id } })).toBe(1);
+  });
+
+  it('reports a verified address as emailVerified: true, and never sends the timestamp', async () => {
+    const user = await createUser();
+    await prisma.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } });
+
+    const res = await request(app)
+      .post(loginRoute)
+      .send({ email: userData.email, password: userData.password });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.emailVerified).toBe(true);
+    expect(res.body.user).not.toHaveProperty('emailVerifiedAt');
   });
 
   it('uses 32 random bytes as the session id, and that id is the cookie value', async () => {
@@ -104,9 +117,23 @@ describe(`GET ${meRoute}`, () => {
         email: userData.email,
         tel: userData.tel,
         avatarUrl: null,
+        emailVerified: false,
         id: expect.any(Number),
       },
     });
+  });
+
+  it('reports a verified address as emailVerified: true, and never sends the timestamp', async () => {
+    const user = await createUser();
+    await prisma.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } });
+    const session = await createSessionRow(user.id, new Date(Date.now() + 60_000));
+
+    const res = await request(app)
+      .get(meRoute)
+      .set('Cookie', `${config.SESSION_COOKIE}=${session.id}`);
+
+    expect(res.body.user.emailVerified).toBe(true);
+    expect(res.body.user).not.toHaveProperty('emailVerifiedAt');
   });
 
   it('returns { user: null } when there is no valid session', async () => {

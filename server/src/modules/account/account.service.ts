@@ -13,22 +13,78 @@ export function findUserByEmail(email: string) {
 	return prisma.user.findUnique({ where: { email } });
 }
 
+/**
+ * Creates the user. With `emailVerification` the token row for the user's
+ * address is created in the same statement (a nested create), so an account
+ * never exists without the link that was mailed for it, and a link never
+ * exists without its account. Only the hash of the token is stored.
+ */
 export function createUser(data: {
 	name: string;
 	email: string;
 	tel: string;
 	passwordHash: string;
+	emailVerification?: { tokenHash: string; createdAt: Date; expiresAt: Date };
 }) {
-	return prisma.user.create({ data });
+	const { emailVerification, ...fields } = data;
+
+	return prisma.user.create({
+		data: {
+			...fields,
+			...(emailVerification && {
+				emailVerificationToken: {
+					create: {
+						email: fields.email,
+						tokenHash: emailVerification.tokenHash,
+						createdAt: emailVerification.createdAt,
+						expiresAt: emailVerification.expiresAt,
+					},
+				},
+			}),
+		},
+	});
 }
 
-// The public shape of a user, as returned by login, GET /account/me and
-// PATCH /account/me. Never includes passwordHash.
-const userSelect = { id: true, name: true, email: true, tel: true, avatarUrl: true } as const;
+// What is read from the database to build the public shape of a user (see
+// toPublicUser). Never includes passwordHash.
+export const userSelect = { id: true, name: true, email: true, tel: true, avatarUrl: true, emailVerifiedAt: true } as const;
+
+/**
+ * The public shape of a user, as returned by login, GET /account/me and
+ * PATCH /account/me, and as kept in `req.user`. The timestamp of the
+ * verification stays on the server: clients only get whether the address is
+ * verified.
+ */
+export type PublicUser = {
+	id: number;
+	name: string;
+	email: string;
+	tel: string;
+	avatarUrl: string | null;
+	emailVerified: boolean;
+};
+
+export function toPublicUser(user: {
+	id: number;
+	name: string;
+	email: string;
+	tel: string;
+	avatarUrl: string | null;
+	emailVerifiedAt: Date | null;
+}): PublicUser {
+	return {
+		id: user.id,
+		name: user.name,
+		email: user.email,
+		tel: user.tel,
+		avatarUrl: user.avatarUrl,
+		emailVerified: user.emailVerifiedAt !== null,
+	};
+}
 
 /** Updates the profile fields that were sent and returns the user. */
-export function updateUserProfile(userId: number, data: { name?: string; avatarUrl?: string | null }) {
-	return prisma.user.update({ where: { id: userId }, data, select: userSelect });
+export async function updateUserProfile(userId: number, data: { name?: string; avatarUrl?: string | null }): Promise<PublicUser> {
+	return toPublicUser(await prisma.user.update({ where: { id: userId }, data, select: userSelect }));
 }
 
 /** The stored password hash, or null when the account no longer exists. */

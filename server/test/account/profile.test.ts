@@ -33,7 +33,7 @@ describe(`PATCH ${route}`, () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      user: { id: alice.id, name: 'Alice2', email: alice.email, tel: alice.tel, avatarUrl: null },
+      user: { id: alice.id, name: 'Alice2', email: alice.email, tel: alice.tel, avatarUrl: null, emailVerified: false },
     });
     expect(res.body.user.passwordHash).toBeUndefined();
     expect(await prisma.user.findUnique({ where: { id: alice.id } })).toEqual({ ...alice, name: 'Alice2' });
@@ -49,13 +49,24 @@ describe(`PATCH ${route}`, () => {
 
     expect(set.status).toBe(200);
     expect(set.body.user).toMatchObject({ name: 'Alice', avatarUrl });
-    expect(me.body.user).toEqual({ id: alice.id, name: 'Alice', email: alice.email, tel: alice.tel, avatarUrl });
+    expect(me.body.user).toEqual({ id: alice.id, name: 'Alice', email: alice.email, tel: alice.tel, avatarUrl, emailVerified: false });
 
     const cleared = await agent.patch(route).send({ avatar_url: null });
 
     expect(cleared.status).toBe(200);
     expect(cleared.body.user.avatarUrl).toBeNull();
     expect((await prisma.user.findUnique({ where: { id: alice.id } }))!.avatarUrl).toBeNull();
+  });
+
+  it('reports a verified address as emailVerified: true, and never sends the timestamp', async () => {
+    const alice = await createUser('Alice');
+    await prisma.user.update({ where: { id: alice.id }, data: { emailVerifiedAt: new Date() } });
+    const agent = await loginAs(alice);
+
+    const res = await agent.patch(route).send({ name: 'Alice2' });
+
+    expect(res.body.user.emailVerified).toBe(true);
+    expect(res.body.user).not.toHaveProperty('emailVerifiedAt');
   });
 
   it('only changes the field that was sent', async () => {
