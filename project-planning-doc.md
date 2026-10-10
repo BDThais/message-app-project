@@ -56,6 +56,8 @@ Completed:
 - DELETE /account/me
 - POST /account/email/verify
 - POST /account/email/verification
+- POST /account/password/reset-request
+- POST /account/password/reset
 - POST /chat
 - GET /chat
 - GET /chat/:chatid
@@ -84,13 +86,14 @@ Completed:
 - Automatic cleanup of chat rooms that stay empty (see "Empty chat room cleanup")
 - Email delivery: the `Mailer` in `src/lib/mailer.ts` with a console transport and a Resend transport, chosen by `MAIL_TRANSPORT` and checked when the server starts (see "Email delivery").
 - Email verification (see "Email verification (implemented)"): a link is mailed at signup and on request, `POST /account/email/verify` uses it, and the user shape carries `emailVerified`. It is the first feature that sends mail
-- Integration tests for the account endpoints (including profile update, password change, account deletion and email verification), the chat-room endpoints (including the `lastMessage` and `unreadCount` of the room summaries), the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the reject/cancel-friend-request endpoint, the list-friends endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
+- Password reset (see "Password reset (implemented)"): a signed-out user asks for a link by email (`POST /account/password/reset-request`), opens it, and sets a new password (`POST /account/password/reset`). Only verified addresses get a link. It is the second feature that sends mail
+- Integration tests for the account endpoints (including profile update, password change, account deletion, email verification and password reset), the chat-room endpoints (including the `lastMessage` and `unreadCount` of the room summaries), the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the reject/cancel-friend-request endpoint, the list-friends endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
 - Unit tests for the mailer (the startup checks of the mail settings, the console transport, and the Resend transport run through the real Resend SDK with a stubbed `fetch`), and a test that guards the mail outbox wiring of the test setup
 - Unit tests for email verification (the settings checks, the link and the send helper, the body validator), for `hashToken`, and for how `EMAIL_VERIFICATION_TTL_MS` is read
+- Unit tests for the password reset (the settings checks, the two mails and their send helpers, the two body validators), for the key of the per-email limiter, and for how `PASSWORD_RESET_TTL_MS` is read
 
 Still planned or not yet implemented:
 
-- Password reset by email (see "Password reset (planned)"); the verified addresses and the mailer it needs are in place (see "Email verification (implemented)" and "Email delivery")
 - Changing the email address (optional, see "Changing the address" under "Email verification (implemented)")
 - Real-time socket communication
 - Frontend application screens and state management
@@ -286,6 +289,24 @@ POST /account/email/verification (implemented)
 - `429 { "error": "Please wait a minute before asking for another email" }` while the stored link is younger than 60 seconds; nothing is sent and the stored link stays valid
 - responds `204` with no body, and the mail goes out after the response
 - rate limited to 5 requests per hour per user (`429 { "error": "Too many verification emails requested, try again later" }`). `emailVerificationRequestLimiter` is keyed by user id, so it is mounted after `requireUserAuth`; every request that gets past it counts, including ones answered with a `409` or the cooldown's `429`
+
+POST /account/password/reset-request (implemented)
+
+- Asks for a password reset link by email. No session is needed: whoever asks has forgotten the password
+- incoming body: `{ email }`, a string accepted by `validator.isEmail` (`400 { "error": "Email is required" }` when it is missing or not a non-empty string, `400 { "error": "Invalid email format" }` when it is not an address). Validation lives in `passwordReset.validator.ts`
+- answers `202 { "message": "If an account exists for that email, a reset link is on its way" }` for every well-formed email, whether or not an account has it, and whatever else happens below, so the answer cannot be used to find out who is registered. (Signup still answers `409` for a registered email, so registration is not hidden as long as that stays.)
+- a verified account gets a new reset link, which replaces the old one. An unverified account gets the verification mail instead (under the verification cooldown), because a reset link goes only to an address someone has proven. An unknown address, or an account whose stored link is younger than 60 seconds, gets nothing. The address is matched exactly, like login
+- the database work is finished before the answer and the mail goes out after it (a failed or slow mail changes nothing for the caller)
+- two limiters, in this order: per IP (10 per 15 minutes, `429 { "error": "Too many attempts, try again later" }`) and per email (3 per hour, `429 { "error": "Too many password reset requests, try again later" }`). Every request counts, known email or not and valid body or not, so a `429` reveals nothing either. The per-email key is the lower-cased address from the body, or the client's IP when the body has no usable address (not a string, or longer than 254 characters); keys have an `email:` or `ip:` prefix, so an address that looks like an IP cannot use up that IP's budget. The limiters live in `modules/account/accountRateLimit.middleware.ts`
+- how links are made, stored and mailed is under "Password reset (implemented)"
+
+POST /account/password/reset (implemented)
+
+- Sets a new password with the token from a reset mail. No session is needed: the token is the credential, and the link is often opened on another device
+- incoming body: `{ token, new_password }`, both non-empty strings (`400 { "error": "Token and new password are required" }` otherwise). `new_password` follows the signup password rules (`400` with the same messages as signup) and is checked first, so a weak password does not use up the link. Validation lives in `passwordReset.validator.ts`
+- `400 { "error": "This reset link is invalid or has expired" }` for a token that is unknown, already used, expired or replaced by a newer link: one message for all of them
+- responds `204` with no body. It does not sign the user in: they log in with the new password. Every session of the account is deleted (expired ones too), a link works once, even for two simultaneous requests, and a "your password was changed" mail goes to the account's address after the response
+- rate limited per IP, 10 requests per 15 minutes (`429 { "error": "Too many attempts, try again later" }` afterwards). `passwordResetLimiter` lives in `modules/account/accountRateLimit.middleware.ts`; every request counts, including ones answered with a `400`
 
 ### Room, message and friend endpoints (implemented)
 
@@ -879,7 +900,7 @@ Friendship is required to start a conversation. Before this rule `POST /chat` an
 
 ### Email delivery
 
-Shared by email verification and password reset. The mailer, its settings and the test outbox are implemented; email verification is the first feature that sends mail (its mail is composed in `modules/account/emailVerification.mail.ts`), and password reset will be the second.
+Shared by email verification and password reset. The mailer, its settings and the test outbox are implemented; email verification is the first feature that sends mail (its mail is composed in `modules/account/emailVerification.mail.ts`), and password reset is the second (`modules/account/passwordReset.mail.ts`).
 
 - **Provider: Resend**, through its official `resend` package (`new Resend(apiKey).emails.send({ from, to, subject, text })`). It is one API key and one HTTPS call, with no SMTP host, port or TLS settings, and no trouble on hosts that block outbound SMTP. Its free plan (3,000 emails a month, at most 100 a day, one domain, per Resend's pricing page when this was written) is far above what a personal project sends. Nodemailer was the alternative, but it is only a library for talking SMTP, so choosing it would still mean choosing an SMTP provider; the `Mailer` interface below keeps the provider replaceable (a Nodemailer implementation would be one more file).
 - **What it costs:** sending to real users needs a domain you own, verified in Resend by adding the DNS records it lists (SPF and DKIM). Until then `onboarding@resend.dev` can only deliver to the address of the Resend account itself and answers `403` for anyone else, so real emails can be tried end to end only with your own address.
@@ -920,7 +941,7 @@ All the times in the service are JS `Date`s handed to Prisma (the same as everyw
 
 What verification gates:
 
-- Required: password reset sends only to verified addresses (see "Password reset (planned)").
+- Required: password reset sends only to verified addresses (see "Password reset (implemented)").
 - Not gated: login, chat and friends. Blocking login until verified would lock out someone who mistyped the address, who can never receive the link and has no way yet to change the address.
 - Optional later: a `requireVerifiedEmail` middleware on the actions spammers want (for example `POST /friend/requests` and `POST /chat`), so throwaway accounts are less useful. Best added once the frontend can prompt for verification.
 
@@ -941,42 +962,57 @@ Not covered, because it needs a real key and a verified domain: an actual delive
 
 The two frontend pieces (the banner with a resend button, and the page that reads the fragment and posts it) belong to the frontend milestone. Until then the link is tried with the token from the console mailer's log.
 
-### Password reset (planned)
+### Password reset (implemented)
 
-A signed-out user who forgot their password asks for a link by email, opens it, and sets a new password. The plan is two endpoints and one table, on top of the mailer from "Email delivery" and the verified addresses from "Email verification (implemented)". Nothing here is implemented yet.
+A signed-out user who forgot their password asks for a link by email, opens it, and sets a new password. It is two endpoints and one table, on top of the mailer from "Email delivery" and the verified addresses from "Email verification (implemented)". The two endpoints are specified under "Auth endpoints (implemented)" (`POST /account/password/reset-request` and `POST /account/password/reset`); this section is the design behind them. The code is `modules/account/passwordReset.service.ts` (the database work), `passwordReset.mail.ts` (the settings check and the two mails) and `passwordReset.validator.ts`; the two handlers are in `account.controller.ts`.
 
 Decisions:
 
 - **Only verified addresses get a reset link.** A reset link takes over the account, so it goes only to accounts with `email_verified_at` set. For an unverified account, `reset-request` sends the verification email instead (under the verification cooldown) and gives the same `202`, so someone who never verified is not locked out: they verify, then ask again. This makes email verification a prerequisite, and it is built.
 - **Where the link points.** `PASSWORD_RESET_URL` is the frontend page (`http://localhost:5173/reset-password` in development) and the token is appended as a URL fragment, `...#token=...`, for the reasons given under email verification. The frontend does not exist yet, so until it does the endpoints are exercised with the token from the logged mail.
-- **Email matching is exact**, like login (`findUnique({ where: { email } })`, and signup does not lowercase). Asking for `john@x.com` when the account was created as `John@x.com` sends nothing. Normalizing the case at signup and login is a separate fix, with a migration for the addresses already stored.
+- **Email matching is exact**, like login (`email = ${email}`, and signup does not lowercase). Asking for `john@x.com` when the account was created as `John@x.com` sends nothing. Normalizing the case at signup and login is a separate fix, with a migration for the addresses already stored. (The per-email limiter does lower-case its key, which only makes it stricter.)
+- **The answer never depends on the account.** `reset-request` finishes all its database work, then answers `202`, then sends the mail, so neither the status, the body nor a failed or slow mail shows whether an account exists. Known limit: an address with an account does one more write before answering than an unknown one, so the answer is a few milliseconds slower; nothing pads that.
 
-Schema: one new model, `PasswordResetToken`, shaped like `EmailVerificationToken` without the `email` column: `userId` (primary key, cascade on delete), `tokenHash` (unique), `expiresAt` and `createdAt`. An account has at most one outstanding link: asking again replaces it, so the table never grows past one row per user and needs no cleanup job.
+Database (migration `20261008120000_add_password_reset`, written by hand like the verification one, because the schema engine is not available everywhere): one new table, `password_reset_tokens`, shaped like `email_verification_tokens` without the `email` column: `user_id` (primary key, deleted with the user), `token_hash` (unique), `expires_at` and `created_at`. An account has at most one outstanding link: asking again replaces it, so the table never grows past one row per user and needs no cleanup job (an expired row stays until it is replaced). `test/account/passwordResetToken.schema.test.ts` guards those rules.
 
-- the token is `generateToken()` and only its SHA-256 is stored. Time to live: `PASSWORD_RESET_TTL_MS`, default 30 minutes. New setting: `PASSWORD_RESET_URL`
+- the token is `generateToken()` and only its SHA-256 is stored (`hashToken`). Time to live: `PASSWORD_RESET_TTL_MS`
 - services never send mail themselves: they return what is needed and the controller sends it after responding
 
-`POST /account/password/reset-request` (signed out)
+Settings in `config.ts`, checked when the server starts by `checkPasswordResetSettings` (called from `server.ts`, like the other settings checks); a bad one stops the server and the message names it:
 
-- incoming body: `{ email }`, a string accepted by `validator.isEmail`, otherwise `400`
-- answers `202 { "message": "If an account exists for that email, a reset link is on its way" }` for every well-formed email, whether or not an account has it, so this endpoint cannot be used to find out who is registered. (Signup still answers `409` for a registered email, so registration is not hidden as long as that stays.)
-- for a known, verified email: store a new token in place of the old one (an upsert on `userId`), respond, and only then send the mail
-- if the account's token was created less than 60 seconds ago, nothing is stored or sent and the answer is the same `202`: it stops anyone from filling a victim's inbox or from replacing their link over and over
-- two limiters in `accountRateLimit.middleware.ts`, both answering `429 { "error": ... }`: per IP (10 per 15 minutes) and per email (3 per hour, keyed on the lower-cased email from the body, and on the IP when there is none). Both count every request, known email or not, so a `429` reveals nothing either
+- `PASSWORD_RESET_TTL_MS`: how long a link works. A whole number of milliseconds from 1 to 24 hours, default 30 minutes (`1800000`). The ceiling is lower than the verification link's year because a reset link takes over the account: a longer lifetime is a typo in the unit. Read with `Number`, so `30m` is `NaN` and stops the server.
+- `PASSWORD_RESET_URL`: the frontend page the link opens, an absolute `http` or `https` URL with no `#` in it. Default `http://localhost:5173/reset-password` outside production; required when `NODE_ENV=production`. The URL rules are shared with email verification (`checkFrontendPageUrl` and `buildTokenLink` in `src/lib/frontendLink.ts`), so the two cannot drift apart.
 
-`POST /account/password/reset` (signed out)
+`POST /account/password/reset-request` (`issuePasswordReset`):
 
-- incoming body: `{ token, new_password }`, both non-empty strings. `new_password` follows the signup rules (`validatePassword`) and is checked first, so a weak password is a `400` that does not use up the link
-- claims the token and changes the password in one transaction: delete the row whose `token_hash` matches while `expires_at` is still in the future (`deleteMany` with `expiresAt: { gt: now }`, `now` a JS `Date` and not the database's `now()`, for the reason given under "Email verification (implemented)"; a count of `1` means this request claimed the token), then store the new hash and delete all of the user's sessions (expired ones too). Only one of two simultaneous requests with the same token can delete the row, so a link works once, and a failure rolls everything back, so the link survives it
-- `400 { "error": "This reset link is invalid or has expired" }` for an unknown, used or expired token, one message for all three
-- responds `204` and does not sign the user in: they log in with the new password, so `loginLimiter` stays in the path. Afterwards a "your password was changed" mail goes to the account's address, so a takeover does not go unnoticed
-- rate limited per IP (10 per 15 minutes)
+1. One transaction. It locks the account's row (`SELECT ... FOR UPDATE`, found by the exact address), as `issueEmailVerification` does: without the lock two simultaneous requests could both find the stored link older than 60 seconds, and both send a mail. With it the second waits, sees the link the first one stored, and gets nothing.
+2. An unverified account gets the verification link instead, stored by `issueEmailVerification` inside the same transaction (it takes the optional transaction as its last argument), so the account cannot become verified between the check and the store. Its cooldown is the verification one.
+3. For a verified account, a stored link younger than 60 seconds means nothing is stored or sent; otherwise a new token replaces the old one (an upsert on `user_id`, which also resets `created_at`, the start of the next cooldown).
+4. The result tells the controller what to mail (`reset_link`, `verification_link`) or that there is nothing to send (`unknown_email`, `cooldown`). The controller answers the same `202` for all four.
 
-Changes to existing code: `changePassword` also deletes the account's reset token in its transaction (a link asked for earlier must not outlive a deliberate password change). `deleteAccount` needs nothing, the token goes with the user.
+`POST /account/password/reset` (`resetPasswordWithToken`):
 
-Tests, once built (with the in-memory outbox): both endpoints answer the same for a known and an unknown email and only a verified one gets exactly one reset mail; an unverified account gets the verification mail instead; the mailed token works once, not twice (including two requests at the same moment, called on the service), not after it expires and not after a newer one replaced it; a weak password is a `400` and the token still works afterwards; a reset signs out every session and the new password logs in while the old one does not; `changePassword` kills an outstanding token; the cooldown and the limiters; a table of bad bodies in the validators' unit tests.
+1. The controller validates the body, including the password rules, and hashes the new password before it looks at the token, so a weak password does not use up the link and an unknown token takes as long to answer as a good one.
+2. One transaction: find the row by the token's hash; lock the user's row; delete the token row while `expires_at` is still in the future (`deleteMany` with `expiresAt: { gt: now }`, `now` a JS `Date` and not the database's `now()`, for the reason given under "Email verification (implemented)"; a count of `1` means this request claimed the token); store the new hash; delete all of the user's sessions (expired ones too). Of two simultaneous requests with the same token only one can claim the row (the other waits for the user row, then finds the token gone), so a link works once, and a failure rolls everything back, so the link survives it.
+3. Lock order: the user row first, then the token row, in both services. An account deletion locks the user row and then cascades to the token row, so a reset that took them the other way round could deadlock with a deletion of the same account.
+4. The answer is `204`, and the user is not signed in: they log in with the new password, so `loginLimiter` stays in the path. After the response a "your password was changed" mail goes to the account's address, so a takeover does not go unnoticed. It has no link in it.
 
-Build order: email delivery (done); email verification (done); then the reset schema and migration, service and validators, controller, routes and limiters, tests, and this document and the README. The two frontend pages (a form that asks for the email and shows the `202` message, and a page that reads the fragment, asks for the new password and sends the user to the login) belong to the frontend milestone. Out of scope: reset by SMS through `tel`, security questions, locking an account after failed logins.
+Mails are plain text, one sentence each: `Reset your password` carries the link `PASSWORD_RESET_URL#token=...`, and `Your password was changed` carries nothing secret. Both send helpers never reject (see "Email delivery"): a failed send is logged without the address or the token and the mail is lost.
+
+Changes to existing code: `changePassword` also deletes the account's reset token in its transaction (a link asked for earlier must not outlive a deliberate password change, and it only does so when the change really happens). `deleteAccount` needs nothing, the token goes with the user. `issueEmailVerification` takes an optional transaction, and the verification mail module uses the shared URL helper.
+
+Tests (all with the in-memory outbox):
+
+- `passwordReset.service.test.ts`: a link works until the moment it expires and not at that moment, once even for two simultaneous requests (tried on eight accounts, because two requests do not always overlap), and not after a newer one replaced it; the cooldown lasts exactly 60 seconds; two simultaneous requests issue one link; an unverified account gets the verification link and its cooldown; exact matching; a reset signs out every session, expired ones included, and touches nobody else; a failing step rolls back and the link survives.
+- `passwordReset.lockOrder.test.ts`: a reset that overlaps a deletion of the same account does not deadlock (the overlap is built by hand with a second connection).
+- `passwordResetRequest.test.ts` and `passwordResetConfirm.test.ts` for the two endpoints (the answer is the same for a known and an unknown email, and only a verified one gets exactly one reset mail; an unverified account gets the verification mail instead; the cooldown; a weak password is a `400` and the link still works afterwards; a reset signs out every session without signing in, the new password logs in and the old one does not; the notice mail; a failing or hanging mailer). Each stays under the per-IP limiter's 10 requests.
+- `passwordResetRequestIpLimiter.test.ts`, `passwordResetRequestLimiter.test.ts` (per email) and `passwordResetLimiter.test.ts`, one file each because each uses up a budget.
+- `password.test.ts`: `changePassword` kills an outstanding link, and only that account's, and only when the change happens.
+- `passwordReset.validator.unit.test.ts` (tables of bad bodies), `passwordReset.mail.unit.test.ts` (the settings checks and the two send helpers), `accountRateLimit.unit.test.ts` (the key of the per-email limiter), and `PASSWORD_RESET_TTL_MS` in `config.unit.test.ts`.
+
+Not covered, because it needs a real key and a verified domain: an actual delivery (see "Email delivery").
+
+The two frontend pages (a form that asks for the email and shows the `202` message, and a page that reads the fragment, asks for the new password and sends the user to the login) belong to the frontend milestone. Out of scope: reset by SMS through `tel`, security questions, locking an account after failed logins.
 
 ### Real-time events (planned)
 
@@ -1025,6 +1061,7 @@ message-app/
     │   │   └── config.ts            // every number is read by numberSetting: Number(), blank = not set, never parseInt
     │   ├── lib/
     │   │   ├── constants.ts
+    │   │   ├── frontendLink.ts      // checkFrontendPageUrl (startup check of a setting that holds a frontend page address) and buildTokenLink (the page plus `#token=...`); used by the verification and reset mail modules
     │   │   ├── mailer.ts            // Mailer interface; console and Resend mailers; createMailerFromConfig, getMailer / setMailer
     │   │   ├── randomToken.ts       // generateToken: 32 random bytes as base64url (session ids, emailed tokens); hashToken: its SHA-256, the only form of an emailed token that is stored
     │   │   ├── parseIdParam.ts      // numeric URL param -> ID or null (used by the chat and friend validators)
@@ -1038,13 +1075,16 @@ message-app/
     │   └── modules/
     │       ├── account/
     │       │   ├── account.routes.ts
-    │       │   ├── accountRateLimit.middleware.ts   // loginLimiter and emailVerifyLimiter (per IP), passwordCheckLimiter (per user; POST /account/password and DELETE /account/me share it), emailVerificationRequestLimiter (per user)
+    │       │   ├── accountRateLimit.middleware.ts   // loginLimiter, emailVerifyLimiter, passwordResetRequestIpLimiter and passwordResetLimiter (per IP), passwordCheckLimiter (per user; POST /account/password and DELETE /account/me share it), emailVerificationRequestLimiter (per user), passwordResetRequestEmailLimiter (per email; its key is passwordResetEmailKey)
     │       │   ├── account.controller.ts
     │       │   ├── account.service.ts
     │       │   ├── session.service.ts   // session database operations; checkSessionSettings (SESSION_TTL_MS, checked at startup)
     │       │   ├── emailVerification.service.ts   // newVerificationToken, issueEmailVerification (resend), verifyEmailToken
     │       │   ├── emailVerification.mail.ts      // settings check, the link, sendVerificationEmail (never rejects)
     │       │   ├── emailVerification.validator.ts // POST /account/email/verify body
+    │       │   ├── passwordReset.service.ts       // newPasswordResetToken, issuePasswordReset (reset-request, under a row lock), resetPasswordWithToken
+    │       │   ├── passwordReset.mail.ts          // settings check, sendPasswordResetEmail and sendPasswordChangedEmail (never reject)
+    │       │   ├── passwordReset.validator.ts     // POST /account/password/reset-request and /reset bodies
     │       │   ├── login.validator.ts
     │       │   ├── deleteAccount.validator.ts   // DELETE /account/me body
     │       │   ├── password.validator.ts   // POST /account/password body
@@ -1073,6 +1113,7 @@ message-app/
         │   ├── chatRooms.ts                  // createGroupRoom, createDirectRoom, promoteToAdmin, memberIdsOf
         │   ├── emailVerification.ts          // tokenFromMail (the token in a mailed link), createVerificationLink (stores a link in a chosen state)
         │   ├── friends.ts                    // makeFriends, createFriendRequest (optional createdAt)
+        │   ├── passwordReset.ts              // createVerifiedUser (optionally with a real password), createResetLink (stores a link in a chosen state)
         │   └── mailer.ts                     // InMemoryMailer and the shared `outbox` (installed as the app's mailer and emptied before each test by setup.ts)
         ├── account/
         │   ├── session.test.ts               // login, me, logout (and emailVerified in their bodies)
@@ -1084,12 +1125,23 @@ message-app/
         │   ├── emailVerify.test.ts           // POST /account/email/verify (keep it under the IP limiter's 10 requests)
         │   ├── emailVerifyLimiter.test.ts    // its per-IP limiter, in a file of its own because the test uses the whole budget
         │   ├── emailVerificationResend.test.ts   // POST /account/email/verification
+        │   ├── passwordResetToken.schema.test.ts   // the hand-written migration's rules: one token per user, unique hash, deleted with the user
+        │   ├── passwordReset.service.test.ts       // expiry, one use, cooldown, row lock, rollback: the service called directly, with the races
+        │   ├── passwordReset.lockOrder.test.ts     // a reset that overlaps a deletion of the same account does not deadlock
+        │   ├── passwordResetRequest.test.ts        // POST /account/password/reset-request (keep it under the IP limiter's 10 requests)
+        │   ├── passwordResetConfirm.test.ts        // POST /account/password/reset (keep it under 10 requests, and under loginLimiter's 10 logins)
+        │   ├── passwordResetRequestIpLimiter.test.ts   // per-IP limiter of reset-request, in a file of its own
+        │   ├── passwordResetRequestLimiter.test.ts     // per-email limiter of reset-request, in a file of its own
+        │   ├── passwordResetLimiter.test.ts        // limiter of POST /account/password/reset, in a file of its own
         │   ├── deleteAccount.test.ts         // DELETE /account/me, and deleteAccount's stale-hash guard and room lock
         │   ├── profile.validator.unit.test.ts
         │   ├── deleteAccount.validator.unit.test.ts
         │   ├── password.validator.unit.test.ts
         │   ├── emailVerification.validator.unit.test.ts
         │   ├── emailVerification.mail.unit.test.ts   // settings checks, link, send helper (no database)
+        │   ├── passwordReset.validator.unit.test.ts
+        │   ├── passwordReset.mail.unit.test.ts       // settings checks, the two send helpers (no database)
+        │   ├── accountRateLimit.unit.test.ts         // passwordResetEmailKey (no database)
         │   └── session.settings.unit.test.ts         // checkSessionSettings (no database)
         ├── config/                           // mirrors src/config/
         │   └── config.unit.test.ts           // every numeric setting: the number that was set, blank = default, "7d" and the like = NaN
@@ -1140,10 +1192,10 @@ Conventions:
 - Error bodies: every `4xx` and `5xx` response has the shape `{ "error": "<text>" }`, whichever layer sends it (controller, feature middleware, rate limiter, `errorHandler`). `message` is not used for errors because it is already a success-body key for a chat message (`POST` and `PATCH /chat/:chatid/message` return `{ "message": { ... } }`), so a client could otherwise get a string and an object under the same key from one endpoint. Validators keep their own internal `{ valid: false, message }` result; the controller puts that text under `error`. A success body that only confirms an action (`201 { "message": "Account created successfully" }` from signup) is not an error body and is unchanged.
 - Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.
 - Background jobs live in the folder of the feature they belong to and are started from `server.ts`, never from `app.ts`, so tests that import the app do not start timers.
-- Mail goes out through `getMailer()` from `src/lib/mailer.ts` and nowhere else: a feature never imports a mail provider's SDK, and services never send mail themselves. The real mailer is installed from `server.ts`, never `app.ts`; the tests install the outbox in `test/setup.ts`. A feature's mail (subject, text, link, and the send helper that logs a failure instead of throwing) is composed in its own `<feature>.mail.ts`, for example `emailVerification.mail.ts`.
+- Mail goes out through `getMailer()` from `src/lib/mailer.ts` and nowhere else: a feature never imports a mail provider's SDK, and services never send mail themselves. The real mailer is installed from `server.ts`, never `app.ts`; the tests install the outbox in `test/setup.ts`. A feature's mail (subject, text, link, and the send helper that logs a failure instead of throwing) is composed in its own `<feature>.mail.ts`, for example `emailVerification.mail.ts` and `passwordReset.mail.ts`.
 - Tests live in `server/test/`, in a folder per feature that mirrors `src/modules/` (`test/account/`, `test/chatrooms/`, `test/friends/`; `test/middlewares/` mirrors `src/middlewares/`, `test/lib/` mirrors `src/lib/` and `test/config/` mirrors `src/config/`), and import from `../../src/...`. Shared fixtures live in `test/helpers/`. `loginAs(user)` creates the session row and sends its cookie directly, so no test outside `test/account/` depends on `/account/login` or its rate limiter.
-- A rate limiter keeps its count for as long as its module is loaded, which in a test is the whole test file. Per-user limiters need no care (every test makes new users, with new ids), but a per-IP limiter (`loginLimiter`, `emailVerifyLimiter`) is shared by every request the file sends from the test client: keep such a file under the limiter's budget, and put the test that uses the budget up in a file of its own (`emailVerifyLimiter.test.ts`).
-- Numeric settings in `config.ts` (`PORT`, `SESSION_TTL_MS`, the cleanup job's two, `EMAIL_VERIFICATION_TTL_MS`) are read by `numberSetting`, which uses `Number()` and treats a blank value as not set (`0` is a value). Never `parseInt`: `parseInt('7d')` is `7`, a session that lasts 7 milliseconds, with nothing at startup to say so, while `Number('7d')` is `NaN`, which the startup check of the feature that owns the setting refuses (`checkSessionSettings`, `checkEmailVerificationSettings`, `startEmptyChatRoomCleanup`; `listen` refuses a `NaN` `PORT`). A new setting gets a check like those, and a case in `config.unit.test.ts`.
+- A rate limiter keeps its count for as long as its module is loaded, which in a test is the whole test file. Per-user limiters need no care (every test makes new users, with new ids), but a per-IP limiter (`loginLimiter`, `emailVerifyLimiter`, `passwordResetRequestIpLimiter`, `passwordResetLimiter`) is shared by every request the file sends from the test client, and so is a limiter keyed by something the body carries (`passwordResetRequestEmailLimiter`, one budget per address): keep such a file under the limiter's budget, and put the test that uses the budget up in a file of its own (`emailVerifyLimiter.test.ts`, `passwordResetLimiter.test.ts`).
+- Numeric settings in `config.ts` (`PORT`, `SESSION_TTL_MS`, the cleanup job's two, `EMAIL_VERIFICATION_TTL_MS`, `PASSWORD_RESET_TTL_MS`) are read by `numberSetting`, which uses `Number()` and treats a blank value as not set (`0` is a value). Never `parseInt`: `parseInt('7d')` is `7`, a session that lasts 7 milliseconds, with nothing at startup to say so, while `Number('7d')` is `NaN`, which the startup check of the feature that owns the setting refuses (`checkSessionSettings`, `checkEmailVerificationSettings`, `checkPasswordResetSettings`, `startEmptyChatRoomCleanup`; `listen` refuses a `NaN` `PORT`). A new setting gets a check like those, and a case in `config.unit.test.ts`.
 - Times are JS `Date`s handed to Prisma (`expiresAt: { gt: now }`), never the database's `now()` in SQL: the `timestamp` columns hold UTC without a zone, so `now()` is off by the session's UTC offset wherever the database is not in UTC. A time that the code later compares with the JS clock is set explicitly instead of left to a column default. The `@default(now())` columns are filled by Prisma Client with the JS clock (checked on `email_verification_tokens.created_at` with the database in UTC+7), and the tests run in UTC+7 so a mistake here fails them (see "Test database setup").
 - Each test file covers what its part of the code owns: an endpoint file covers that endpoint's business rules plus one bad-input case to prove the validator is wired in; the full list of bad inputs is a table in `chatRoom.validator.unit.test.ts` (no database); `chatRoom.permissions.test.ts` covers the shared guards once per route, so a new route should be added to its lists. Keep a new test only if it guards a rule that is not already covered by another one.
 - `npm run build` runs `tsc` and then `scripts/fix-esm-imports.mjs`. The source keeps extensionless imports, but Node's ESM loader needs real file names, so the script rewrites the relative imports in `dist/` (`./app` becomes `./app.js`, a folder import becomes `./dir/index.js`) and fails the build if an import points at nothing. `npm start` runs `node dist/server.js`.
@@ -1208,7 +1260,7 @@ The backend follows a layered request flow:
 5.**Service and database flow**
 
 - Services contain all database operations and use the shared Prisma client from `src/lib/prisma`. They do not import Express.
-- Account services create and find users, update a profile, change a password (`changePassword` also deletes the other sessions in the same transaction) and delete an account (`deleteAccount` locks the rooms the user is in, refuses while the user is the only admin of a group room that still has other members, and leaves the rest to the foreign keys). The session service creates, reads, and deletes sessions (rows only; cookies are handled in `middlewares/SessionCookie.ts`). The email verification service makes a token, replaces the account's link (`issueEmailVerification`, under a row lock) and uses a link (`verifyEmailToken`); it returns the token to mail and never sends it, the controller does that after responding.
+- Account services create and find users, update a profile, change a password (`changePassword` also deletes the other sessions in the same transaction) and delete an account (`deleteAccount` locks the rooms the user is in, refuses while the user is the only admin of a group room that still has other members, and leaves the rest to the foreign keys). The session service creates, reads, and deletes sessions (rows only; cookies are handled in `middlewares/SessionCookie.ts`). The email verification service makes a token, replaces the account's link (`issueEmailVerification`, under a row lock) and uses a link (`verifyEmailToken`); it returns the token to mail and never sends it, the controller does that after responding. The password reset service does the same for the reset link: `issuePasswordReset` (under a row lock; an unverified account gets the verification link instead) and `resetPasswordWithToken` (claims the link, stores the new hash and deletes every session in one transaction).
 - Chat-room services check with `findNonFriendIds` (from the friend service) that everyone being added is a friend of the requester, create rooms and memberships in a Prisma transaction, load direct and group rooms, retrieve the latest message that has not been deleted and the requester's unread count for room summaries, and update or delete rooms.
 - Direct-room responses derive the room name and avatar from the other member; group-room responses use the room's own name and avatar fields.
 - Friend services look up users and the friend-list and pending-request rows that connect them to the requester. Other users are returned as `{ id, name, avatarUrl }` only, never with `email` or `tel`.
@@ -1240,7 +1292,7 @@ HTTP request
 1. Implement real-time communication with Socket.io (see "Real-time events")
 2. Build the React frontend and integrate with TanStack Query
 3. Add authentication-aware UI states and protected routes
-4. Add deployment configuration and production hardening, including the password reset flow, and the Resend account and verified domain that production mail needs (see "Email delivery", "Email verification (implemented)" and "Password reset (planned)")
+4. Add deployment configuration and production hardening, including the Resend account and verified domain that production mail needs (see "Email delivery", "Email verification (implemented)" and "Password reset (implemented)")
 
 ## Notes
 

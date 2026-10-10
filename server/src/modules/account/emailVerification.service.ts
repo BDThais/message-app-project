@@ -1,3 +1,4 @@
+import type { Prisma } from '../../generated/prisma/client';
 import { prisma } from '../../lib/prisma';
 import config from '../../config/config';
 import { generateToken, hashToken } from '../../lib/randomToken';
@@ -45,9 +46,19 @@ export type IssueVerificationResult =
  * simultaneous requests could both find the stored link older than the
  * cooldown, and both send a mail. With it the second waits, then sees the
  * link the first one stored and is told to wait.
+ *
+ * `existingTx` is for a caller that must decide and store in one step inside a
+ * transaction of its own (the password reset request sends this link to an
+ * account that never verified): the work then joins that transaction instead
+ * of opening one. The lock is taken either way; a caller that already holds it
+ * is not blocked by it.
  */
-export function issueEmailVerification(userId: number, now: Date = new Date()): Promise<IssueVerificationResult> {
-  return prisma.$transaction(async (tx) => {
+export function issueEmailVerification(
+  userId: number,
+  now: Date = new Date(),
+  existingTx?: Prisma.TransactionClient
+): Promise<IssueVerificationResult> {
+  const issue = async (tx: Prisma.TransactionClient): Promise<IssueVerificationResult> => {
     const locked = await tx.$queryRaw<{ id: number }[]>`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
     if (locked.length === 0) return { status: 'no_user' };
 
@@ -72,7 +83,9 @@ export function issueEmailVerification(userId: number, now: Date = new Date()): 
     });
 
     return { status: 'issued', email: user.email, token };
-  });
+  };
+
+  return existingTx ? issue(existingTx) : prisma.$transaction(issue);
 }
 
 export type VerifyEmailResult =

@@ -23,6 +23,7 @@ const numericSettings = [
   { name: 'EMPTY_ROOM_RETENTION_MS', fallback: 604_800_000 },
   { name: 'EMPTY_ROOM_CLEANUP_INTERVAL_MS', fallback: 3_600_000 },
   { name: 'EMAIL_VERIFICATION_TTL_MS', fallback: 86_400_000 },
+  { name: 'PASSWORD_RESET_TTL_MS', fallback: 1_800_000 },
 ] as const;
 
 describe.each(numericSettings)('$name', ({ name, fallback }) => {

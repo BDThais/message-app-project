@@ -100,6 +100,9 @@ export async function findPasswordHash(userId: number): Promise<string | null> {
  * while a leaked session still works, and the old sessions are never deleted
  * while the old password still stands.
  *
+ * A password reset link asked for earlier is deleted in the same transaction:
+ * a link must not outlive a deliberate change of password.
+ *
  * `oldPasswordHash` is the hash the caller verified. If the stored hash is no
  * longer that one (the password was changed by another request in the
  * meantime, or the account is gone) nothing is written and the result is
@@ -119,6 +122,7 @@ export function changePassword(
 		if (updated.count === 0) return false;
 
 		await tx.session.deleteMany({ where: { userId, id: { not: currentSessionId } } });
+		await tx.passwordResetToken.deleteMany({ where: { userId } });
 		return true;
 	});
 }

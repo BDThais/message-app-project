@@ -7,9 +7,12 @@ import { validateUpdateProfileBody } from './profile.validator';
 import { validateChangePasswordBody } from './password.validator';
 import { validateDeleteAccountBody } from './deleteAccount.validator';
 import { validateVerifyEmailBody } from './emailVerification.validator';
+import { validatePasswordResetRequestBody, validateResetPasswordBody } from './passwordReset.validator';
 import { createUser, updateUserProfile, findPasswordHash, changePassword, deleteAccount, toPublicUser } from './account.service';
 import { newVerificationToken, issueEmailVerification, verifyEmailToken } from './emailVerification.service';
 import { sendVerificationEmail } from './emailVerification.mail';
+import { issuePasswordReset, resetPasswordWithToken } from './passwordReset.service';
+import { sendPasswordResetEmail, sendPasswordChangedEmail } from './passwordReset.mail';
 import { createSession, deleteSession } from './session.service';
 import { getSessionUser, setSessionCookie, clearSessionCookie } from '../../middlewares/SessionCookie';
 import config from '../../config/config';
@@ -232,6 +235,63 @@ export async function resendEmailVerification(req: Request, res: Response, next:
     await sendVerificationEmail(result.email, result.token);
   } catch (error) {
     console.error('Error requesting a verification email:', error);
+    next(error);
+  }
+}
+
+export async function requestPasswordReset(req: Request, res: Response, next: NextFunction) {
+  try {
+    const validation = validatePasswordResetRequestBody(req.body);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.message });
+    }
+
+    // All the database work happens before the answer, and the answer is the same whatever the
+    // result is: an unknown address, a cooldown, an unverified account and a reset link that was
+    // stored all look alike from outside. Only what happens after responding differs.
+    const result = await issuePasswordReset(validation.data.email);
+
+    res.status(202).json({ message: 'If an account exists for that email, a reset link is on its way' });
+
+    // After responding, so the request never waits for the mail (neither helper throws).
+    if (result.status === 'reset_link') {
+      await sendPasswordResetEmail(result.email, result.token);
+    } else if (result.status === 'verification_link') {
+      // A reset link goes only to a verified address: this one gets the verification link instead.
+      await sendVerificationEmail(result.email, result.token);
+    }
+  } catch (error) {
+    console.error('Error requesting a password reset:', error);
+    next(error);
+  }
+}
+
+export async function resetPassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    // The password rules are checked here, before the token is looked at, so a weak password does
+    // not use up the link.
+    const validation = validateResetPasswordBody(req.body);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.message });
+    }
+    const { token, newPassword } = validation.data;
+
+    // Hashed whatever the token is, so an unknown token takes as long to answer as a good one.
+    const newHash = await hashPassword(newPassword);
+
+    const result = await resetPasswordWithToken(token, newHash);
+    if (result.status === 'invalid') {
+      // The same answer for an unknown, used, replaced or expired link.
+      return res.status(400).json({ error: 'This reset link is invalid or has expired' });
+    }
+
+    // No session is created: the user logs in with the new password.
+    res.status(204).end();
+
+    // After responding, as in signup.
+    await sendPasswordChangedEmail(result.email);
+  } catch (error) {
+    console.error('Error resetting the password:', error);
     next(error);
   }
 }

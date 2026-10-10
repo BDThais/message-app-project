@@ -4,7 +4,7 @@ dotenv.config();
 // Numbers are read with Number(), never parseInt(): parseInt('7d') is 7 and parseInt('24h') is 24, so a
 // typo in the unit used to turn into a few milliseconds without a word (a session or a link that
 // died at once), while Number('7d') is NaN, which the startup checks refuse (checkSessionSettings,
-// checkEmailVerificationSettings, startEmptyChatRoomCleanup; listen() refuses a NaN port). A blank
+// checkEmailVerificationSettings, checkPasswordResetSettings, startEmptyChatRoomCleanup; listen() refuses a NaN port). A blank
 // value counts as not set.
 function numberSetting(name: string, fallback: number): number {
   const raw = process.env[name]?.trim();
@@ -25,6 +25,8 @@ interface Config {
   MAIL_FROM: string;
   EMAIL_VERIFICATION_TTL_MS: number;
   EMAIL_VERIFICATION_URL: string;
+  PASSWORD_RESET_TTL_MS: number;
+  PASSWORD_RESET_URL: string;
 }
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const config: Config = {
@@ -40,5 +42,7 @@ const config: Config = {
   MAIL_FROM: process.env.MAIL_FROM || '', // Sender of every mail, e.g. 'Message App <no-reply@yourdomain.com>'. Required when MAIL_TRANSPORT=resend.
   EMAIL_VERIFICATION_TTL_MS: numberSetting('EMAIL_VERIFICATION_TTL_MS', 86400000), // How long an emailed verification link works. Default: 24 hours. Validated at startup by checkEmailVerificationSettings.
   EMAIL_VERIFICATION_URL: process.env.EMAIL_VERIFICATION_URL || (NODE_ENV === 'production' ? '' : 'http://localhost:5173/verify-email'), // The frontend page the mailed link opens (the token is appended as #token=...). Required when NODE_ENV=production, so a mail can never point at localhost. Validated at startup by checkEmailVerificationSettings.
+  PASSWORD_RESET_TTL_MS: numberSetting('PASSWORD_RESET_TTL_MS', 1800000), // How long an emailed password reset link works. Default: 30 minutes. Validated at startup by checkPasswordResetSettings.
+  PASSWORD_RESET_URL: process.env.PASSWORD_RESET_URL || (NODE_ENV === 'production' ? '' : 'http://localhost:5173/reset-password'), // The frontend page the mailed reset link opens (the token is appended as #token=...). Required when NODE_ENV=production, so a mail can never point at localhost. Validated at startup by checkPasswordResetSettings.
 };
 export default config;

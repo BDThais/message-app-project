@@ -2,12 +2,14 @@ import app from './app';
 import config from './config/config';
 import { createMailerFromConfig, setMailer } from './lib/mailer';
 import { checkEmailVerificationSettings } from './modules/account/emailVerification.mail';
+import { checkPasswordResetSettings } from './modules/account/passwordReset.mail';
 import { checkSessionSettings } from './modules/account/session.service';
 import { startEmptyChatRoomCleanup } from './modules/chatrooms/chatRoomCleanup.job';
 
 // Before listen: a setting that cannot work stops the server before it takes requests.
 setMailer(createMailerFromConfig(config));
 checkEmailVerificationSettings(config);
+checkPasswordResetSettings(config);
 checkSessionSettings(config);
 
 app.listen(config.PORT, () => {

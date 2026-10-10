@@ -11,6 +11,7 @@ The application is currently in an active backend MVP phase. Implemented feature
 - Login, logout, and session cookie handling
 - Authenticated user lookup via session middleware
 - Email verification: a link is mailed at signup and on request, and the user carries `emailVerified`
+- Password reset by email: a signed-out user asks for a link and sets a new password with it; only verified addresses get a link
 - Protected route middleware for chat access
 - Direct and group chat room creation, listing, update, and deletion
 - Chat membership and role checks with admin-only protections
@@ -112,6 +113,16 @@ The mailed link is `EMAIL_VERIFICATION_URL#token=...`: the token is in the URL f
 
 Mails a new verification link to the signed-in user's address and replaces the old one. Answers `204`, `409` when the address is already verified, and `429` while the last link is younger than a minute. Limited to 5 requests per hour per user. This is also how accounts created before email verification get verified.
 
+#### POST /account/password/reset-request
+
+Asks for a password reset link. No session is needed. Body: `{ "email": "..." }`. Answers `202 { "message": "If an account exists for that email, a reset link is on its way" }` for every well-formed email, whether or not an account has it, so it cannot be used to find out who is registered; `400` for something that is not an email. A verified account is mailed a link (an unverified one is mailed a verification link instead, because a reset link goes only to an address someone has proven); an unknown address, or an account asked for less than a minute ago, gets nothing. Limited to 10 requests per 15 minutes per IP and 3 per hour per email.
+
+#### POST /account/password/reset
+
+Sets a new password with the token from a reset mail. No session is needed. Body: `{ "token": "...", "new_password": "..." }`. `new_password` follows the signup password rules (a weak one is a `400` that does not use up the link). Answers `204`, or `400` when the token is unknown, already used, expired or replaced by a newer link (one message for all of them). A link works once. It signs the account out of every session and does not sign the user in: they log in with the new password, and a "your password was changed" mail goes to the account's address. Limited to 10 requests per 15 minutes per IP.
+
+The mailed link is `PASSWORD_RESET_URL#token=...`, with the token in the URL fragment like the verification link. Links work for `PASSWORD_RESET_TTL_MS` (30 minutes by default, at most 24 hours). `PASSWORD_RESET_URL` defaults to `http://localhost:5173/reset-password` outside production and must be set in production; both settings are checked when the server starts. Without `MAIL_TRANSPORT=resend` the mail is printed to the server log, so the token can be copied from there.
+
 ### Chatroom endpoints
 
 The protected chat routes are implemented on the server and include:
@@ -133,6 +144,7 @@ The Prisma schema includes the core relational models needed for a messaging app
 - User
 - Session
 - EmailVerificationToken
+- PasswordResetToken
 - ChatRoom
 - ChatMember
 - Message

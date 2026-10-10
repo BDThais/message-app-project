@@ -1,4 +1,5 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { isRecord } from '../../lib/validation';
 
 // Limiters for the account routes. Login is keyed by IP (the default) because
 // nobody is signed in yet at that point.
@@ -41,4 +42,49 @@ export const emailVerificationRequestLimiter = rateLimit({
   limit: 5,
   keyGenerator: (req) => String(req.user!.id),
   message: { error: 'Too many verification emails requested, try again later' },
+});
+
+// The password reset needs no session either (a user who forgot the password cannot sign in), so
+// its limiters are keyed by what the request carries, not by user.
+//
+// Asking for a link: two limiters, mounted in this order. Both count every request, whether the
+// address has an account or not and whether the body is valid, so a 429 reveals nothing about who
+// is registered.
+//
+// Per IP: keeps one client from trying many addresses.
+export const passwordResetRequestIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  message: { error: 'Too many attempts, try again later' },
+});
+
+// An address is long enough to be a key; anything longer cannot be one (validator.isEmail refuses
+// it anyway) and must not be stored in the limiter as one.
+const MAX_EMAIL_LENGTH = 254;
+
+// Per email: keeps anyone from filling one inbox with reset links, from any number of IPs. The key
+// is the lower-cased address from the body ("John@x.com" and "john@x.com" share one budget, though
+// the account lookup itself is exact), and the client's IP when the body has no usable address. The
+// two kinds of key have prefixes, so an address that looks like an IP cannot use up that IP's budget.
+export function passwordResetEmailKey(req: { body?: unknown; ip?: string | undefined }): string {
+  const email = isRecord(req.body) ? req.body.email : undefined;
+  if (typeof email === 'string' && email.length <= MAX_EMAIL_LENGTH) return `email:${email.toLowerCase()}`;
+
+  return `ip:${ipKeyGenerator(req.ip ?? '')}`;
+}
+
+export const passwordResetRequestEmailLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 3,
+  keyGenerator: passwordResetEmailKey,
+  message: { error: 'Too many password reset requests, try again later' },
+});
+
+// Using a reset link: like email verification, the token is the credential and it cannot be
+// guessed, so this only keeps one client from hammering the endpoint. Every request counts,
+// including ones answered with a 400.
+export const passwordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  message: { error: 'Too many attempts, try again later' },
 });

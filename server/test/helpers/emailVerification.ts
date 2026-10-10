@@ -2,10 +2,10 @@ import type { MailMessage } from '../../src/lib/mailer';
 import { prisma } from '../../src/lib/prisma';
 import { generateToken, hashToken } from '../../src/lib/randomToken';
 
-/** The token in the link of a verification mail (`...#token=<token>`). */
+/** The token in the link of a mailed verification or password reset link (`...#token=<token>`). */
 export function tokenFromMail(mail: MailMessage): string {
   const match = /#token=([A-Za-z0-9_-]+)/.exec(mail.text);
-  if (!match) throw new Error(`No verification link in this mail: ${mail.text}`);
+  if (!match) throw new Error(`No link with a token in this mail: ${mail.text}`);
 
   return match[1];
 }

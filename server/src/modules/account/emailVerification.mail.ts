@@ -1,5 +1,6 @@
 import config from '../../config/config';
 import { getMailer } from '../../lib/mailer';
+import { buildTokenLink, checkFrontendPageUrl } from '../../lib/frontendLink';
 
 // The mail side of email verification: what the link looks like, what the mail
 // says, and handing it to the mailer. No database and no Express in here, so
@@ -27,28 +28,13 @@ export function checkEmailVerificationSettings(settings: EmailVerificationSettin
     throw new Error(`EMAIL_VERIFICATION_TTL_MS must be a whole number of milliseconds between 1 and ${MAX_TTL_MS}`);
   }
 
-  const url = settings.EMAIL_VERIFICATION_URL.trim();
-  if (!url) {
-    // Only reachable in production: elsewhere config.ts supplies the development page.
-    throw new Error(
-      `EMAIL_VERIFICATION_URL is required${settings.NODE_ENV === 'production' ? ' when NODE_ENV=production' : ''}: ` +
-        'the address of the frontend page that confirms the email (for example "https://yourdomain.com/verify-email")'
-    );
-  }
-  // The token is added as the fragment, so the base must not have one already.
-  if (url.includes('#')) {
-    throw new Error('EMAIL_VERIFICATION_URL must not contain a "#": the token is added as the URL fragment');
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw new Error(`EMAIL_VERIFICATION_URL is not a valid absolute URL: "${url}"`);
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error(`EMAIL_VERIFICATION_URL must be an http or https URL, got "${url}"`);
-  }
+  checkFrontendPageUrl({
+    name: 'EMAIL_VERIFICATION_URL',
+    value: settings.EMAIL_VERIFICATION_URL,
+    nodeEnv: settings.NODE_ENV,
+    purpose: 'confirms the email',
+    example: 'https://yourdomain.com/verify-email',
+  });
 }
 
 /**
@@ -58,7 +44,7 @@ export function checkEmailVerificationSettings(settings: EmailVerificationSettin
  * no escaping.
  */
 export function buildVerificationLink(baseUrl: string, token: string): string {
-  return `${baseUrl.trim()}#token=${token}`;
+  return buildTokenLink(baseUrl, token);
 }
 
 /**

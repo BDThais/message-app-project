@@ -4,6 +4,7 @@ import app from '../../src/app';
 import { hashPassword, verifyPassword } from '../../src/lib/passwordHash';
 import { prisma } from '../../src/lib/prisma';
 import { changePassword } from '../../src/modules/account/account.service';
+import { createResetLink } from '../helpers/passwordReset';
 import { createSessionRow, createUser, loginAs } from '../helpers/users';
 
 const route = '/account/password';
@@ -92,6 +93,20 @@ describe(`POST ${route}`, () => {
     expect((await bobAgent.get('/account/me')).body.user).not.toBeNull();
   });
 
+  it("deletes the account's outstanding password reset link, and nobody else's", async () => {
+    const alice = await createUserWithPassword('Alice');
+    const bob = await createUser('Bob');
+    await createResetLink(alice);
+    await createResetLink(bob);
+    const agent = await loginAs(alice);
+
+    const res = await agent.post(route).send({ current_password: currentPassword, new_password: newPassword });
+
+    expect(res.status).toBe(204);
+    expect(await prisma.passwordResetToken.count({ where: { userId: alice.id } })).toBe(0);
+    expect(await prisma.passwordResetToken.count({ where: { userId: bob.id } })).toBe(1);
+  });
+
   it('answers 429 after 10 attempts in the window, counted per user', async () => {
     const alice = await createUser('Alice');
     const bob = await createUser('Bob');
@@ -118,9 +133,11 @@ describe('changePassword (service)', () => {
     await loginAs(alice);
 
     // The caller verified 'stale-hash', but another request has changed the password since.
+    await createResetLink(alice);
     const changed = await changePassword(alice.id, 'stale-hash', 'new-hash', 'no-such-session');
 
     expect(changed).toBe(false);
+    expect(await prisma.passwordResetToken.count({ where: { userId: alice.id } })).toBe(1);
     expect((await prisma.user.findUnique({ where: { id: alice.id } }))!.passwordHash).toBe(alice.passwordHash);
     expect(await prisma.session.count({ where: { userId: alice.id } })).toBe(2);
   });
