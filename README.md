@@ -169,6 +169,8 @@ npm test
 
 The test setup brings up the `chatapp_test` container, applies Prisma migrations, and clears records between runs.
 
+The tests never send a mail. To try a real delivery through Resend, put `MAIL_TRANSPORT=resend`, `RESEND_API_KEY` and `MAIL_FROM` in `server/.env`, start the server with `npm run dev`, and run `npm run try:email -- <address>` in a second terminal; it walks through email verification and password reset and asks you to paste the link from each mail. Until a domain is verified in Resend, the address has to be the Resend account's own.
+
 The test connections run in the `Asia/Ho_Chi_Minh` time zone, whatever the database server is set to, so code that depends on the database clock instead of the application's fails in the tests (see `project-planning-doc.md`, "Test database setup").
 
 ## Roadmap

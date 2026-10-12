@@ -12,7 +12,13 @@ checkEmailVerificationSettings(config);
 checkPasswordResetSettings(config);
 checkSessionSettings(config);
 
-app.listen(config.PORT, () => {
+// Express 5 hands a failed listen (a port that is already taken, for one) to this callback instead of
+// throwing. Without the check the process printed "Server is running" and idled on the cleanup job's timer.
+app.listen(config.PORT, (error?: Error) => {
+  if (error) {
+    console.error(`Could not listen on port ${config.PORT}:`, error);
+    process.exit(1);
+  }
   console.log(`Server is running on port ${config.PORT}`);
 });
 

@@ -14,7 +14,8 @@
     "db:test:down": "node scripts/test-db.mjs down",
     "db:test:deploy": "node scripts/test-db.mjs deploy",
     "db:test:reset": "node scripts/test-db.mjs reset",
-    "db:normalize-tels": "node scripts/normalize-tels.mjs"
+    "db:normalize-tels": "node scripts/normalize-tels.mjs",
+    "try:email": "node scripts/try-email-flows.mjs"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
