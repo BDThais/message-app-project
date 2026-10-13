@@ -183,7 +183,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. The dev server forwards requests that start with `/api` to the server, so no CORS setup is needed and the session cookie works as it will in production. The port is fixed because the server's verification and password reset mails link to `http://localhost:5173/...`; if something else uses it, `npm run dev` stops instead of moving to another port.
+Open `http://localhost:5173`. The dev server forwards requests that start with `/api` to the server, so no CORS setup is needed and the session cookie works as it will in production. The port is fixed because the server's verification and password reset mails link to `http://localhost:5173/...`; if something else uses it, `npm run dev` stops instead of moving to another port.
 
 `npm test` in `frontend/` runs the frontend tests (Vitest; no server and no database needed). `API_PROXY_TARGET` in `frontend/.env` changes where `/api` is forwarded to (see `frontend/.env.example`).
 
