@@ -1038,15 +1038,6 @@ The server is organized by feature: each folder under `src/modules/` holds every
 
 ```text
 message-app/
-├── .dockerignore
-├── .gitignore
-├── project-planning-doc.md
-├── README.md
-├── frontend/                        // React app (Vite + TanStack Router/Query), see frontend/frontend-planning-doc.md
-│   ├── frontend-planning-doc.md
-│   ├── package.json
-│   ├── vite.config.ts               // dev server on 5173, proxies /api to the server
-│   └── src/                         // main.tsx, createApp.ts, router.tsx, routes/, features/, lib/
 └── server/
     ├── .env.test.example            // template for .env.test (test database settings)
     ├── docker-compose.test.yml      // throwaway PostgreSQL used by the tests
@@ -1297,7 +1288,7 @@ HTTP request
 
 ## Roadmap
 
-1. Build the React frontend and integrate it with TanStack Query, step by step (see `frontend/frontend-planning-doc.md`; step 1, the scaffold, is done)
+1. Build the React frontend and integrate it with TanStack Query, step by step (see `./frontend.doc.md`; step 1, the scaffold, is done)
 2. Implement real-time communication with Socket.io, server and client together (see "Real-time events" and step 6 of the frontend plan)
 3. Add authentication-aware UI states and protected routes (the route guards are in place; the sign-up, verification and reset screens are step 2 of the frontend plan)
 4. Add deployment configuration and production hardening, including the Resend account and verified domain that production mail needs (see "Email delivery", "Email verification (implemented)" and "Password reset (implemented)")

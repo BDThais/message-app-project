@@ -64,7 +64,7 @@ npm run build      # vite build, then the type check
 
 **Production (planned, step 7).** Serve the built frontend and route `/api` (and later `/socket.io`) to the API from the same origin, for example with a reverse proxy. With `SameSite=Lax` the frontend and the API have to be on the same site anyway. Two server-side consequences:
 
-- CORS is only needed if the two end up on different origins. Then `cors` has to be added (see "Cookie / CORS Notes" in `../project-planning-doc.md`) and the cookie changed to `SameSite=None; Secure`, as the comment in `SessionCookie.ts` says.
+- CORS is only needed if the two end up on different origins. Then `cors` has to be added (see "Cookie / CORS Notes" in `./backend.doc.md`) and the cookie changed to `SameSite=None; Secure`, as the comment in `SessionCookie.ts` says.
 - Behind a reverse proxy, every request arrives from the proxy's address unless Express is told to trust the proxy's `X-Forwarded-For` header (`app.set('trust proxy', ...)`; `app.ts` does not set it today). The rate limiters key on the IP, so without it all users would share one limit.
 
 **Errors.** `api` throws an `ApiError` (`status`, `message`, `body`) for every non-2xx answer. `message` is the server's `{ error }` text, `body` keeps the whole parsed body for the few errors that carry more (`chatIds` on the `409` of `DELETE /account/me`). A request that never got an answer is an `ApiError` with status `0`. Endpoints that answer `204` resolve to `undefined`.
@@ -86,7 +86,6 @@ Why it matters here: when a socket event arrives (step 6), the handler does not 
 frontend/
 ├── .env.example                  // API_PROXY_TARGET for the dev proxy
 ├── .gitignore
-├── frontend-planning-doc.md
 ├── index.html
 ├── package.json
 ├── tsconfig.json                 // the app (src/), browser types
