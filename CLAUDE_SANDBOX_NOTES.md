@@ -1,6 +1,6 @@
 # Notes for Claude: working on this repo in the claude.ai chat sandbox
 
-Notes to self from earlier sessions, so a new session does not re-discover them. They describe the claude.ai chat sandbox only, not the developer's machine (there, `npm test` with Docker works as documented in `project-planning-doc.md`). Last verified 2026-10-09. If something below no longer matches reality, fix this file in the same patch.
+Notes to self from earlier sessions, so a new session does not re-discover them. They describe the claude.ai chat sandbox only, not the developer's machine (there, `npm test` with Docker works as documented in `project-planning-doc.md`). Last verified 2026-10-13. If something below no longer matches reality, fix this file in the same patch.
 
 ## What the sandbox can and cannot do
 
@@ -51,9 +51,21 @@ After a schema change: re-run step 3, and apply only the new `migration.sql`. To
 
 ## Working from the user's uploads
 
-- The uploaded `project-planning-doc.md` and `schema.prisma` have CRLF line endings (a Windows checkout); the repo has LF. Compare with `tr -d '\r'`, and never copy an upload over a repo file. On 2026-09-30, 2026-10-02, 2026-10-05, 2026-10-07, 2026-10-08 and 2026-10-09 both matched the remote's HEAD exactly, so cloning is enough; still diff them once.
+- The uploaded `project-planning-doc.md` and `schema.prisma` have CRLF line endings (a Windows checkout); the repo has LF. Compare with `tr -d '\r'`, and never copy an upload over a repo file. On 2026-09-30, 2026-10-02, 2026-10-05, 2026-10-07, 2026-10-08, 2026-10-09 and 2026-10-13 both matched the remote's HEAD exactly, so cloning is enough; still diff them once.
 - Read the doc with `grep -n -i friend`/`sed -n` on the relevant section; it is ~970 lines and the viewer truncates it. "Friend endpoints" is the spec for the friend routes, "Project structure" lists files and tests, and the conventions (file names, layering, tests per file, error bodies `{ error }`) are stated there. Follow them; do not re-derive them from the code.
 - The user has each time asked for the result **as a patch file**, and for the planning doc to be updated alongside the code. The README (it starts with a BOM and has LF endings: read and write it as bytes with python, so the BOM stays) needs the Project Status line, the endpoint's entry and, for a new table, the Database Model list. Per implemented endpoint, the doc needs: the "Completed" list, the "Integration tests for ..." bullet, the "Still planned" list (and any sentence that says what is still missing: grep the doc for the feature's name and for "planned"), the endpoint's own entry under "Auth endpoints" or the room/friend one, the feature's section marked `(implemented)` with any new rules, the conventions that name limiters, settings or helpers, and the test-file tree.
+
+## Working on the frontend (`frontend/`)
+
+Written 2026-10-13, when the frontend was scaffolded. Nothing here needs Docker or Prisma.
+
+- `cd frontend && npm ci` works from the npm registry, and `npm test`, `npm run typecheck` and `npx vite build` need no database and no server. Start a frontend patch with a baseline run of all three.
+- The frontend has its own lockfile. When adding a dependency there, the lockfile trick from "Habits that paid off" applies the same way.
+- `npm install -D vitest@^4` next to Vite 8 failed here with `Cannot read properties of null (reading 'edgesOut')` (npm 10.9.7); `vitest@5.0.4` installed fine, so the frontend uses Vitest 5 while the server uses 4. Install a group of dev dependencies one at a time to find which one npm chokes on.
+- To check the dev proxy and the cookie against the real Express server, start the server (`npx tsx src/server.ts` with `DATABASE_URL`, `PORT=3000`, `NODE_ENV=development`) and `npx vite --host 127.0.0.1` in the background, wait for both with a `curl` loop, run the `curl` checks against `http://127.0.0.1:5173/api/...` with a cookie jar, and kill both, **all in one tool call** (background jobs die when the call ends). Use `psql ... 'TRUNCATE users CASCADE'` first so signup does not hit a `409`. There is no browser in the sandbox, so what a page looks like cannot be checked; `frontend/src/app.test.tsx` (jsdom) is what stands in for it.
+- A navigation loop in the router does not fail a test, it kills the worker: the run prints `Not implemented: Window's scrollTo()` many times, then `JavaScript heap out of memory` after about 30 s. Run such tests with `timeout 100`. (The first version of the `_app` layout used a location hook inside its redirect and nested `?redirect=` into itself this way.)
+- Mutation checks work for the frontend too (same script as in "Habits that paid off", with `npx vitest run` as the command, restoring each file in a `finally`). Three mutants of the first round survived because no test could tell: the guard in `beforeLoad` (the layout's own redirect hid it: test `router.load()` itself), the use of `safeRedirectPath` in the login page (test it through the page), and the 401 handler in `createApp.ts` (test it through a request that really answers 401).
+- `src/routeTree.gen.ts` is regenerated by `vite build` (or `vite dev`); run `npx vite build` after adding or renaming a route file, then `npm run typecheck`, and commit the generated file with the patch. Delete `dist/` afterwards (ignored, but clutter).
 
 ## Delivering a patch
 

@@ -15,9 +15,11 @@ The backend has grown beyond the original account/session MVP and now includes a
 - TanStack Query
 - Socket.io
 - TanStack Router
+- Vite (frontend dev server and build)
 - Argon2 (password hashing), cookie-parser, express-rate-limit
 - Resend (email delivery, behind the `Mailer` interface in `src/lib/mailer.ts`)
-- Vitest + Supertest (tests), Docker Compose (test database)
+- Vitest + Supertest (server tests), Docker Compose (test database)
+- Vitest + Testing Library + jsdom (frontend tests; see `frontend/frontend-planning-doc.md`)
 
 ## Test database setup
 
@@ -91,15 +93,16 @@ Completed:
 - Unit tests for the mailer (the startup checks of the mail settings, the console transport, and the Resend transport run through the real Resend SDK with a stubbed `fetch`), and a test that guards the mail outbox wiring of the test setup
 - Unit tests for email verification (the settings checks, the link and the send helper, the body validator), for `hashToken`, and for how `EMAIL_VERIFICATION_TTL_MS` is read
 - Unit tests for the password reset (the settings checks, the two mails and their send helpers, the two body validators), for the key of the per-email limiter, and for how `PASSWORD_RESET_TTL_MS` is read
+- Frontend scaffold (step 1 of `frontend/frontend-planning-doc.md`): Vite + React + TypeScript in `frontend/`, a dev proxy that forwards `/api` to this server, the fetch wrapper and query client, TanStack Router with the signed-in/signed-out route guards (they use `GET /account/me`), a thin login page, and tests for all of it
 
 Still planned or not yet implemented:
 
 - Changing the email address (optional, see "Changing the address" under "Email verification (implemented)")
 - Real-time socket communication
-- Frontend application screens and state management
+- Frontend application screens and state management (the scaffold exists; the steps still to do are in `frontend/frontend-planning-doc.md`)
 - Production deployment hardening
 
-The room and auth systems are now acting as the current working backend foundation. The friend endpoints are all in place, so realtime is the next milestone and remains future work rather than a missing piece of the current baseline.
+The room and auth systems are now acting as the current working backend foundation. The friend endpoints are all in place, so the frontend is the next milestone, with realtime (built together with the frontend's step 6) after it; both remain future work rather than a missing piece of the current baseline.
 
 Note: In the database, the mutual friendship model stores two rows per friendship pair, one for each user, as described in the project requirements.
 
@@ -961,7 +964,7 @@ Tests (all with the in-memory outbox):
 
 Not covered, because it needs a real key and a verified domain: an actual delivery (see "Email delivery").
 
-The two frontend pieces (the banner with a resend button, and the page that reads the fragment and posts it) belong to the frontend milestone. Until then the link is tried with the token from the console mailer's log.
+The two frontend pieces (the banner with a resend button, and the page that reads the fragment and posts it) belong to the frontend milestone (step 2 of `frontend/frontend-planning-doc.md`). Until then the link is tried with the token from the console mailer's log.
 
 ### Password reset (implemented)
 
@@ -1013,14 +1016,14 @@ Tests (all with the in-memory outbox):
 
 Not covered, because it needs a real key and a verified domain: an actual delivery (see "Email delivery").
 
-The two frontend pages (a form that asks for the email and shows the `202` message, and a page that reads the fragment, asks for the new password and sends the user to the login) belong to the frontend milestone. Out of scope: reset by SMS through `tel`, security questions, locking an account after failed logins.
+The two frontend pages (a form that asks for the email and shows the `202` message, and a page that reads the fragment, asks for the new password and sends the user to the login) belong to the frontend milestone (step 2 of `frontend/frontend-planning-doc.md`). Out of scope: reset by SMS through `tel`, security questions, locking an account after failed logins.
 
 ### Real-time events (planned)
 
 Socket.io stays a notification layer on top of the REST endpoints rather than a second way to write data, so validation, permissions and tests are reused as they are:
 
 - a controller (or a small `events` module) emits after the service call succeeds. Services keep returning a result the caller can inspect, like `editMessage`'s `edited` / `unchanged`, so only real changes are broadcast. Services still never import Socket.io
-- handshake: read the session cookie and resolve it with the same `getSessionUser` lookup; reject the connection without a valid session
+- handshake: read the session cookie and resolve it with the same `getSessionUser` lookup; reject the connection without a valid session. In development the browser reaches Socket.io through the frontend's dev proxy (`/socket.io` with `ws: true`, to be added to `frontend/vite.config.ts` in step 6 of the frontend plan), so the handshake carries the same first-party cookie as the REST calls
 - on connect, the socket joins `user:<id>` (friend events, being added to a room) and `chat:<chatId>` for every room the user is a member of
 - leaving, being removed, or a deleted room must also remove the affected sockets from `chat:<chatId>` (`socketsLeave`), otherwise a removed member keeps receiving that room's messages
 - events: `message:new`, `message:updated` (payload identical to the `PATCH` response's `message`), `message:deleted` (`{ chatId, messageId, deletedAt }`), `chat:updated`, `chat:removed`, `member:added`, `member:removed`, `member:role_changed`, `read:updated`, `friend:request`, `friend:accepted`
@@ -1028,7 +1031,7 @@ Socket.io stays a notification layer on top of the REST endpoints rather than a 
 
 ## Project Structure
 
-The repository contains a TypeScript/Express server with Prisma persistence, authentication, and the current chat-room backend implementation. The React frontend has not been created yet.
+The repository contains a TypeScript/Express server with Prisma persistence, authentication, and the current chat-room backend implementation. The React frontend is scaffolded in `frontend/`; its own layout and conventions are described in `frontend/frontend-planning-doc.md`.
 Generated files created by tools such as Prisma (`server/src/generated/`) are omitted from this structure, while the source-controlled Prisma schema remains documented.
 
 The server is organized by feature: each folder under `src/modules/` holds everything for one feature (routes, controller, validators, services, feature-specific middleware and jobs). Only code shared by several features lives in `src/middlewares/` and `src/lib/`.
@@ -1039,7 +1042,11 @@ message-app/
 ├── .gitignore
 ├── project-planning-doc.md
 ├── README.md
-├── frontend/                        // planned, not created yet
+├── frontend/                        // React app (Vite + TanStack Router/Query), see frontend/frontend-planning-doc.md
+│   ├── frontend-planning-doc.md
+│   ├── package.json
+│   ├── vite.config.ts               // dev server on 5173, proxies /api to the server
+│   └── src/                         // main.tsx, createApp.ts, router.tsx, routes/, features/, lib/
 └── server/
     ├── .env.test.example            // template for .env.test (test database settings)
     ├── docker-compose.test.yml      // throwaway PostgreSQL used by the tests
@@ -1217,20 +1224,18 @@ The job is `modules/chatrooms/chatRoomCleanup.job.ts` (timer, validation of the 
 
 ## Cookie / CORS Notes
 
-When sending cookies from a frontend, the server must allow credentials and the frontend origin must be explicitly allowed.
-Not set up yet: `cors` is not a dependency and `app.ts` does not use it. Add it before the frontend starts calling the API from `http://localhost:5173`.
+In development the frontend does not need CORS: its dev server (`http://localhost:5173`) proxies every request that starts with `/api` to this server (`http://localhost:3000`) and removes the prefix, so the browser sees one origin and the session cookie is a first-party cookie (see `frontend/frontend-planning-doc.md`, "How the frontend talks to the server"). The frontend sends every request with `credentials: 'include'`.
 
-Example Express setup:
+The session cookie is `HttpOnly` and `SameSite=Lax` (and `Secure` in production), so in production the frontend and the API have to be on the same site, for example behind one reverse proxy that routes `/api` here. Two things to do for that setup:
 
-```ts
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
-```
-
-Example frontend fetch:
+- `app.set('trust proxy', ...)` is not set in `app.ts`. Behind a reverse proxy every request would otherwise come from the proxy's address, and the IP-based rate limiters would give all users one shared limit.
+- `cors` is not a dependency and `app.ts` does not use it; it is only needed if the frontend and the API end up on different origins. Then the cookie also has to become `SameSite=None; Secure` (see the comment in `middlewares/SessionCookie.ts`), and the server must allow credentials from the frontend's origin explicitly:
 
 ```ts
-fetch('http://localhost:3000/account/me', { credentials: 'include' });
+app.use(cors({ origin: 'https://app.example.com', credentials: true }));
 ```
+
+and the frontend's requests would have to go to that origin instead of `/api`.
 
 ## Backend Data Flow
 
@@ -1292,9 +1297,9 @@ HTTP request
 
 ## Roadmap
 
-1. Implement real-time communication with Socket.io (see "Real-time events")
-2. Build the React frontend and integrate with TanStack Query
-3. Add authentication-aware UI states and protected routes
+1. Build the React frontend and integrate it with TanStack Query, step by step (see `frontend/frontend-planning-doc.md`; step 1, the scaffold, is done)
+2. Implement real-time communication with Socket.io, server and client together (see "Real-time events" and step 6 of the frontend plan)
+3. Add authentication-aware UI states and protected routes (the route guards are in place; the sign-up, verification and reset screens are step 2 of the frontend plan)
 4. Add deployment configuration and production hardening, including the Resend account and verified domain that production mail needs (see "Email delivery", "Email verification (implemented)" and "Password reset (implemented)")
 
 ## Notes

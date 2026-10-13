@@ -1,6 +1,6 @@
 ﻿# Message App
 
-A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a planned React frontend. The backend has moved beyond the initial auth baseline and now includes the core chat-room foundation, while friend requests and real-time messaging remain next on the roadmap.
+A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a React frontend (scaffolded, screens in progress). The backend has moved beyond the initial auth baseline and now includes the core chat-room foundation, while friend requests and real-time messaging remain next on the roadmap.
 
 ## Project Status
 
@@ -18,6 +18,7 @@ The application is currently in an active backend MVP phase. Implemented feature
 - Room summaries with the latest message and the unread count
 - Prisma models for users, sessions, chat rooms, messages, and friendship flows
 - Vitest integration tests for the account/session flow
+- React frontend scaffold in `frontend/`: Vite dev server that proxies `/api` to the server, route guards for signed-in and signed-out pages, and a sign-in page (the plan and the next steps are in `frontend/frontend-planning-doc.md`)
 
 Next priorities:
 
@@ -34,14 +35,14 @@ Next priorities:
 - Authentication: session cookies with protected middleware
 - Testing: Vitest + Supertest
 - Email: Resend behind a replaceable `Mailer` (mails are only printed to the server log unless `MAIL_TRANSPORT=resend`)
-- Frontend: React planned
-- Data fetching: TanStack Query planned
+- Frontend: React + TypeScript + Vite (scaffolded; see `frontend/frontend-planning-doc.md`)
+- Routing and data fetching: TanStack Router and TanStack Query
 - Real-time communication: Socket.io planned
 
 ## Repository Layout
 
 - Root project files: project-planning-doc.md, README.md
-- Frontend workspace: frontend/
+- Frontend workspace: frontend/ (plan and conventions: frontend/frontend-planning-doc.md)
 - Backend server: server/
 - App entry point: server/src/app.ts
 - Feature modules (routes, controllers, services, validators per feature): server/src/modules/
@@ -173,12 +174,25 @@ The tests never send a mail. To try a real delivery through Resend, put `MAIL_TR
 
 The test connections run in the `Asia/Ho_Chi_Minh` time zone, whatever the database server is set to, so code that depends on the database clock instead of the application's fails in the tests (see `project-planning-doc.md`, "Test database setup").
 
+## Running the frontend
+
+Start the server first (`npm run dev` in `server/`, port 3000), then from `frontend/`:
+
+```powershell
+npm install
+npm run dev
+```
+
+Open http://localhost:5173. The dev server forwards requests that start with `/api` to the server, so no CORS setup is needed and the session cookie works as it will in production. The port is fixed because the server's verification and password reset mails link to `http://localhost:5173/...`; if something else uses it, `npm run dev` stops instead of moving to another port.
+
+`npm test` in `frontend/` runs the frontend tests (Vitest; no server and no database needed). `API_PROXY_TARGET` in `frontend/.env` changes where `/api` is forwarded to (see `frontend/.env.example`).
+
 ## Roadmap
 
 - Finish friend lookup and pending request flows
 - Implement message creation and retrieval APIs
 - Add Socket.io for realtime messaging
-- Build the React frontend and protected auth screens
+- Build the React frontend step by step (scaffold and route guards done; account screens, chat, friends and room management next)
 - Add deployment and environment configuration for production
 
 ## License
