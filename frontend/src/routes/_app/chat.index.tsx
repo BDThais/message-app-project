@@ -5,7 +5,7 @@ export const Route = createFileRoute('/_app/chat/')({
   component: ChatHome,
 });
 
-// Placeholder: the room list and the open conversation arrive in step 3 of frontend-planning-doc.md.
+// Placeholder: the room list and the open conversation arrive in step 3 of frontend.doc.md.
 function ChatHome() {
   const { data: user } = useMe();
 

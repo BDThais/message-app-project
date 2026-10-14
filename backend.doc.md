@@ -19,7 +19,7 @@ The backend has grown beyond the original account/session MVP and now includes a
 - Argon2 (password hashing), cookie-parser, express-rate-limit
 - Resend (email delivery, behind the `Mailer` interface in `src/lib/mailer.ts`)
 - Vitest + Supertest (server tests), Docker Compose (test database)
-- Vitest + Testing Library + jsdom (frontend tests; see `frontend/frontend-planning-doc.md`)
+- Vitest + Testing Library + jsdom (frontend tests; see `./frontend.doc.md`)
 
 ## Test database setup
 
@@ -93,13 +93,13 @@ Completed:
 - Unit tests for the mailer (the startup checks of the mail settings, the console transport, and the Resend transport run through the real Resend SDK with a stubbed `fetch`), and a test that guards the mail outbox wiring of the test setup
 - Unit tests for email verification (the settings checks, the link and the send helper, the body validator), for `hashToken`, and for how `EMAIL_VERIFICATION_TTL_MS` is read
 - Unit tests for the password reset (the settings checks, the two mails and their send helpers, the two body validators), for the key of the per-email limiter, and for how `PASSWORD_RESET_TTL_MS` is read
-- Frontend scaffold (step 1 of `frontend/frontend-planning-doc.md`): Vite + React + TypeScript in `frontend/`, a dev proxy that forwards `/api` to this server, the fetch wrapper and query client, TanStack Router with the signed-in/signed-out route guards (they use `GET /account/me`), a thin login page, and tests for all of it
+- Frontend scaffold (step 1 of `./frontend.doc.md`): Vite + React + TypeScript in `frontend/`, a dev proxy that forwards `/api` to this server, the fetch wrapper and query client, TanStack Router with the signed-in/signed-out route guards (they use `GET /account/me`), a thin login page, and tests for all of it
 
 Still planned or not yet implemented:
 
 - Changing the email address (optional, see "Changing the address" under "Email verification (implemented)")
 - Real-time socket communication
-- Frontend application screens and state management (the scaffold exists; the steps still to do are in `frontend/frontend-planning-doc.md`)
+- Frontend application screens and state management (the scaffold exists; the steps still to do are in `./frontend.doc.md`)
 - Production deployment hardening
 
 The room and auth systems are now acting as the current working backend foundation. The friend endpoints are all in place, so the frontend is the next milestone, with realtime (built together with the frontend's step 6) after it; both remain future work rather than a missing piece of the current baseline.
@@ -124,6 +124,8 @@ Note: In the database, the mutual friendship model stores two rows per friendshi
 Implemented so far: update, delete, add members, remove members, leave, promote/demote, listing the members, marking a room as read (each member moves only their own marker), sending messages, reading messages, and editing and deleting a message (sender only - no admin-moderation override for other members' messages).
 
 ## API Status
+
+The frontend has a condensed, client-oriented copy of this section in `./frontend.doc.md` ("API contract"): request and response shapes, status codes and the error texts a screen handles, without the server internals. This section stays the source of truth. When an endpoint's request, response, status code or error body changes, change both documents in the same patch.
 
 ### Auth endpoints (implemented)
 
@@ -319,6 +321,8 @@ All of these endpoints are routed after auth middleware so they can access the c
   name: string;
   email: string;
   tel: string;
+  avatarUrl: string | null;
+  emailVerified: boolean;
 }
 A direct room has no name/avatar to edit, its members cannot add or remove the other member from the room, and all of its members are admins.
 Endpoints that require authorization have to be routed after the auth middlewares.
@@ -330,7 +334,7 @@ POST /chat (implemented)
 - for direct rooms, `member_ids` must contain exactly one other integer user ID; direct rooms cannot include `name` or `avatar_url`
 - every `member_ids` entry must be an integer from 1 to 2147483647 and a friend of the requester (see "Friendship and messaging"); a group room with no `member_ids` needs no friends
 - for group rooms, `member_ids` may be omitted or be an empty array; the requester is always added as an admin
-- group rooms may include `name` and `avatar_url`
+- group rooms may include `name` and `avatar_url`. `name`, when given, must be a non-empty string (it is stored trimmed) and `avatar_url` a string. Unlike `PATCH /chat/:chatid`, this endpoint applies neither the 100-character limit on `name` nor the `http:`/`https:` check on `avatar_url`: a known inconsistency between `validateCreateChatRoomInput` and `validateUpdateChatRoomBody`, so a client should hold both to the update rules
 - incoming body:
 
   ```json
@@ -347,6 +351,7 @@ POST /chat (implemented)
 - responds `400` on validation errors
 - each entry of `members` is `{ chatId, role, lastReadMessageId, member: { id, name, avatarUrl } }`. The user is only under `member`: there is no separate `memberId`, it would repeat `member.id`. `GET /chat/:chatid/member`, `POST /chat/:chatid/member` and `PATCH /chat/:chatid/member/:userid` return entries of the same shape
 - responds `403` with `{ "error": "Only your friends can be added to a chat room" }` when any `member_ids` entry is not a friend of the requester, or does not exist (the two are not told apart), and creates no room and no members. For a direct room this check comes before the lookup of an existing room, so two former friends get `403` here, not their old room back
+- the room is returned as stored, with its `members`, and without `lastMessage`, `unreadCount` or `role`. The response also carries `emptiedAt` (the cleanup job's column, always `null` for a room that has just been created or reused) which the example below leaves out: it is not part of the contract, and a client ignores it. For a direct room `name` and `avatarUrl` are `null` (the client shows the other member from `members`): only `GET /chat` and `GET /chat/:chatid` derive them from the other member
 - return body:
 
   ```json
@@ -441,7 +446,9 @@ PATCH /chat/:chatid (implemented)
 - update the room's name and/or avatar_url
 - only valid for type: group rooms
 - requires the requester to hold admin in this room
-- incoming body: { name?, avatar_url? }
+- incoming body: { name?, avatar_url? }, at least one of the two (`400` otherwise)
+- `name` must be a non-empty string of at most 100 characters after trimming (stored trimmed); `avatar_url` an `http:` or `https:` URL, or `null` to clear it
+- the response carries only the room's own columns (`id`, `type`, `name`, `avatarUrl`, `createdAt`): no `lastMessage`, `unreadCount` or `role`, so a client merges it into what it has cached instead of replacing the summary
 - incoming body:
 
   ```json
@@ -664,6 +671,7 @@ GET /chat/:chatid/message?before=<message_id>&limit=50 (implemented)
   ```
 
 - `hasMore` is `true` when older messages remain beyond the returned page
+- a message whose author deleted their account has `senderId` and `sender` set to `null` (see `DELETE /account/me`), and a deleted message keeps its place in the list with `content: ""` and a non-null `deletedAt`
 
 PATCH /chat/:chatid/message/:message_id (implemented)
 
@@ -964,7 +972,7 @@ Tests (all with the in-memory outbox):
 
 Not covered, because it needs a real key and a verified domain: an actual delivery (see "Email delivery").
 
-The two frontend pieces (the banner with a resend button, and the page that reads the fragment and posts it) belong to the frontend milestone (step 2 of `frontend/frontend-planning-doc.md`). Until then the link is tried with the token from the console mailer's log.
+The two frontend pieces (the banner with a resend button, and the page that reads the fragment and posts it) belong to the frontend milestone (step 2 of `./frontend.doc.md`). Until then the link is tried with the token from the console mailer's log.
 
 ### Password reset (implemented)
 
@@ -1016,7 +1024,7 @@ Tests (all with the in-memory outbox):
 
 Not covered, because it needs a real key and a verified domain: an actual delivery (see "Email delivery").
 
-The two frontend pages (a form that asks for the email and shows the `202` message, and a page that reads the fragment, asks for the new password and sends the user to the login) belong to the frontend milestone (step 2 of `frontend/frontend-planning-doc.md`). Out of scope: reset by SMS through `tel`, security questions, locking an account after failed logins.
+The two frontend pages (a form that asks for the email and shows the `202` message, and a page that reads the fragment, asks for the new password and sends the user to the login) belong to the frontend milestone (step 2 of `./frontend.doc.md`). Out of scope: reset by SMS through `tel`, security questions, locking an account after failed logins.
 
 ### Real-time events (planned)
 
@@ -1031,7 +1039,7 @@ Socket.io stays a notification layer on top of the REST endpoints rather than a 
 
 ## Project Structure
 
-The repository contains a TypeScript/Express server with Prisma persistence, authentication, and the current chat-room backend implementation. The React frontend is scaffolded in `frontend/`; its own layout and conventions are described in `frontend/frontend-planning-doc.md`.
+The repository contains a TypeScript/Express server with Prisma persistence, authentication, and the current chat-room backend implementation. The React frontend is scaffolded in `frontend/`; its own layout and conventions are described in `./frontend.doc.md`.
 Generated files created by tools such as Prisma (`server/src/generated/`) are omitted from this structure, while the source-controlled Prisma schema remains documented.
 
 The server is organized by feature: each folder under `src/modules/` holds everything for one feature (routes, controller, validators, services, feature-specific middleware and jobs). Only code shared by several features lives in `src/middlewares/` and `src/lib/`.
@@ -1215,7 +1223,7 @@ The job is `modules/chatrooms/chatRoomCleanup.job.ts` (timer, validation of the 
 
 ## Cookie / CORS Notes
 
-In development the frontend does not need CORS: its dev server (`http://localhost:5173`) proxies every request that starts with `/api` to this server (`http://localhost:3000`) and removes the prefix, so the browser sees one origin and the session cookie is a first-party cookie (see `frontend/frontend-planning-doc.md`, "How the frontend talks to the server"). The frontend sends every request with `credentials: 'include'`.
+In development the frontend does not need CORS: its dev server (`http://localhost:5173`) proxies every request that starts with `/api` to this server (`http://localhost:3000`) and removes the prefix, so the browser sees one origin and the session cookie is a first-party cookie (see `./frontend.doc.md`, "How the frontend talks to the server"). The frontend sends every request with `credentials: 'include'`.
 
 The session cookie is `HttpOnly` and `SameSite=Lax` (and `Secure` in production), so in production the frontend and the API have to be on the same site, for example behind one reverse proxy that routes `/api` here. Two things to do for that setup:
 

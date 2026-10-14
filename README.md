@@ -1,10 +1,10 @@
 ﻿# Message App
 
-A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a React frontend (scaffolded, screens in progress). The backend has moved beyond the initial auth baseline and now includes the core chat-room foundation, while friend requests and real-time messaging remain next on the roadmap.
+A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a React frontend (scaffolded, screens in progress). The REST API is in place (accounts with email verification and password reset, chat rooms, messages and the friend flows), while real-time messaging and the frontend screens remain next on the roadmap.
 
 ## Project Status
 
-The application is currently in an active backend MVP phase. Implemented features include:
+The server's REST API is in place and the frontend is the current milestone. Implemented features include:
 
 - User signup with validation and duplicate checks
 - Password hashing and credential verification
@@ -16,16 +16,17 @@ The application is currently in an active backend MVP phase. Implemented feature
 - Direct and group chat room creation, listing, update, and deletion
 - Chat membership and role checks with admin-only protections
 - Room summaries with the latest message and the unread count
+- Messages: send, list with pagination, edit, delete, and a read marker per member
+- Friends: search by phone number, friend requests (send, list, accept, reject, cancel), the friend list and unfriending; friendship is required to start a conversation
+- Profile update, password change and account deletion
 - Prisma models for users, sessions, chat rooms, messages, and friendship flows
-- Vitest integration tests for the account/session flow
-- React frontend scaffold in `frontend/`: Vite dev server that proxies `/api` to the server, route guards for signed-in and signed-out pages, and a sign-in page (the plan and the next steps are in `frontend/frontend-planning-doc.md`)
+- Vitest integration tests for the account, chat-room, message and friend endpoints
+- React frontend scaffold in `frontend/`: Vite dev server that proxies `/api` to the server, route guards for signed-in and signed-out pages, and a sign-in page (the plan and the next steps are in `frontend.doc.md`)
 
 Next priorities:
 
-- Friend search, requests, and friendship management
-- Direct and group messaging APIs and pagination
-- Real-time communication with Socket.io
-- Frontend screens and auth-aware user flows
+- Real-time communication with Socket.io, built together with the frontend
+- Frontend screens and auth-aware user flows (the steps are in `frontend.doc.md`)
 - Production deployment and environment hardening
 
 ## Tech Stack
@@ -35,14 +36,14 @@ Next priorities:
 - Authentication: session cookies with protected middleware
 - Testing: Vitest + Supertest
 - Email: Resend behind a replaceable `Mailer` (mails are only printed to the server log unless `MAIL_TRANSPORT=resend`)
-- Frontend: React + TypeScript + Vite (scaffolded; see `frontend/frontend-planning-doc.md`)
+- Frontend: React + TypeScript + Vite (scaffolded; see `frontend.doc.md`)
 - Routing and data fetching: TanStack Router and TanStack Query
 - Real-time communication: Socket.io planned
 
 ## Repository Layout
 
-- Root project files: project-planning-doc.md, README.md
-- Frontend workspace: frontend/ (plan and conventions: frontend/frontend-planning-doc.md)
+- Root project files: README.md, backend.doc.md (server plan and API reference), frontend.doc.md (frontend plan and API contract), CLAUDE_SANDBOX_NOTES.md
+- Frontend workspace: frontend/ (plan and conventions: frontend.doc.md)
 - Backend server: server/
 - App entry point: server/src/app.ts
 - Feature modules (routes, controllers, services, validators per feature): server/src/modules/
@@ -128,15 +129,20 @@ The mailed link is `PASSWORD_RESET_URL#token=...`, with the token in the URL fra
 
 The protected chat routes are implemented on the server and include:
 
-- POST /chat
-- GET /chat
-- GET /chat/:chatid
-- PATCH /chat/:chatid
-- DELETE /chat/:chatid
+- POST /chat, GET /chat, GET /chat/:chatid, PATCH /chat/:chatid, DELETE /chat/:chatid
+- GET, POST /chat/:chatid/member and DELETE, PATCH /chat/:chatid/member/:userid
+- POST, GET /chat/:chatid/message and PATCH, DELETE /chat/:chatid/message/:message_id
+- PUT /chat/:chatid/read
 - Room membership logic for direct and group rooms
 - Admin-only room management controls
 
-The remaining work is focused on friend flows and realtime messaging rather than the core room infrastructure itself.
+### Friend endpoints
+
+- GET /friend/search/:tel
+- POST, GET /friend/requests, POST /friend/requests/:id/accept and DELETE /friend/requests/:id
+- GET /friend and DELETE /friend/:id
+
+The request and response of every endpoint, with its status codes, are specified in `backend.doc.md`; the remaining work is real-time messaging and the frontend.
 
 ## Database Model
 
@@ -172,7 +178,7 @@ The test setup brings up the `chatapp_test` container, applies Prisma migrations
 
 The tests never send a mail. To try a real delivery through Resend, put `MAIL_TRANSPORT=resend`, `RESEND_API_KEY` and `MAIL_FROM` in `server/.env`, start the server with `npm run dev`, and run `npm run try:email -- <address>` in a second terminal; it walks through email verification and password reset and asks you to paste the link from each mail. Until a domain is verified in Resend, the address has to be the Resend account's own.
 
-The test connections run in the `Asia/Ho_Chi_Minh` time zone, whatever the database server is set to, so code that depends on the database clock instead of the application's fails in the tests (see `project-planning-doc.md`, "Test database setup").
+The test connections run in the `Asia/Ho_Chi_Minh` time zone, whatever the database server is set to, so code that depends on the database clock instead of the application's fails in the tests (see `backend.doc.md`, "Test database setup").
 
 ## Running the frontend
 
@@ -189,9 +195,7 @@ Open `http://localhost:5173`. The dev server forwards requests that start with `
 
 ## Roadmap
 
-- Finish friend lookup and pending request flows
-- Implement message creation and retrieval APIs
-- Add Socket.io for realtime messaging
+- Add Socket.io for realtime messaging (server and client together)
 - Build the React frontend step by step (scaffold and route guards done; account screens, chat, friends and room management next)
 - Add deployment and environment configuration for production
 

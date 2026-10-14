@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is the plan and progress log for the React frontend in `frontend/`. The backend (API, database, tests) is documented in `../project-planning-doc.md`; this document covers only the frontend and refers to the backend for every endpoint's exact request and response shapes.
+This is the plan and progress log for the React frontend in `frontend/`. The backend (API, database, tests) is documented in `./backend.doc.md`; this document covers the frontend and carries the part of the API it needs, in "API contract" (a condensed copy: `./backend.doc.md` is the source of truth, and the two change together).
 
 The frontend is built as a series of small steps (see "Implementation steps"). Each step ends with something that runs, so problems with the API's shapes show up early, while they are still cheap to fix on the server.
 
@@ -130,7 +130,7 @@ Planned additions: `features/chats/`, `features/messages/`, `features/friends/` 
 - **Cache updates go through functions** (`setSignedInUser`, later `addMessageToCache`, `removeChatFromCache`). Mutations and socket handlers call the same function, and such a function must be idempotent by id, so a message that arrives twice (the sender's own REST response and the socket event) is stored once.
 - **Whatever the server decides, the server decides.** Client-side checks (a password hint, a required field) exist to save a round trip, never to replace the server's validation. Show the server's `{ error }` text.
 - **TypeScript:** `strict` and `noUncheckedIndexedAccess`, like the server. `exactOptionalPropertyTypes` is off here because React's and TanStack's own types do not follow it.
-- **Types of API responses are written by hand** in each feature's `types.ts`, from the shapes in `../project-planning-doc.md`. A shared package or generated types can come later if keeping them in step becomes a chore.
+- **Types of API responses are written by hand** in each feature's `types.ts`, from the shapes in "API contract". A shared package or generated types can come later if keeping them in step becomes a chore.
 - **Files:** components `PascalCase.tsx`, everything else `camelCase.ts`, tests next to the file as `<file>.test.ts(x)`.
 
 ## Routing and authentication
@@ -157,20 +157,177 @@ How the guards work:
 - A guard only runs on navigation. When the session ends while a page is open (a request answers 401 and `me` then comes back empty), the `_app` layout notices that the cached user became `null` and navigates to `/login?redirect=...`. Signing out on purpose goes to plain `/login`. The layout reads the current location once, inside the effect: a hook that follows the location would run the effect again for the `/login` URL it has just navigated to and nest the `redirect` parameter without end (the app-level test caught exactly this).
 - Signing in or out replaces the whole cache except `me` (`setSignedInUser`), so the next person at this tab never sees the previous user's rooms or messages.
 
-## Server responses the screens depend on
+## API contract
 
-Check the exact shapes in `../project-planning-doc.md` before each step; the list below is what shapes the design.
+Everything a screen needs to know about the server's API, so a frontend session does not need `./backend.doc.md`. It is a condensed copy: `./backend.doc.md` stays the source of truth and has the server-side detail (limiters, transactions, locks, tests). When an endpoint's request, response, status code or error text changes, change both documents in the same patch.
 
-- `GET /account/me` answers `200` with `user: null` when signed out (it never answers 401), which is why the guards can use it. The user is `{ id, name, email, tel, avatarUrl, emailVerified }`.
-- Signup does not sign the user in. It mails a verification link (`EMAIL_VERIFICATION_URL#token=...`), and so does `POST /account/email/verification` (`204`; `409` already verified; `429` while the last link is under a minute old; 5 per hour per user). The token is in the URL fragment: the page reads it from `location.hash`, posts it to `POST /account/email/verify`, and removes it from the address bar.
-- Password reset: `POST /account/password/reset-request` answers `202` with the same message whether or not the address exists. The mailed link is `PASSWORD_RESET_URL#token=...`; the page posts `{ token, new_password }` to `POST /account/password/reset` (`204`), after which the person signs in again. The new password follows the signup rules.
-- Signup rules the form should hint at: name letters and digits only; password 8+ characters with upper case, lower case, a digit and a special character; `tel` in international format with the leading `+`.
-- `GET /chat` answers `{ chatRooms: [...] }`; each room carries the latest message that has not been deleted (`lastMessage`) and the requester's `unreadCount`. A direct room has no name or avatar of its own: the response derives them from the other member.
-- `GET /chat/:chatid/message?before=<id>&limit=50` returns `{ messages, hasMore }`, **newest first**. The next page is requested with `before` set to the id of the oldest message loaded.
-- A deleted message stays in the list with `deletedAt` set and its content cleared; an edited one has `editedAt`.
-- Avatars are plain URL strings (`avatarUrl`) and there is no upload endpoint, so avatars show initials or a placeholder when `avatarUrl` is `null`, and for now also in place of an upload.
-- Several endpoints answer `204` with no body; a few errors carry extra fields next to `error`.
-- Friend and room endpoints require a friendship before a room can be created or a member added: the UI should start a direct chat from the friends list.
+### Request and response conventions
+
+- In the browser every path below is prefixed with `/api` (see "How the frontend talks to the server"). Bodies are JSON.
+- **Request bodies use snake_case, responses use camelCase.** Going out: `avatar_url`, `member_ids`, `receiver_id`, `message_id`, `current_password`, `new_password`. Coming back: `avatarUrl`, `createdAt`, `lastReadMessageId`, `unreadCount`.
+- Ids are positive integers up to 2147483647 (a Postgres `INTEGER`). A path or query id that is not one answers `400`.
+- Timestamps are ISO 8601 strings in UTC (`"2026-09-13T12:00:00.000Z"`), typed `string`.
+- Every `4xx` and `5xx` has the body `{ "error": string }`: show that text. Two errors carry one extra key: `chatIds` (the `409` of `DELETE /account/me`) and `requestId` (the `409` "they already sent you a request" of `POST /friend/requests`). A malformed JSON body is a `400`.
+- Without a session, every endpoint except the public ones answers `401 { "error": "Unauthorized Access" }`. Public: signup, login, logout, `GET /account/me` (never a 401), `POST /account/email/verify`, `POST /account/password/reset-request`, `POST /account/password/reset`.
+- `204` has no body. `429` is a rate limit; its text is in `error` (the limits are listed at the end of this section).
+- Every `/chat/:chatid/...` path answers `400` for an invalid `:chatid` and `404 { "error": "Chat room not found" }` when the requester is not a member (a room that does not exist gets the same answer). Both are left out of the tables below.
+
+### Shapes
+
+```ts
+type Role = 'admin' | 'member';
+
+/** Your own account: login, GET /account/me, PATCH /account/me. */
+interface User { id: number; name: string; email: string; tel: string; avatarUrl: string | null; emailVerified: boolean }
+
+/** Any other user. Never has an email or a tel. */
+interface PublicUser { id: number; name: string; avatarUrl: string | null }
+
+/** GET /chat, one entry per room. */
+interface ChatRoomSummary {
+  id: number;
+  type: 'direct' | 'group';
+  name: string | null;       // direct room: the other member's name (null once they are gone); group room: its own name, may be null
+  avatarUrl: string | null;  // direct room: the other member's avatar
+  createdAt: string;
+  lastMessage: { content: string; createdAt: string } | null; // newest message that is not deleted; no id, no sender
+  unreadCount: number;
+}
+
+/** GET /chat/:chatid. */
+interface ChatRoomDetail extends ChatRoomSummary { role: Role } // the requester's own role
+
+/** Members of a room: GET/POST/PATCH under /chat/:chatid/member, and `members` of POST /chat. */
+interface Member { chatId: number; role: Role; lastReadMessageId: number | null; member: PublicUser }
+
+interface Message {
+  id: number;
+  chatId: number;
+  senderId: number | null;   // null when the sender has deleted their account
+  content: string;           // '' once the message is deleted
+  createdAt: string;
+  editedAt: string | null;
+  deletedAt: string | null;
+  sender: PublicUser | null; // null together with senderId
+}
+
+/** GET /friend/requests, POST /friend/requests. `user` is always the other party. */
+interface FriendRequest { id: number; createdAt: string; user: PublicUser }
+
+/** GET /friend/search/:tel. `requestId` only for the two request states. */
+type Relationship = 'self' | 'friend' | 'request_sent' | 'request_received' | 'none';
+interface SearchResult extends PublicUser { relationship: Relationship; requestId?: number }
+```
+
+### Account endpoints
+
+| Endpoint | Request | Success | Errors a screen handles |
+| --- | --- | --- | --- |
+| `POST /account/signup` | `{ name, email, tel, password }` | `201 { message }`; does not sign in; a verification link is mailed | `400` (the rule that failed, see "Rules"); `409` email or phone number taken |
+| `POST /account/login` | `{ email, password }` | `200 { user: User }`, sets the cookie | `400` missing field; `401 Invalid email or password`; `429` |
+| `GET /account/me` | none | `200 { user: User }` or `{ user: null }` when signed out | none |
+| `POST /account/logout` | none | `200 { user: null }`, clears the cookie | none |
+| `PATCH /account/me` | `{ name?, avatar_url? }`, at least one; `name` follows the signup rule, `avatar_url` an `http:` or `https:` URL or `null` | `200 { user: User }` | `400` |
+| `POST /account/password` | `{ current_password, new_password }` | `204`; the other sessions are signed out, this one stays | `400`; `401 Current password is incorrect` (still signed in); `429` |
+| `DELETE /account/me` | `{ password }` | `204`, cookie cleared | `400`; `401 Password is incorrect` (still signed in); `409 { error, chatIds: number[] }` the user is the only admin of those group rooms; `429` |
+| `POST /account/email/verify` | `{ token }` | `204`; `emailVerified` is now `true` | `400 This verification link is invalid or has expired`; `429` |
+| `POST /account/email/verification` | none | `204`; mails a new link, the old one stops working | `409 Email is already verified`; `429` (a link under a minute old, or too many) |
+| `POST /account/password/reset-request` | `{ email }` | `202 { message }` for every well-formed email, known or not | `400` (missing, or not an address); `429` |
+| `POST /account/password/reset` | `{ token, new_password }` | `204`; does not sign in, every session of the account is deleted | `400` (weak password, or `This reset link is invalid or has expired`); `429` |
+
+### Chat room endpoints
+
+| Endpoint | Request | Success | Errors a screen handles |
+| --- | --- | --- | --- |
+| `POST /chat` | `{ type: 'direct' or 'group', member_ids?, name?, avatar_url? }` | `201` new room, `200` existing direct room reused: `{ id, type, name, avatarUrl, createdAt, members: Member[] }`, plus an internal `emptiedAt` that is always `null` (ignore it) | `400`; `403 Only your friends can be added to a chat room` (a stranger and an unknown id look the same) |
+| `GET /chat` | none | `200 { chatRooms: ChatRoomSummary[] }`, most recent activity first | none |
+| `GET /chat/:chatid` | none | `200 { chatRoom: ChatRoomDetail }` | none |
+| `PATCH /chat/:chatid` | `{ name?, avatar_url? }`, at least one | `200 { chatRoom: { id, type, name, avatarUrl, createdAt } }`: no `lastMessage`, `unreadCount` or `role`, so merge it into the cached room | `400`; `403` not an admin, or a direct room |
+| `DELETE /chat/:chatid` | none | `204` | `403` not an admin, or a direct room |
+| `GET /chat/:chatid/member` | none | `200 { members: Member[] }`, admins first, then by name; no pagination | none |
+| `POST /chat/:chatid/member` | `{ member_ids }`, non-empty | `201` when someone was added, `200` when everyone was already in: `{ addedMembers: Member[], alreadyMemberIds: number[] }` | `400`; `403` not an admin, a direct room, or someone is not your friend (nobody is added) |
+| `DELETE /chat/:chatid/member/:userid` | none | `204` | `400`; `403` removing someone else without being an admin, or anyone but yourself in a direct room; `404` not a member; `409` the only admin cannot leave or be removed while others remain |
+| `PATCH /chat/:chatid/member/:userid` | `{ role: 'admin' or 'member' }` | `200 { member: Member }` | `400`; `403` not an admin, or a direct room; `404` not a member; `409` the only admin cannot be demoted while others remain |
+| `POST /chat/:chatid/message` | `{ content }` | `201 { message: Message }` | `400` |
+| `GET /chat/:chatid/message` | query `before?` (a message id), `limit?` (1 to 100, default 50) | `200 { messages: Message[], hasMore }`, newest first | `400` |
+| `PATCH /chat/:chatid/message/:message_id` | `{ content }` | `200 { message: Message }` | `400`; `403 You can only edit your own messages`; `404 Message not found in this chat room` (also for a deleted message) |
+| `DELETE /chat/:chatid/message/:message_id` | none | `204` | `400`; `403 You can only delete your own messages`; `404` as above |
+| `PUT /chat/:chatid/read` | `{ message_id }` (a number) | `200 { lastReadMessageId }` | `400`; `404 Message not found in this chat room` |
+
+### Friend endpoints
+
+| Endpoint | Request | Success | Errors a screen handles |
+| --- | --- | --- | --- |
+| `GET /friend/search/:tel` | none; `:tel` in the canonical form below | `200 { user: SearchResult }`, or `{ user: null }` when nobody has that number | `400` not a canonical E.164 number; `429` |
+| `POST /friend/requests` | `{ receiver_id }` | `201 { request: FriendRequest }` (`user` is the receiver) | `400` (invalid id, yourself, unknown user); `409` already friends, already sent, or they already sent you one (that body has `requestId`: offer "Accept"); `429` |
+| `GET /friend/requests` | query `direction?`: `incoming` (default) or `outgoing` | `200 { requests: FriendRequest[] }`, newest first | `400` any other `direction` |
+| `POST /friend/requests/:id/accept` | none; `:id` is a request id | `201 { friend: PublicUser }`; does not create a room | `400`; `404` (only the receiver can accept) |
+| `DELETE /friend/requests/:id` | none; `:id` is a request id | `204`: the receiver rejects, the sender cancels | `400`; `404` |
+| `GET /friend` | none | `200 { friends: PublicUser[] }`, by name, case-insensitive; no pagination | none |
+| `DELETE /friend/:id` | none; `:id` is a **user** id | `204`; any existing direct room keeps working | `400`; `404` not friends |
+
+### Rules the screens depend on
+
+#### Account
+
+- Signup rules to hint at: `name` letters and digits only; `password` at least 8 characters with an upper-case letter, a lower-case letter, a digit and a special character; `tel` in international format with the leading `+`. The server also accepts spaces, dashes and parentheses in `tel` and stores the canonical form (`+` and digits only), and it answers with the text of the first rule that failed (`All fields are required` first). Client-side checks only save a round trip: show the server's `error`.
+- Signup does not sign the user in. It mails a verification link (`EMAIL_VERIFICATION_URL#token=...`), and so does `POST /account/email/verification`. The token is in the URL fragment: the page reads it from `location.hash`, posts it to `POST /account/email/verify`, and removes it from the address bar.
+- Password reset: the mailed link is `PASSWORD_RESET_URL#token=...`; the page posts `{ token, new_password }` (the new password follows the signup rules), after which the person signs in again. Only a verified address gets a reset link: an unverified one gets the verification mail instead, with the same `202`, so word the confirmation the way the server does ("if an account exists..."), never "a reset mail is on its way".
+- `emailVerified` is `false` until the address is verified: that is what the "verify your email" banner reads. Nothing in the app is blocked for an unverified user; only password reset needs a verified address.
+- A `401` from `POST /account/password` or `DELETE /account/me` means a wrong password, not a lost session (see "How the frontend talks to the server").
+- Avatars are plain URL strings (`http:` or `https:`) and there is no upload endpoint, so avatars show initials or a placeholder when `avatarUrl` is `null`, and for now also in place of an upload. Changing the email or the phone number is not supported.
+
+#### Rooms and members
+
+| Action | Admin | Member |
+| --- | :---: | :---: |
+| Send, read, edit own, delete own messages | yes | yes |
+| List members, mark as read, leave | yes | yes |
+| Rename the room or change its avatar, delete the room, add members, remove others, promote or demote | yes | no |
+
+- Nobody edits or deletes another member's message, admins included.
+- A direct room has exactly two members, both admins, and no name or avatar of its own. Its members cannot add or remove anyone, rename it or delete it; each can only leave it. Anything else answers `403`.
+- Start a direct chat from the friends list with `POST /chat` and `type: 'direct'`: it answers `200` with the existing room when there is one and `201` with a new one, so use the returned `id` either way. Two people who are no longer friends get `403`, not their old room back, but the old room keeps working for them.
+- Rooms are created and members added only from the requester's friends. A group room with no `member_ids` is allowed (the creator is its only member and its admin).
+- Hold group names and avatars to the update rules on both create and update: a name is 1 to 100 characters, an avatar an `http:` or `https:` URL (`null` clears it on update). The create endpoint is looser today (no length limit, any string as an avatar), so the form has to enforce it.
+- `POST /chat` and `PATCH /chat/:chatid` answer with the room as stored, not as a summary: a direct room's `name` and `avatarUrl` are `null` there. After either, invalidate or merge into `GET /chat` instead of writing the response over a `ChatRoomSummary`.
+- Leaving is `DELETE /chat/:chatid/member/:userid` with your own id. A group's only admin cannot leave while others remain (`409`): promote someone first. When the last member leaves, the room disappears from the API (the server deletes it after a retention period).
+- Adding a member who already belongs is not an error: their id comes back in `alreadyMemberIds`. A member added to a room that already has messages starts with all of them read (`unreadCount` 0).
+
+#### Messages
+
+- `content` is trimmed and must be 1 to 4000 characters; a blank message is a `400`.
+- `GET /chat/:chatid/message` returns the newest `limit` messages, newest first. For the next page pass `before` set to the id of the oldest message loaded; `hasMore` says whether older ones remain. Reverse the list for display.
+- A deleted message stays in the list with `content: ""` and `deletedAt` set: show a placeholder such as "message deleted". An edited one has `editedAt`: show an "edited" label. Saving the content a message already has answers `200` without stamping `editedAt`. There is no edit history and no time limit.
+- `sender` and `senderId` are `null` when the author deleted their account: show a placeholder name and no actions on that message.
+- `lastMessage` of a room has no id and no sender, and it skips deleted messages. It changes when the newest message is edited or deleted.
+- `unreadCount` counts the messages of other people, not deleted, above the requester's own `lastReadMessageId`. Mark as read with `PUT /chat/:chatid/read` and the id of the newest message loaded (`lastMessage` has no id to use). The marker only moves forward, so an out-of-order or repeated call is harmless and still `200`; after it set that room's `unreadCount` to 0 in the cache. `lastReadMessageId` of the other members is what a "seen by" indicator would be built from.
+
+#### Friends
+
+- Search by phone number: `GET /friend/search/:tel` accepts only the canonical form, `+` followed by up to 15 digits. Strip spaces, dashes and parentheses from what was typed before calling, and encode the path segment with `encodeURIComponent`. The search is an exact match, so it finds one person or nobody.
+- `relationship` decides the button: `none` shows "Add friend", `request_sent` shows "Cancel" (`requestId`), `request_received` shows "Accept" (`requestId`), `friend` shows "Message", `self` shows nothing.
+- The ids differ: `/friend/requests/:id...` takes a **request** id, `DELETE /friend/:id` a **user** id.
+- Accepting or rejecting is not announced to the other person, and nothing is remembered: afterwards either can send a new request. Unfriending does not touch existing rooms.
+- `GET /friend` and `GET /friend/requests` are not paginated yet.
+
+### Limits that answer `429`
+
+| Endpoint | Limit |
+| --- | --- |
+| `POST /account/login` | 10 per 15 minutes per IP |
+| `POST /account/password`, `DELETE /account/me` | 10 per 15 minutes per user, shared by the two |
+| `POST /account/email/verify`, `POST /account/password/reset` | 10 per 15 minutes per IP each |
+| `POST /account/email/verification` | 5 per hour per user, and `Please wait a minute before asking for another email` while the last link is under 60 seconds old |
+| `POST /account/password/reset-request` | 10 per 15 minutes per IP, and 3 per hour per email address |
+| `GET /friend/search/:tel` | 30 per 15 minutes per user |
+| `POST /friend/requests` | 20 per hour per user |
+
+Requests answered `400` or `409` count too, so disable the submit button while a request is running: a double click should not spend the budget.
+
+### Real-time events (planned, step 6)
+
+The socket is a notification layer on top of REST: it never writes data, and every event has the same effect as refetching the matching endpoint. The server's design is under "Real-time events" in `./backend.doc.md`. Known so far: the handshake uses the session cookie (reached through `/socket.io` on the dev proxy); a socket joins `user:<id>` and one `chat:<chatId>` per room; `message:updated` carries the same message as the `PATCH` response, and `message:deleted` is `{ chatId, messageId, deletedAt }`. The other payloads are fixed in step 6, when the server side is written, and go into this section then.
 
 ## Implementation steps
 
@@ -200,11 +357,11 @@ See "Current Implementation Status".
 ### Step 5 — account settings and room management
 
 - `/settings`: change name and avatar URL (`PATCH /account/me`), change password (`POST /account/password`), delete account (`DELETE /account/me`; show the rooms from the `409`'s `chatIds`).
-- Create a group room, the member list, add and remove members, promote and demote, leave, rename. Show actions according to the permission table in `../project-planning-doc.md`, and rely on the server's answers for the rest.
+- Create a group room, the member list, add and remove members, promote and demote, leave, rename. Show actions according to the permission table in "API contract", and rely on the server's answers for the rest.
 
 ### Step 6 — Socket.io, together with the server
 
-Server and client are written in the same step, so each event can be tried as soon as it exists. The server side is specified under "Real-time events" in `../project-planning-doc.md`: the socket is a notification layer on top of REST and never a second way to write data.
+Server and client are written in the same step, so each event can be tried as soon as it exists. The server side is specified under "Real-time events" in `./backend.doc.md`: the socket is a notification layer on top of REST and never a second way to write data.
 
 Client side:
 
@@ -251,6 +408,7 @@ Client side:
 - **TanStack Router file-based routing, `routeTree.gen.ts` committed.**
 - **Vitest 5** in the frontend (the server uses Vitest 4): Vitest 5 installed cleanly next to Vite 8, while installing Vitest 4 there failed with an npm error in the sandbox this was built in. Align the two later if it matters.
 - **Hand-written API types** per feature for now.
+- **The API contract lives in this document too**, as a condensed copy of `./backend.doc.md`: frontend work should not need the 100 KB backend doc. The cost is two places to keep in step, so an endpoint change updates both in the same patch.
 - **Plain CSS** in step 1; no styling library until the first real screens.
 
 ## Open questions

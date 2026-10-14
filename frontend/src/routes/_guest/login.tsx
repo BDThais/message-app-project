@@ -12,7 +12,7 @@ export const Route = createFileRoute('/_guest/login')({
 
 // A thin first version, to prove the guard, the cookie and the cache work together end to end.
 // The real sign-in screens (validation messages, signup, forgot password) come in step 2 of
-// frontend-planning-doc.md.
+// frontend.doc.md.
 function LoginPage() {
   const router = useRouter();
   const { redirect } = Route.useSearch();

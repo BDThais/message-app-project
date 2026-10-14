@@ -2,7 +2,7 @@
 //
 // In development the paths below go to the Vite dev server, which forwards `/api/...` to the
 // Express server and removes the prefix (see vite.config.ts). In production the same prefix is
-// expected to be routed to the API by whatever serves the app (see frontend-planning-doc.md).
+// expected to be routed to the API by whatever serves the app (see frontend.doc.md).
 
 export const API_BASE = '/api';
 

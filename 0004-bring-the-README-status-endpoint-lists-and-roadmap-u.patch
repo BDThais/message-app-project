@@ -1,0 +1,91 @@
+From 6be4535ccb9e5ccc3786c91f847212db3de4aa1a Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 14 Oct 2026 01:46:26 +0000
+Subject: [PATCH 4/4] bring the README status, endpoint lists and roadmap up to
+ date
+
+---
+ README.md | 36 ++++++++++++++++++++----------------
+ 1 file changed, 20 insertions(+), 16 deletions(-)
+
+diff --git a/README.md b/README.md
+index 7c4f4f4..bf5c367 100644
+--- a/README.md
++++ b/README.md
+@@ -1,10 +1,10 @@
+ ﻿# Message App
+ 
+-A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a React frontend (scaffolded, screens in progress). The backend has moved beyond the initial auth baseline and now includes the core chat-room foundation, while friend requests and real-time messaging remain next on the roadmap.
++A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a React frontend (scaffolded, screens in progress). The REST API is in place (accounts with email verification and password reset, chat rooms, messages and the friend flows), while real-time messaging and the frontend screens remain next on the roadmap.
+ 
+ ## Project Status
+ 
+-The application is currently in an active backend MVP phase. Implemented features include:
++The server's REST API is in place and the frontend is the current milestone. Implemented features include:
+ 
+ - User signup with validation and duplicate checks
+ - Password hashing and credential verification
+@@ -16,16 +16,17 @@ The application is currently in an active backend MVP phase. Implemented feature
+ - Direct and group chat room creation, listing, update, and deletion
+ - Chat membership and role checks with admin-only protections
+ - Room summaries with the latest message and the unread count
++- Messages: send, list with pagination, edit, delete, and a read marker per member
++- Friends: search by phone number, friend requests (send, list, accept, reject, cancel), the friend list and unfriending; friendship is required to start a conversation
++- Profile update, password change and account deletion
+ - Prisma models for users, sessions, chat rooms, messages, and friendship flows
+-- Vitest integration tests for the account/session flow
++- Vitest integration tests for the account, chat-room, message and friend endpoints
+ - React frontend scaffold in `frontend/`: Vite dev server that proxies `/api` to the server, route guards for signed-in and signed-out pages, and a sign-in page (the plan and the next steps are in `frontend.doc.md`)
+ 
+ Next priorities:
+ 
+-- Friend search, requests, and friendship management
+-- Direct and group messaging APIs and pagination
+-- Real-time communication with Socket.io
+-- Frontend screens and auth-aware user flows
++- Real-time communication with Socket.io, built together with the frontend
++- Frontend screens and auth-aware user flows (the steps are in `frontend.doc.md`)
+ - Production deployment and environment hardening
+ 
+ ## Tech Stack
+@@ -128,15 +129,20 @@ The mailed link is `PASSWORD_RESET_URL#token=...`, with the token in the URL fra
+ 
+ The protected chat routes are implemented on the server and include:
+ 
+-- POST /chat
+-- GET /chat
+-- GET /chat/:chatid
+-- PATCH /chat/:chatid
+-- DELETE /chat/:chatid
++- POST /chat, GET /chat, GET /chat/:chatid, PATCH /chat/:chatid, DELETE /chat/:chatid
++- GET, POST /chat/:chatid/member and DELETE, PATCH /chat/:chatid/member/:userid
++- POST, GET /chat/:chatid/message and PATCH, DELETE /chat/:chatid/message/:message_id
++- PUT /chat/:chatid/read
+ - Room membership logic for direct and group rooms
+ - Admin-only room management controls
+ 
+-The remaining work is focused on friend flows and realtime messaging rather than the core room infrastructure itself.
++### Friend endpoints
++
++- GET /friend/search/:tel
++- POST, GET /friend/requests, POST /friend/requests/:id/accept and DELETE /friend/requests/:id
++- GET /friend and DELETE /friend/:id
++
++The request and response of every endpoint, with its status codes, are specified in `backend.doc.md`; the remaining work is real-time messaging and the frontend.
+ 
+ ## Database Model
+ 
+@@ -189,9 +195,7 @@ Open `http://localhost:5173`. The dev server forwards requests that start with `
+ 
+ ## Roadmap
+ 
+-- Finish friend lookup and pending request flows
+-- Implement message creation and retrieval APIs
+-- Add Socket.io for realtime messaging
++- Add Socket.io for realtime messaging (server and client together)
+ - Build the React frontend step by step (scaffold and route guards done; account screens, chat, friends and room management next)
+ - Add deployment and environment configuration for production
+ 
+-- 
+2.43.0
+
