@@ -239,7 +239,7 @@ interface SearchResult extends PublicUser { relationship: Relationship; requestI
 
 | Endpoint | Request | Success | Errors a screen handles |
 | --- | --- | --- | --- |
-| `POST /chat` | `{ type: 'direct' or 'group', member_ids?, name?, avatar_url? }` | `201` new room, `200` existing direct room reused: `{ id, type, name, avatarUrl, createdAt, members: Member[] }`, plus an internal `emptiedAt` that is always `null` (ignore it) | `400`; `403 Only your friends can be added to a chat room` (a stranger and an unknown id look the same) |
+| `POST /chat` | `{ type: 'direct' or 'group', member_ids?, name?, avatar_url? }` | `201` new room, `200` existing direct room reused: `{ id, type, name, avatarUrl, createdAt, members: Member[] }` | `400`; `403 Only your friends can be added to a chat room` (a stranger and an unknown id look the same) |
 | `GET /chat` | none | `200 { chatRooms: ChatRoomSummary[] }`, most recent activity first | none |
 | `GET /chat/:chatid` | none | `200 { chatRoom: ChatRoomDetail }` | none |
 | `PATCH /chat/:chatid` | `{ name?, avatar_url? }`, at least one | `200 { chatRoom: { id, type, name, avatarUrl, createdAt } }`: no `lastMessage`, `unreadCount` or `role`, so merge it into the cached room | `400`; `403` not an admin, or a direct room |
@@ -289,7 +289,7 @@ interface SearchResult extends PublicUser { relationship: Relationship; requestI
 - A direct room has exactly two members, both admins, and no name or avatar of its own. Its members cannot add or remove anyone, rename it or delete it; each can only leave it. Anything else answers `403`.
 - Start a direct chat from the friends list with `POST /chat` and `type: 'direct'`: it answers `200` with the existing room when there is one and `201` with a new one, so use the returned `id` either way. Two people who are no longer friends get `403`, not their old room back, but the old room keeps working for them.
 - Rooms are created and members added only from the requester's friends. A group room with no `member_ids` is allowed (the creator is its only member and its admin).
-- Hold group names and avatars to the update rules on both create and update: a name is 1 to 100 characters, an avatar an `http:` or `https:` URL (`null` clears it on update). The create endpoint is looser today (no length limit, any string as an avatar), so the form has to enforce it.
+- Group names are 1 to 100 characters after trimming, on create and on update alike (`400` otherwise). An avatar must be an `http:` or `https:` URL (`null` clears it on update), but only update checks that: create accepts any string, so the form has to enforce the URL rule itself.
 - `POST /chat` and `PATCH /chat/:chatid` answer with the room as stored, not as a summary: a direct room's `name` and `avatarUrl` are `null` there. After either, invalidate or merge into `GET /chat` instead of writing the response over a `ChatRoomSummary`.
 - Leaving is `DELETE /chat/:chatid/member/:userid` with your own id. A group's only admin cannot leave while others remain (`409`): promote someone first. When the last member leaves, the room disappears from the API (the server deletes it after a retention period).
 - Adding a member who already belongs is not an error: their id comes back in `alreadyMemberIds`. A member added to a room that already has messages starts with all of them read (`unreadCount` 0).

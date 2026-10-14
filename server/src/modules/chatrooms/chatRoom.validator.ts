@@ -4,6 +4,9 @@ import { isRecord, isValidHttpUrl } from '../../lib/validation';
 
 type ValidRoomType = 'direct' | 'group';
 
+// Longest group name, counted after trimming: the same limit when a room is created and when it is renamed.
+const MAX_CHAT_NAME_LENGTH = 100;
+
 type CreateChatRoomBody = Partial<{
   type: ValidRoomType;
   member_ids: number[];
@@ -74,6 +77,10 @@ export function validateCreateChatRoomInput(
         return { valid: false, error: 'name must be a non-empty string if provided' };
     }
 
+    if (name !== undefined && name.trim().length > MAX_CHAT_NAME_LENGTH) {
+        return { valid: false, error: `name must be ${MAX_CHAT_NAME_LENGTH} characters or fewer` };
+    }
+
     if (avatar_url !== undefined && typeof avatar_url !== 'string') {
         return { valid: false, error: 'avatar_url must be a string if provided' };
     }
@@ -106,8 +113,8 @@ export function validateUpdateChatRoomBody(body: unknown): UpdateChatRoomValidat
     if (typeof name !== 'string' || name.trim().length === 0) {
       return { valid: false, message: "'name' must be a non-empty string" };
     }
-    if (name.trim().length > 100) {
-      return { valid: false, message: "'name' must be 100 characters or fewer" };
+    if (name.trim().length > MAX_CHAT_NAME_LENGTH) {
+      return { valid: false, message: `'name' must be ${MAX_CHAT_NAME_LENGTH} characters or fewer` };
     }
     data.name = name.trim();
   }

@@ -25,6 +25,8 @@ describe('POST /chat', () => {
 
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ type: 'group', name: 'Project chat', avatarUrl: null });
+    // The whole shape, so a column added to the table does not leak into the response by accident (`emptiedAt` did once).
+    expect(Object.keys(res.body).sort()).toEqual(['avatarUrl', 'createdAt', 'id', 'members', 'name', 'type']);
     // Each entry is exactly this: the user is only under `member`, with no separate `memberId`.
     const members = [...res.body.members].sort((a, b) => a.member.id - b.member.id);
     expect(members).toEqual([
@@ -68,6 +70,8 @@ describe('POST /chat', () => {
     expect(first.status).toBe(201);
     expect(second.status).toBe(200);
     expect(second.body.id).toBe(first.body.id);
+    expect(Object.keys(first.body).sort()).toEqual(['avatarUrl', 'createdAt', 'id', 'members', 'name', 'type']);
+    expect(Object.keys(second.body).sort()).toEqual(Object.keys(first.body).sort());
     expect(await prisma.chatRoom.count()).toBe(1);
     expect(await prisma.chatMember.count()).toBe(2);
   });

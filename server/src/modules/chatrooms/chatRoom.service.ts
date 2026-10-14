@@ -3,9 +3,13 @@ import { findNonFriendIds } from '../friends/friend.service';
 import { prisma } from '../../lib/prisma';
 import { Prisma, ChatRoomType, ChatMemberRole } from '../../generated/prisma/client';
 
-const memberInclude = { members: memberResponseArgs } as const;
+// What POST /chat returns: the room's own columns and its members. `emptiedAt` belongs to the cleanup job and stays out of the response.
+const roomWithMembersArgs = {
+  include: { members: memberResponseArgs },
+  omit: { emptiedAt: true },
+} as const;
 
-type ChatRoomWithMembers = Prisma.ChatRoomGetPayload<{ include: typeof memberInclude }>;
+type ChatRoomWithMembers = Prisma.ChatRoomGetPayload<typeof roomWithMembersArgs>;
 
 export type CreateChatRoomResult =
   | { status: 'ok'; room: ChatRoomWithMembers; created: boolean }
@@ -74,7 +78,7 @@ export async function createDirectChatRoom(
         { members: { some: { memberId: otherUserId } } },
       ],
     },
-    include: memberInclude,
+    ...roomWithMembersArgs,
   });
   if (existing) {
     return { room: existing, created: false };
@@ -85,7 +89,7 @@ export async function createDirectChatRoom(
 
   const room = await tx.chatRoom.findUniqueOrThrow({
     where: { id: newRoom.id },
-    include: memberInclude,
+    ...roomWithMembersArgs,
   });
   return { room, created: true };
 }
@@ -115,7 +119,7 @@ export async function createGroupChatRoom(
 
   const room = await tx.chatRoom.findUniqueOrThrow({
     where: { id: newRoom.id },
-    include: memberInclude,
+    ...roomWithMembersArgs,
   });
   return { room, created: true };
 }

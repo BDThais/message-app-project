@@ -37,6 +37,17 @@ describe('validateCreateChatRoomInput', () => {
     });
   });
 
+  it('accepts a group name of exactly 100 characters, counted after trimming', () => {
+    const name = ` ${'a'.repeat(100)} `;
+
+    expect(validateCreateChatRoomInput({ type: 'group', name }, requesterId)).toEqual({
+      valid: true,
+      type: 'group',
+      memberIds: [],
+      name,
+    });
+  });
+
   it.each([
     ['a missing type', { member_ids: [2] }, 'type must be "direct" or "group"'],
     ['an unknown type', { type: 'channel' }, 'type must be "direct" or "group"'],
@@ -49,6 +60,7 @@ describe('validateCreateChatRoomInput', () => {
     ['a direct room with two other members', { type: 'direct', member_ids: [2, 3] }, 'a direct chat room requires exactly one other member'],
     ['a direct room with a name', { type: 'direct', member_ids: [2], name: 'Bob' }, 'direct chat rooms cannot have a name or avatar'],
     ['a blank group name', { type: 'group', name: '   ' }, 'name must be a non-empty string if provided'],
+    ['a group name over 100 characters', { type: 'group', name: 'a'.repeat(101) }, 'name must be 100 characters or fewer'],
   ])('rejects %s', (_label, body, error) => {
     expect(validateCreateChatRoomInput(body, requesterId)).toEqual({ valid: false, error });
   });

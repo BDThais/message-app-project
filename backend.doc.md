@@ -334,7 +334,7 @@ POST /chat (implemented)
 - for direct rooms, `member_ids` must contain exactly one other integer user ID; direct rooms cannot include `name` or `avatar_url`
 - every `member_ids` entry must be an integer from 1 to 2147483647 and a friend of the requester (see "Friendship and messaging"); a group room with no `member_ids` needs no friends
 - for group rooms, `member_ids` may be omitted or be an empty array; the requester is always added as an admin
-- group rooms may include `name` and `avatar_url`. `name`, when given, must be a non-empty string (it is stored trimmed) and `avatar_url` a string. Unlike `PATCH /chat/:chatid`, this endpoint applies neither the 100-character limit on `name` nor the `http:`/`https:` check on `avatar_url`: a known inconsistency between `validateCreateChatRoomInput` and `validateUpdateChatRoomBody`, so a client should hold both to the update rules
+- group rooms may include `name` and `avatar_url`. `name`, when given, must be a non-empty string of at most 100 characters after trimming (it is stored trimmed), the same rule as `PATCH /chat/:chatid` (`400 name must be 100 characters or fewer`); both validators read the limit from `MAX_CHAT_NAME_LENGTH` in `chatRoom.validator.ts`. `avatar_url` only has to be a string here: unlike `PATCH /chat/:chatid`, this endpoint does not check that it is an `http:`/`https:` URL (a known gap between `validateCreateChatRoomInput` and `validateUpdateChatRoomBody`, so a client should hold both to the update rule)
 - incoming body:
 
   ```json
@@ -351,7 +351,7 @@ POST /chat (implemented)
 - responds `400` on validation errors
 - each entry of `members` is `{ chatId, role, lastReadMessageId, member: { id, name, avatarUrl } }`. The user is only under `member`: there is no separate `memberId`, it would repeat `member.id`. `GET /chat/:chatid/member`, `POST /chat/:chatid/member` and `PATCH /chat/:chatid/member/:userid` return entries of the same shape
 - responds `403` with `{ "error": "Only your friends can be added to a chat room" }` when any `member_ids` entry is not a friend of the requester, or does not exist (the two are not told apart), and creates no room and no members. For a direct room this check comes before the lookup of an existing room, so two former friends get `403` here, not their old room back
-- the room is returned as stored, with its `members`, and without `lastMessage`, `unreadCount` or `role`. The response also carries `emptiedAt` (the cleanup job's column, always `null` for a room that has just been created or reused) which the example below leaves out: it is not part of the contract, and a client ignores it. For a direct room `name` and `avatarUrl` are `null` (the client shows the other member from `members`): only `GET /chat` and `GET /chat/:chatid` derive them from the other member
+- the room is returned with its `members` and without `lastMessage`, `unreadCount` or `role`: its own columns `id`, `type`, `name`, `avatarUrl` and `createdAt`, and nothing else. `emptiedAt`, the cleanup job's column, is left out of the query (`omit` in `roomWithMembersArgs`, `chatRoom.service.ts`), and `chatRoom.test.ts` pins the exact set of keys so a new column cannot leak in unnoticed. For a direct room `name` and `avatarUrl` are `null` (the client shows the other member from `members`): only `GET /chat` and `GET /chat/:chatid` derive them from the other member
 - return body:
 
   ```json
