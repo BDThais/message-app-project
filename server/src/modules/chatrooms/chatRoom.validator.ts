@@ -85,6 +85,10 @@ export function validateCreateChatRoomInput(
         return { valid: false, error: 'avatar_url must be a string if provided' };
     }
 
+    if (avatar_url !== undefined && !isValidHttpUrl(avatar_url)) {
+        return { valid: false, error: 'avatar_url must be a valid URL' };
+    }
+
     return {
         valid: true,
         type,

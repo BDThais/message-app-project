@@ -161,32 +161,32 @@ How the guards work:
 
 The API itself (every endpoint's request, response, status codes, error texts, rate limits, and the rules that come with them) is specified in `./api.doc.md`; the types in each feature's `types.ts` are written from its "Shapes" section. What follows is only how the screens are meant to use it.
 
-#### Account
+### Account
 
 - Signup form: hint the rules from `./api.doc.md` (name, password, phone number), but show the server's `error` text rather than rebuilding it: client-side checks only save a round trip. A new account has no avatar, so the avatar field belongs to the profile screen, not to signup.
 - The "verify your email" banner reads `emailVerified` and offers the resend button; nothing else in the app is blocked for an unverified user.
 - The page behind a mailed link reads the token from `location.hash`, posts it, and removes it from the address bar. The reset form words its confirmation like the server does ("if an account exists..."), never "a reset mail is on its way".
 - There is no avatar upload, so show initials or a placeholder when `avatarUrl` is `null`. An avatar is a pasted `http:` or `https:` URL, and the server refuses anything else on every endpoint that takes one.
 
-#### Rooms and members
+### Rooms and members
 
 - Start a direct chat from the friends list with `POST /chat` and use the returned `id`, whether it answered `200` or `201`. Two people who are no longer friends get a `403` there, but their old room keeps working from the room list.
 - `POST /chat` and `PATCH /chat/:chatid` return the room as stored, not a summary: merge them into the cached room list or invalidate `GET /chat`, and for a direct room show the other member from `members`.
 - Show room actions according to the permission table in `./api.doc.md`, and rely on the server's answers for the rest. A group's only admin cannot leave while others remain (`409`): offer to promote someone first.
 
-#### Messages
+### Messages
 
 - `GET /chat/:chatid/message` is newest first: reverse it for display, and page back with `before` set to the oldest id loaded.
 - Show a placeholder such as "message deleted" for a deleted message, an "edited" label for `editedAt`, and a placeholder name with no actions when `sender` is `null`.
 - Mark a room as read with the id of the newest message loaded (`lastMessage` has no id to use), then set that room's `unreadCount` to 0 in the cache.
 
-#### Friends
+### Friends
 
 - Strip spaces, dashes and parentheses from the typed phone number before `GET /friend/search/:tel`, and encode the segment with `encodeURIComponent`: the server accepts only the canonical form.
 - `relationship` decides the button: `none` shows "Add friend", `request_sent` shows "Cancel" (`requestId`), `request_received` shows "Accept" (`requestId`), `friend` shows "Message", `self` shows nothing.
 - `/friend/requests/:id...` takes a request id, `DELETE /friend/:id` a user id.
 
-#### Forms that hit a rate limit
+### Forms that hit a rate limit
 
 - Disable the submit button while a request is running: the limiters count every request, including the ones that fail validation, so a double click spends the budget.
 

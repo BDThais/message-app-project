@@ -37,6 +37,12 @@ describe('validateCreateChatRoomInput', () => {
     });
   });
 
+  it('accepts an http or https avatar_url on a group room', () => {
+    expect(
+      validateCreateChatRoomInput({ type: 'group', avatar_url: 'https://example.com/team.png' }, requesterId)
+    ).toEqual({ valid: true, type: 'group', memberIds: [], avatarUrl: 'https://example.com/team.png' });
+  });
+
   it('accepts a group name of exactly 100 characters, counted after trimming', () => {
     const name = ` ${'a'.repeat(100)} `;
 
@@ -61,6 +67,9 @@ describe('validateCreateChatRoomInput', () => {
     ['a direct room with a name', { type: 'direct', member_ids: [2], name: 'Bob' }, 'direct chat rooms cannot have a name or avatar'],
     ['a blank group name', { type: 'group', name: '   ' }, 'name must be a non-empty string if provided'],
     ['a group name over 100 characters', { type: 'group', name: 'a'.repeat(101) }, 'name must be 100 characters or fewer'],
+    ['an avatar_url that is not a string', { type: 'group', avatar_url: 5 }, 'avatar_url must be a string if provided'],
+    ['an avatar_url that is not a URL', { type: 'group', avatar_url: 'not a url' }, 'avatar_url must be a valid URL'],
+    ['an avatar_url with another scheme', { type: 'group', avatar_url: 'javascript:alert(1)' }, 'avatar_url must be a valid URL'],
   ])('rejects %s', (_label, body, error) => {
     expect(validateCreateChatRoomInput(body, requesterId)).toEqual({ valid: false, error });
   });
