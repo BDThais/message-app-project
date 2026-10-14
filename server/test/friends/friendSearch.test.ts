@@ -165,7 +165,7 @@ describe('GET /friend/search/:tel', () => {
     });
 
     it('is request_received when both users have sent each other a request', async () => {
-      // The accepted send-at-the-same-instant race from the planning doc: the
+      // The accepted send-at-the-same-instant race described in backend.doc.md: the
       // received request is the one the requester can accept, and accepting it
       // clears both.
       const alice = await createUser('Alice');

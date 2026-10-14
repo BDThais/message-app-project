@@ -5,6 +5,8 @@
 This project is a real-time messaging application built with PostgreSQL, Prisma, TypeScript, Express.js, and a React frontend.
 The backend has grown beyond the original account/session MVP and now includes a working chat-room foundation with direct and group room support, while the realtime features are still planned work.
 
+The project has three documents: `./api.doc.md` specifies the API (what a client sends and gets back), this one is the server's plan and how it is built, and `./frontend.doc.md` is the frontend's plan.
+
 ## Tech Stack
 
 - PostgreSQL
@@ -106,216 +108,11 @@ The room and auth systems are now acting as the current working backend foundati
 
 Note: In the database, the mutual friendship model stores two rows per friendship pair, one for each user, as described in the project requirements.
 
-## Permission model
+## API implementation notes
 
-| Action                  | admin | member |
-| ----------------------- | :---: | :----: |
-| Send / read messages    |  ✅   |   ✅   |
-| Edit own message        |  ✅   |   ✅   |
-| Delete own message      |  ✅   |   ✅   |
-| Update room name/avatar |  ✅   |   ❌   |
-| Delete room             |  ✅   |   ❌   |
-| Add members             |  ✅   |   ❌   |
-| Remove other members    |  ✅   |   ❌   |
-| Leave the room          |  ✅   |   ✅   |
-| List members, mark read |  ✅   |   ✅   |
-| Promote/demote a member |  ✅   |   ❌   |
+The specification of every endpoint (request and response bodies, status codes, error texts, rate limits, the permission model) is in `./api.doc.md`, and it is the source of truth for what a client sees. This section is how the endpoints are built and why: the files, the transactions and locks, the limiters, and the decisions behind a behavior. When an endpoint's request, response, status code or error body changes, change `./api.doc.md` in the same patch; a change that only touches the how stays here.
 
-Implemented so far: update, delete, add members, remove members, leave, promote/demote, listing the members, marking a room as read (each member moves only their own marker), sending messages, reading messages, and editing and deleting a message (sender only - no admin-moderation override for other members' messages).
-
-## API Status
-
-The frontend has a condensed, client-oriented copy of this section in `./frontend.doc.md` ("API contract"): request and response shapes, status codes and the error texts a screen handles, without the server internals. This section stays the source of truth. When an endpoint's request, response, status code or error body changes, change both documents in the same patch.
-
-### Auth endpoints (implemented)
-
-POST /account/signup
-
-- Creates a new user account
-- Validates name, email, tel, and password
-- Checks for duplicate email or phone number
-- Stores `tel` in its canonical E.164 spelling (`+` and digits only), not as typed: `isValidPhoneNumber` accepts spaces, dashes, parentheses, non-ASCII digits and extensions, and the unique constraint compares raw strings, so `+1 (415) 555-2671` and `+14155552671` would otherwise both register, and `GET /friend/search/:tel` (an exact match) could never find the first. `normalizeTel` in `signup.validator.ts` validates with `isValidPhoneNumber` (so the set of accepted numbers is unchanged) and then takes `parsePhoneNumberFromString(tel).number`; an extension is dropped. The duplicate check and the insert both use the normalized number, so another spelling of a registered number answers `409`
-- Numbers stored before this change are rewritten by `npm run db:normalize-tels` (`scripts/normalize-tels.mjs`, run from `server/` against the database in `DATABASE_URL`). It is a dry run that lists the changes; add `-- --apply` to write them, in one transaction. It never touches a number that is no longer valid or accounts that would end up with the same number: it lists them, exits with code `1`, and leaves the merge or delete to you
-- Hashes the password before saving
-- Mails a verification link to the new address after responding (see "Email verification (implemented)"): the account starts unverified, signup does not log in, and a mail that cannot be sent does not fail the signup (it is logged, and the user asks again with `POST /account/email/verification`)
-- incoming body:
-
-  ```json
-  {
-    "name": "JohnDoe",
-    "email": "john@example.com",
-    "tel": "+1234567890",
-    "password": "Str0ng!Pass"
-  }
-  ```
-
-- return body (`201`):
-
-  ```json
-  {
-    "message": "Account created successfully"
-  }
-  ```
-
-- responds `400` with `{ "error": ... }` when validation fails and `409` when the email or phone number is already taken (in any spelling of the number)
-- the duplicate check and the insert are two statements, so two simultaneous signups for the same email or number can both pass the check. The database then refuses the second insert (a unique violation, Prisma `P2002`) and the answer is the same `409`, naming the column that really collided: `Email already exists` or `Phone number already exists`. Where Prisma reports that column depends on its setup: with the `PrismaPg` driver adapter this project uses, `meta.target` is absent and the column is in `meta.driverAdapterError.cause.constraint` (`fields`, or `index` for the constraint's name), so a handler that only reads `meta.target` never finds it (the old one answered `Phone number already exists` whatever the cause). `uniqueViolationMessage` in `signup.validator.ts` reads both places, and says `Email or phone number already exists` when the error names neither
-
-POST /account/login
-
-- Validates the supplied email/password
-- Returns a generic invalid credentials message for both failed user and password checks
-- Deletes any expired session already stored for the same user
-- Creates a new session and sets the session cookie. The session id is 32 random bytes from `crypto.randomBytes`, base64url-encoded (43 characters), made by `generateToken` (`src/lib/randomToken.ts`) in `createSession`; `sessions.id` has no default in the schema, so a session cannot be created without one. Sessions created before this change keep their old ids and work until they expire; to sign everybody out at once, run `DELETE FROM sessions;`
-- Rate limited to 10 attempts per 15 minutes per IP (`429` with `{ "error": ... }` afterwards); `loginLimiter` lives in `modules/account/accountRateLimit.middleware.ts`
-- responds `400` when email or password is missing or not a string, and `401` for invalid credentials
-- incoming body:
-
-  ```json
-  {
-    "email": "john@example.com",
-    "password": "Str0ng!Pass"
-  }
-  ```
-
-- return body:
-
-  ```json
-  {
-    "user": {
-      "id": 1,
-      "name": "JohnDoe",
-      "email": "john@example.com",
-      "tel": "+1234567890",
-      "avatarUrl": null,
-      "emailVerified": false
-    }
-  }
-  ```
-
-GET /account/me
-
-- Returns the current authenticated user or null if there is no session. `avatarUrl` is `null` until `PATCH /account/me` sets it, and `emailVerified` is `false` until the address is verified (see "Email verification (implemented)")
-- return body:
-
-  ```json
-  {
-    "user": {
-      "id": 1,
-      "name": "JohnDoe",
-      "email": "john@example.com",
-      "tel": "+1234567890",
-      "avatarUrl": null,
-      "emailVerified": false
-    }
-  }
-  ```
-
-  When there is no valid session, `user` is `null`.
-
-POST /account/logout
-
-- Invalidates the current session if it exists
-- Clears the session cookie
-- Returns the user as null
-- return body:
-
-  ```json
-  {
-    "user": null
-  }
-  ```
-
-PATCH /account/me (implemented)
-
-- Updates the requester's own profile. Requires a session (`401 { "error": "Unauthorized Access" }` otherwise)
-- incoming body: `{ name?, avatar_url? }` with at least one, otherwise `400`. Only the fields that are sent change; unknown fields (`email`, `tel`, `password`...) are ignored
-- `name` follows signup's rule (letters and numbers only) and must be a non-empty string. `avatar_url` follows the rule on `PATCH /chat/:chatid`: an `http:` or `https:` URL, or `null` to clear it. The two checks that both validators need (`isValidHttpUrl`, `isRecord`) live in `src/lib/validation.ts`
-- return body (`200`), the same user shape that login and `GET /account/me` return:
-
-  ```json
-  {
-    "user": {
-      "id": 1,
-      "name": "JohnDoe2",
-      "email": "john@example.com",
-      "tel": "+1234567890",
-      "avatarUrl": "https://example.com/john.png",
-      "emailVerified": false
-    }
-  }
-  ```
-
-- `avatarUrl` is now part of the user shape everywhere: `findSessionUser` selects it, so `GET /account/me` and `req.user` carry it, and login returns it. `emailVerified` is part of the user shape everywhere too (login, `GET /account/me`, `PATCH /account/me`, `req.user`): `true` once the address is verified, and the timestamp itself (`email_verified_at`) is never sent. Changing `email` or `tel` is not supported
-- responds `400` with `{ "error": ... }` when validation fails. Validation lives in `profile.validator.ts`
-
-POST /account/password (implemented)
-
-- Changes the requester's password. Requires a session (`401 { "error": "Unauthorized Access" }` otherwise)
-- incoming body: `{ current_password, new_password }`, both non-empty strings (`400` otherwise). `new_password` follows the signup password rules (`400` with the same messages as signup). Validation lives in `password.validator.ts`
-- `401 { "error": "Current password is incorrect" }` when `current_password` is wrong; nothing changes. The same `401` is sent if the password was changed by another request between the check and the write: `changePassword` (`account.service.ts`) only writes when the stored hash is still the one that was verified, so a stale "current password" cannot overwrite a newer one
-- in one transaction, stores the new hash and deletes all the user's other sessions (expired ones too), so a leaked session stops working. The session making the request stays valid, and other users' sessions are untouched
-- responds `204` with no body. A new password equal to the current one is accepted (the other sessions are still signed out)
-- rate limited to 10 attempts per 15 minutes per user (`429 { "error": "Too many attempts, try again later" }` afterwards), because otherwise a stolen session cookie could guess the password here without the limit login has. `passwordCheckLimiter` lives in `modules/account/accountRateLimit.middleware.ts`, is keyed by user id, and so is mounted after `requireUserAuth`. Every request that gets past `requireUserAuth` counts, including ones answered with a `400`. `DELETE /account/me` uses the same limiter instance, so the two routes share one budget
-
-DELETE /account/me (implemented)
-
-- Deletes the requester's own account. Requires a session (`401 { "error": "Unauthorized Access" }` otherwise)
-- incoming body: `{ password }`, the account's current password, a non-empty string (`400 { "error": "Password is required" }` otherwise). It is asked for the same reason `POST /account/password` asks for the current one: deleting is irreversible, so a session cookie alone (a stolen one, or a browser left signed in) must not be enough. Validation lives in `deleteAccount.validator.ts`
-- `401 { "error": "Password is incorrect" }` when the password is wrong; nothing changes. The same `401` is sent if the password was changed by another request between the check and the delete: `deleteAccount` (`account.service.ts`) only deletes when the stored hash is still the one that was verified, like `changePassword`
-- `409` when the requester is the only admin of a group room that still has other members: the only-admin rule of `DELETE /chat/:chatid/member/:userid`, applied to the whole account, so a room with members always keeps an admin. Nothing is deleted, not even the rooms where the requester is only a member. The user can make someone else an admin (`PATCH /chat/:chatid/member/:userid`) or delete the room (`DELETE /chat/:chatid`) and try again. The body lists the rooms so the client can send the user there (`chatIds` is the one extra key an error body carries):
-
-  ```json
-  {
-    "error": "You are the only admin of a group room that still has other members. Make someone else an admin or delete the room first",
-    "chatIds": [3, 8]
-  }
-  ```
-
-  Direct rooms are exempt (both members are admins), and so are group rooms where the requester is the only member
-- everything runs in one transaction. The foreign keys delete the user's sessions (all of them, expired ones too), room memberships, friend-list entries (in both directions) and friend requests (sent and received). The user's messages stay in their rooms with `senderId` and `sender` set to `null`, so the other members keep the conversation; nobody can edit or delete such a message afterwards, because both are sender-only. A direct room stays with its remaining member, who still lists and reads it (its `name` and `avatarUrl` are `null`, as when the other member leaves)
-- a room whose only member was the requester gets `emptied_at` in the same transaction, so the retention clock of the cleanup job starts right away (see "Empty chat room cleanup")
-- every room the requester is in is locked (`SELECT ... FOR UPDATE`, in id order so two deletions that share rooms cannot deadlock) before the admin check, for the same reason as on `DELETE /chat/:chatid/member/:userid`: two admins of one room deleting their accounts at the same moment could otherwise both pass the check and leave the room with members but no admin
-- responds `204` with no body and clears the session cookie. The email and phone number can be used to sign up again
-- rate limited with `POST /account/password`: the two routes share one budget of 10 attempts per 15 minutes per user (`429 { "error": "Too many attempts, try again later" }` afterwards), because both let whoever holds a session guess the password
-
-POST /account/email/verify (implemented)
-
-- Confirms an email address with the token from a verification mail. No session is needed: the token is the credential, and the link is often opened on another device than the one that is signed in
-- incoming body: `{ token }`, a non-empty string (`400 { "error": "Token is required" }` otherwise). Validation lives in `emailVerification.validator.ts`
-- `400 { "error": "This verification link is invalid or has expired" }` for a token that is unknown, already used, expired, replaced by a newer link, or issued for an address the account no longer has: one message for all of them, so the answer says nothing about which it was
-- responds `204` with no body, and the account's `emailVerified` is `true` from then on. A link works once, even for two simultaneous requests
-- rate limited per IP, 10 requests per 15 minutes (`429 { "error": "Too many attempts, try again later" }` afterwards). `emailVerifyLimiter` lives in `modules/account/accountRateLimit.middleware.ts`; every request counts, including ones answered with a `400`
-- how links are made, stored and mailed is under "Email verification (implemented)"
-
-POST /account/email/verification (implemented)
-
-- Mails a new verification link to the signed-in user's current address and replaces the old link, which stops working. Requires a session (`401 { "error": "Unauthorized Access" }` otherwise). No body. This is the "resend" button, and how accounts created before email verification verify
-- `409 { "error": "Email is already verified" }` when it is
-- `429 { "error": "Please wait a minute before asking for another email" }` while the stored link is younger than 60 seconds; nothing is sent and the stored link stays valid
-- responds `204` with no body, and the mail goes out after the response
-- rate limited to 5 requests per hour per user (`429 { "error": "Too many verification emails requested, try again later" }`). `emailVerificationRequestLimiter` is keyed by user id, so it is mounted after `requireUserAuth`; every request that gets past it counts, including ones answered with a `409` or the cooldown's `429`
-
-POST /account/password/reset-request (implemented)
-
-- Asks for a password reset link by email. No session is needed: whoever asks has forgotten the password
-- incoming body: `{ email }`, a string accepted by `validator.isEmail` (`400 { "error": "Email is required" }` when it is missing or not a non-empty string, `400 { "error": "Invalid email format" }` when it is not an address). Validation lives in `passwordReset.validator.ts`
-- answers `202 { "message": "If an account exists for that email, a reset link is on its way" }` for every well-formed email, whether or not an account has it, and whatever else happens below, so the answer cannot be used to find out who is registered. (Signup still answers `409` for a registered email, so registration is not hidden as long as that stays.)
-- a verified account gets a new reset link, which replaces the old one. An unverified account gets the verification mail instead (under the verification cooldown), because a reset link goes only to an address someone has proven. An unknown address, or an account whose stored link is younger than 60 seconds, gets nothing. The address is matched exactly, like login
-- the database work is finished before the answer and the mail goes out after it (a failed or slow mail changes nothing for the caller)
-- two limiters, in this order: per IP (10 per 15 minutes, `429 { "error": "Too many attempts, try again later" }`) and per email (3 per hour, `429 { "error": "Too many password reset requests, try again later" }`). Every request counts, known email or not and valid body or not, so a `429` reveals nothing either. The per-email key is the lower-cased address from the body, or the client's IP when the body has no usable address (not a string, or longer than 254 characters); keys have an `email:` or `ip:` prefix, so an address that looks like an IP cannot use up that IP's budget. The limiters live in `modules/account/accountRateLimit.middleware.ts`
-- how links are made, stored and mailed is under "Password reset (implemented)"
-
-POST /account/password/reset (implemented)
-
-- Sets a new password with the token from a reset mail. No session is needed: the token is the credential, and the link is often opened on another device
-- incoming body: `{ token, new_password }`, both non-empty strings (`400 { "error": "Token and new password are required" }` otherwise). `new_password` follows the signup password rules (`400` with the same messages as signup) and is checked first, so a weak password does not use up the link. Validation lives in `passwordReset.validator.ts`
-- `400 { "error": "This reset link is invalid or has expired" }` for a token that is unknown, already used, expired or replaced by a newer link: one message for all of them
-- responds `204` with no body. It does not sign the user in: they log in with the new password. Every session of the account is deleted (expired ones too), a link works once, even for two simultaneous requests, and a "your password was changed" mail goes to the account's address after the response
-- rate limited per IP, 10 requests per 15 minutes (`429 { "error": "Too many attempts, try again later" }` afterwards). `passwordResetLimiter` lives in `modules/account/accountRateLimit.middleware.ts`; every request counts, including ones answered with a `400`
-
-### Room, message and friend endpoints (implemented)
-
-All of these endpoints are routed after auth middleware so they can access the current user's data through `req.user`.
+All of the endpoints below are routed after the auth middleware, so they can reach the current user through `req.user`; an endpoint that needs a session has to be routed after it.
 `req.user` shape = {
   id: number;
   name: string;
@@ -324,420 +121,161 @@ All of these endpoints are routed after auth middleware so they can access the c
   avatarUrl: string | null;
   emailVerified: boolean;
 }
-A direct room has no name/avatar to edit, its members cannot add or remove the other member from the room, and all of its members are admins.
-Endpoints that require authorization have to be routed after the auth middlewares.
 
-POST /chat (implemented)
+### Account endpoints
 
-- create a new chat room
-- incoming body: type, member_ids, name?, avatar_url?
-- for direct rooms, `member_ids` must contain exactly one other integer user ID; direct rooms cannot include `name` or `avatar_url`
-- every `member_ids` entry must be an integer from 1 to 2147483647 and a friend of the requester (see "Friendship and messaging"); a group room with no `member_ids` needs no friends
-- for group rooms, `member_ids` may be omitted or be an empty array; the requester is always added as an admin
-- group rooms may include `name` and `avatar_url`. `name`, when given, must be a non-empty string of at most 100 characters after trimming (it is stored trimmed), the same rule as `PATCH /chat/:chatid` (`400 name must be 100 characters or fewer`); both validators read the limit from `MAX_CHAT_NAME_LENGTH` in `chatRoom.validator.ts`. `avatar_url` only has to be a string here: unlike `PATCH /chat/:chatid`, this endpoint does not check that it is an `http:`/`https:` URL (a known gap between `validateCreateChatRoomInput` and `validateUpdateChatRoomBody`, so a client should hold both to the update rule)
-- incoming body:
+POST /account/signup
 
-  ```json
-  {
-    "type": "group",
-    "member_ids": [],
-    "name": "Project chat",
-    "avatar_url": "https://example.com/project-chat.png"
-  }
-  ```
+- Validation is `validateAccountBody` in `signup.validator.ts`: it checks that all four fields are there, then name, email (`validator.isEmail`), tel and password in that order, and returns the first message that fails
+- `avatar_url` is deliberately not a signup field: `users.avatar_url` is a nullable column with no default, so a new account always has `avatarUrl: null` and the user adds an avatar later through `PATCH /account/me`. Extra fields in the signup body are ignored
+- Stores `tel` in its canonical E.164 spelling (`+` and digits only), not as typed: `isValidPhoneNumber` accepts spaces, dashes, parentheses, non-ASCII digits and extensions, and the unique constraint compares raw strings, so `+1 (415) 555-2671` and `+14155552671` would otherwise both register, and `GET /friend/search/:tel` (an exact match) could never find the first. `normalizeTel` in `signup.validator.ts` validates with `isValidPhoneNumber` (so the set of accepted numbers is unchanged) and then takes `parsePhoneNumberFromString(tel).number`; an extension is dropped. The duplicate check and the insert both use the normalized number, so another spelling of a registered number answers `409`
+- Numbers stored before this change are rewritten by `npm run db:normalize-tels` (`scripts/normalize-tels.mjs`, run from `server/` against the database in `DATABASE_URL`). It is a dry run that lists the changes; add `-- --apply` to write them, in one transaction. It never touches a number that is no longer valid or accounts that would end up with the same number: it lists them, exits with code `1`, and leaves the merge or delete to you
+- Hashes the password before saving
+- Mails a verification link to the new address after responding (see "Email verification (implemented)"): the account starts unverified, and a mail that cannot be sent does not fail the signup (it is logged, and the user asks again with `POST /account/email/verification`)
+- the duplicate check and the insert are two statements, so two simultaneous signups for the same email or number can both pass the check. The database then refuses the second insert (a unique violation, Prisma `P2002`) and the answer is the same `409`, naming the column that really collided: `Email already exists` or `Phone number already exists`. Where Prisma reports that column depends on its setup: with the `PrismaPg` driver adapter this project uses, `meta.target` is absent and the column is in `meta.driverAdapterError.cause.constraint` (`fields`, or `index` for the constraint's name), so a handler that only reads `meta.target` never finds it (the old one answered `Phone number already exists` whatever the cause). `uniqueViolationMessage` in `signup.validator.ts` reads both places, and says `Email or phone number already exists` when the error names neither
 
-- a group room can also be created without `member_ids` or with additional member IDs, for example `"member_ids": [2, 3]`
-- responds `201` when a new room is created and `200` when an existing direct room between the same two friends is reused
-- responds `400` on validation errors
-- each entry of `members` is `{ chatId, role, lastReadMessageId, member: { id, name, avatarUrl } }`. The user is only under `member`: there is no separate `memberId`, it would repeat `member.id`. `GET /chat/:chatid/member`, `POST /chat/:chatid/member` and `PATCH /chat/:chatid/member/:userid` return entries of the same shape
-- responds `403` with `{ "error": "Only your friends can be added to a chat room" }` when any `member_ids` entry is not a friend of the requester, or does not exist (the two are not told apart), and creates no room and no members. For a direct room this check comes before the lookup of an existing room, so two former friends get `403` here, not their old room back
-- the room is returned with its `members` and without `lastMessage`, `unreadCount` or `role`: its own columns `id`, `type`, `name`, `avatarUrl` and `createdAt`, and nothing else. `emptiedAt`, the cleanup job's column, is left out of the query (`omit` in `roomWithMembersArgs`, `chatRoom.service.ts`), and `chatRoom.test.ts` pins the exact set of keys so a new column cannot leak in unnoticed. For a direct room `name` and `avatarUrl` are `null` (the client shows the other member from `members`): only `GET /chat` and `GET /chat/:chatid` derive them from the other member
-- return body:
+POST /account/login
 
-  ```json
-  {
-    "id": 1,
-    "type": "group",
-    "name": "Project chat",
-    "avatarUrl": "https://example.com/project-chat.png",
-    "createdAt": "2026-09-13T12:00:00.000Z",
-    "members": [
-      {
-        "chatId": 1,
-        "role": "admin",
-        "lastReadMessageId": null,
-        "member": {
-          "id": 1,
-          "name": "JohnDoe",
-          "avatarUrl": null
-        }
-      },
-      {
-        "chatId": 1,
-        "role": "member",
-        "lastReadMessageId": null,
-        "member": {
-          "id": 2,
-          "name": "JaneDoe",
-          "avatarUrl": null
-        }
-      }
-    ]
-  }
-  ```
+- Returns the same generic message for an unknown email and for a wrong password (the lookup answers `null` for both)
+- Deletes any expired session already stored for the same user
+- Creates a new session and sets the session cookie. The session id is 32 random bytes from `crypto.randomBytes`, base64url-encoded (43 characters), made by `generateToken` (`src/lib/randomToken.ts`) in `createSession`; `sessions.id` has no default in the schema, so a session cannot be created without one. Sessions created before this change keep their old ids and work until they expire; to sign everybody out at once, run `DELETE FROM sessions;`
+- The limiter is `loginLimiter`, in `modules/account/accountRateLimit.middleware.ts`
 
-GET /chat (implemented)
+GET /account/me
 
-- retrieve a list of all the chat rooms that have this user as its member
-- have separate functions for retrieving direct and group chat room, the functions return all direct/group chat rooms that has req.user
-  as member (with datas of the last message in that room like it's content, time created) when it's not supplied with a specific chatid.
-  The function responsible for retrieving direct chat room return the other user'name as the room's name and use their avatar url (if it's not null)
-  as the room's avatar url
-- `lastMessage` is the newest message of the room that has not been deleted, or `null` when there is none. A deleted message has no content left, so showing it would give the room list a blank preview: the lookup skips deleted messages, and the preview shows the message before the deleted one (so `content` is never `""`). Deleting the latest message therefore also moves the room down the list, because the order below follows the message that is shown
-- `unreadCount` is the number of messages in the room that the requester has not read: messages with an id above the requester's own `lastReadMessageId` (the marker `PUT /chat/:chatid/read` moves; every message counts while it is still `null`), not sent by the requester and not deleted. A message whose author has since deleted their account (`senderId` is `null`) is still somebody else's message and counts. It is `0` when nothing is unread, never absent. The rooms' counts come from one query for the whole list (`countUnreadMessages`, raw SQL because the threshold is a column of each room's own membership row; the `(chat_id, id)` index serves it), not one per room. Only the requester's own marker matters: the other members' markers (listed by `GET /chat/:chatid/member`) are what a "seen by" indicator would be built from
-- a member added to a room that already has messages starts with those messages counted as read, so their `unreadCount` is `0` and only what is sent after they join is unread (the rule is under `POST /chat/:chatid/member`). `PUT /chat/:chatid/read` moves the marker on from there
-- the success response return the chat rooms sorted by how recent is the last message, the rooms that doesn't have last message is sorted by time created
-- return body:
+- `avatarUrl` is part of the user shape everywhere: `findSessionUser` selects it, so `GET /account/me` and `req.user` carry it, and login returns it. `emailVerified` is part of the user shape everywhere too (login, `GET /account/me`, `PATCH /account/me`, `req.user`): it is `true` once the address is verified, and the timestamp itself (`email_verified_at`) is never sent. `toPublicUser` (`account.service.ts`) builds the shape from `userSelect`, so the bodies cannot drift apart
 
-  ```json
-  {
-    "chatRooms": [
-      {
-        "id": 1,
-        "type": "group",
-        "name": "Project chat",
-        "avatarUrl": "https://example.com/project-chat.png",
-        "createdAt": "2026-09-13T12:00:00.000Z",
-        "lastMessage": {
-          "content": "Hello",
-          "createdAt": "2026-09-13T12:05:00.000Z"
-        },
-        "unreadCount": 3
-      }
-    ]
-  }
-  ```
+POST /account/logout
 
-GET /chat/:chatid (implemented)
+- Invalidates the current session if it exists and clears the cookie
 
-- retrieve data about a specific room, in the same summary shape as `GET /chat` (`lastMessage` and `unreadCount` follow the rules given there) plus the requester's `role`
-- return body:
+PATCH /account/me
 
-  ```json
-  {
-    "chatRoom": {
-      "id": 1,
-      "type": "group",
-      "name": "Project chat",
-      "avatarUrl": "https://example.com/project-chat.png",
-      "createdAt": "2026-09-13T12:00:00.000Z",
-      "lastMessage": {
-        "content": "Hello",
-        "createdAt": "2026-09-13T12:05:00.000Z"
-      },
-      "unreadCount": 3,
-      "role": "admin"
-    }
-  }
-  ```
+- Validation lives in `profile.validator.ts`. The two checks that both it and the chat-room validators need (`isValidHttpUrl`, `isRecord`) live in `src/lib/validation.ts`. The service is `updateUserProfile` (`account.service.ts`)
 
-PATCH /chat/:chatid (implemented)
+POST /account/password
 
-- update the room's name and/or avatar_url
-- only valid for type: group rooms
-- requires the requester to hold admin in this room
-- incoming body: { name?, avatar_url? }, at least one of the two (`400` otherwise)
-- `name` must be a non-empty string of at most 100 characters after trimming (stored trimmed); `avatar_url` an `http:` or `https:` URL, or `null` to clear it
-- the response carries only the room's own columns (`id`, `type`, `name`, `avatarUrl`, `createdAt`): no `lastMessage`, `unreadCount` or `role`, so a client merges it into what it has cached instead of replacing the summary
-- incoming body:
+- Validation lives in `password.validator.ts`
+- `changePassword` (`account.service.ts`) only writes when the stored hash is still the one that was verified, so a stale "current password" cannot overwrite a newer one: if the password was changed by another request between the check and the write, the answer is the same `401 Current password is incorrect`
+- in one transaction, stores the new hash and deletes all the user's other sessions (expired ones too), so a leaked session stops working; other users' sessions are untouched. It also deletes the account's password reset token, so a link asked for earlier cannot outlive a deliberate password change
+- rate limited because otherwise a stolen session cookie could guess the password here without the limit login has. `passwordCheckLimiter` lives in `modules/account/accountRateLimit.middleware.ts`, is keyed by user id, and so is mounted after `requireUserAuth`. Every request that gets past `requireUserAuth` counts, including ones answered with a `400`. `DELETE /account/me` uses the same limiter instance, so the two routes share one budget
 
-  ```json
-  {
-    "name": "Updated project chat",
-    "avatar_url": null
-  }
-  ```
+DELETE /account/me
 
-- return body:
+- Validation lives in `deleteAccount.validator.ts`. The password is asked for the same reason `POST /account/password` asks for the current one: deleting is irreversible, so a session cookie alone (a stolen one, or a browser left signed in) must not be enough
+- `deleteAccount` (`account.service.ts`) only deletes when the stored hash is still the one that was verified, like `changePassword`, and answers the same `401` otherwise
+- the `409` is the only-admin rule of `DELETE /chat/:chatid/member/:userid`, applied to the whole account, so a room with members always keeps an admin. Nothing is deleted, not even the rooms where the requester is only a member
+- everything runs in one transaction. The foreign keys delete the user's sessions (all of them, expired ones too), room memberships, friend-list entries (in both directions) and friend requests (sent and received). The user's messages stay in their rooms with `senderId` and `sender` set to `null`, so the other members keep the conversation; nobody can edit or delete such a message afterwards, because both are sender-only. A direct room stays with its remaining member, who still lists and reads it
+- a room whose only member was the requester gets `emptied_at` in the same transaction, so the retention clock of the cleanup job starts right away (see "Empty chat room cleanup")
+- every room the requester is in is locked (`SELECT ... FOR UPDATE`, in id order so two deletions that share rooms cannot deadlock) before the admin check, for the same reason as on `DELETE /chat/:chatid/member/:userid`: two admins of one room deleting their accounts at the same moment could otherwise both pass the check and leave the room with members but no admin
+- the limiter is the one `POST /account/password` uses (`passwordCheckLimiter`)
 
-  ```json
-  {
-    "chatRoom": {
-      "id": 1,
-      "type": "group",
-      "name": "Updated project chat",
-      "avatarUrl": null,
-      "createdAt": "2026-09-13T12:00:00.000Z"
-    }
-  }
-  ```
+POST /account/email/verify
 
-DELETE /chat/:chatid (implemented)
+- No session is needed because the token is the credential, and the link is often opened on another device than the one that is signed in. Validation lives in `emailVerification.validator.ts`
+- One message for every kind of bad token, so the answer says nothing about which it was. A link works once, even for two simultaneous requests
+- The limiter is `emailVerifyLimiter` (`modules/account/accountRateLimit.middleware.ts`); every request counts, including ones answered with a `400`
+- how links are made, stored and mailed is under "Email verification (implemented)"
 
-- delete the room; cascades to its messages and memberships automatically
-- only valid for type: group rooms
-- requires admin
-- no response body (`204 No Content`)
+POST /account/email/verification
 
-GET /chat/:chatid/member (implemented)
+- This is the "resend" button, and how accounts created before email verification verify. The mail goes out after the response
+- `emailVerificationRequestLimiter` is keyed by user id, so it is mounted after `requireUserAuth`; every request that gets past it counts, including ones answered with a `409` or the cooldown's `429`. The cooldown itself is not a limiter: it is the age of the stored link (see "Email verification (implemented)")
 
-- list the room's members; membership alone is required, in direct or group rooms alike (no group-only or admin-only guard on this route). It is how the frontend shows who is in an existing room and builds the promote/remove screens: member lists otherwise only appear in the responses of room creation, add-members and change-role
-- admins first, then by name. Names are compared ignoring case and accents (`bea` comes before `Carl`), and the order does not depend on the database's collation because the sort is done in the service. Members whose names compare equal keep user-ID order
-- every member of the room is returned; there is no pagination
-- return body (`200`): `{ "members": [ ... ] }`, each entry in the member shape already used by `PATCH /chat/:chatid/member/:userid` (`chatId`, `role`, `lastReadMessageId`, `member: { id, name, avatarUrl }`):
+POST /account/password/reset-request
 
-  ```json
-  {
-    "members": [
-      {
-        "chatId": 1,
-        "role": "admin",
-        "lastReadMessageId": 7,
-        "member": {
-          "id": 1,
-          "name": "Alice",
-          "avatarUrl": null
-        }
-      },
-      {
-        "chatId": 1,
-        "role": "member",
-        "lastReadMessageId": null,
-        "member": {
-          "id": 2,
-          "name": "Bob",
-          "avatarUrl": null
-        }
-      }
-    ]
-  }
-  ```
+- No session is needed: whoever asks has forgotten the password. Validation lives in `passwordReset.validator.ts`
+- answers `202` for every well-formed email, whether or not an account has it, and whatever else happens below, so the answer cannot be used to find out who is registered. (Signup still answers `409` for a registered email, so registration is not hidden as long as that stays.)
+- the database work is finished before the answer and the mail goes out after it (a failed or slow mail changes nothing for the caller)
+- two limiters, in this order: per IP and per email. Every request counts, known email or not and valid body or not, so a `429` reveals nothing either. The per-email key is the lower-cased address from the body, or the client's IP when the body has no usable address (not a string, or longer than 254 characters); keys have an `email:` or `ip:` prefix, so an address that looks like an IP cannot use up that IP's budget. The limiters live in `modules/account/accountRateLimit.middleware.ts`
+- how links are made, stored and mailed is under "Password reset (implemented)"
 
-POST /chat/:chatid/member (implemented)
+POST /account/password/reset
 
-- add one or many existing user to the room
-- only valid for type: group rooms
-- requires admin
-- incoming body: { member_ids }
-- new members are inserted with role: member
-- the messages that already exist count as read for a new member: they start with `lastReadMessageId` set to the room's newest message that has not been deleted (`null` when it has none), so their `unreadCount` is `0`, their `lastMessage` is that same message, and only messages sent after they join are unread. A deleted message above that marker never counted as unread anyway. Everyone added by one request gets the same marker, and a user who left and is added again starts fresh, because leaving deleted their marker. The newest message is looked up just before the insert, not in the same statement, so a message sent in between stays unread for the new member, which is right because it was sent after they joined
-- `member_ids` is required: a non-empty array of positive integer user IDs (duplicates are ignored)
-- users who are already members (including the requester) are skipped and left unchanged, so an existing admin is never demoted; their IDs are returned in `alreadyMemberIds`
-- every user who would be *added* must be a friend of the requester (see "Friendship and messaging"). If any of them is not a friend, or does not exist (the two are not told apart), respond `403` with `{ "error": "Only your friends can be added to a chat room" }` and add nobody from that request. Users who are already members are not checked, so they are skipped even if they are no longer friends
-- responds `201` when at least one member was added, `200` when everyone was already a member
-- incoming body:
+- No session is needed: the token is the credential, and the link is often opened on another device. Validation lives in `passwordReset.validator.ts`; the password rules are checked first, so a weak password does not use up the link
+- One message for every kind of bad token. A link works once, even for two simultaneous requests; every session of the account is deleted (expired ones too); the "your password was changed" mail goes out after the response
+- The limiter is `passwordResetLimiter` (`modules/account/accountRateLimit.middleware.ts`); every request counts, including ones answered with a `400`
 
-  ```json
-  {
-    "member_ids": [2, 3]
-  }
-  ```
+### Room, message and friend endpoints
 
-- return body:
+Roles are enforced by `loadChatMembership` (the membership check every `/chat/:chatid` route starts with, `404` for a non-member), `requireGroupRoom` and `requireChatAdmin`, all in `chatRoomAuth.middleware.ts`; the permission table is in `./api.doc.md`. A direct room has no name/avatar to edit, its members cannot add or remove the other member from the room, and all of its members are admins.
 
-  ```json
-  {
-    "addedMembers": [
-      {
-        "chatId": 1,
-        "role": "member",
-        "lastReadMessageId": 7,
-        "member": {
-          "id": 3,
-          "name": "Carol",
-          "avatarUrl": null
-        }
-      }
-    ],
-    "alreadyMemberIds": [2]
-  }
-  ```
+POST /chat
 
-DELETE /chat/:chatid/member/:userid (implemented)
+- Validation is `validateCreateChatRoomInput` in `chatRoom.validator.ts`; the group name limit is `MAX_CHAT_NAME_LENGTH`, shared with `validateUpdateChatRoomBody` so create and rename cannot drift apart, and `avatar_url` goes through `isValidHttpUrl` like on `PATCH /chat/:chatid`
+- `createChatRoom` (`chatRoom.service.ts`) runs in one transaction and checks the friendships (`findNonFriendIds`, see "Friendship and messaging") before anything is written, so a refused request creates no room and no members. For a direct room the check also comes before the lookup of an existing room
+- a direct room is reused with a `findFirst` for a direct room that has both users as members, so hitting "message" on a friend never creates a duplicate; the requester and the other user are both added as admins
+- a group room: the requester is added as admin and the invitees as members, with the same default role `POST /chat/:chatid/member` uses
+- the room is returned with its `members` and nothing else of the cleanup job's: `emptiedAt` is left out of the query (`omit` in `roomWithMembersArgs`, `chatRoom.service.ts`), and `chatRoom.test.ts` pins the exact set of keys so a new column cannot leak in unnoticed
+- each entry of `members` is built from `memberResponseArgs` (`chatMember.service.ts`), the shape every member payload shares: the user is only under `member`, there is no separate `memberId`, it would repeat `member.id`
 
-- remove a member from the room (delete their ChatMember record)
-- a user can always remove themself (leave); removing someone else requires admin
-- if the chat room is of type "direct", don't let them remove any member other than themself even if they're admin
-- reject with 409 if the target is the room's only remaining admin and other members are still present (basically speaking, the group room admin can't remove themself if they're the only admin in the group room). This rule doesn't apply to direct room since direct room only have 2 members and both are admins
-- if there are less than 1 member in the room after a removal (usually mean that the last member is an admin and they remove themself), then that mean there are no longer any ChatMember record that linked to this ChatRoom record and the ChatRoom record will be deleted after a set period of time along with it's messages.  
-- `:userid` must be a positive integer user ID, otherwise `400`
-- responds `204 No Content` (no response body) when the member was removed
-- responds `403` when a non-admin tries to remove someone else, or when anyone tries to remove the other member of a direct room
-- responds `404` when the target user is not a member of this room (a requester who is not in the room gets the usual `404` from the membership check)
-- responds `409` when the target is the room's only admin and other members are still present
-- this endpoint never deletes the ChatRoom record itself: when the last member leaves, it stamps the room's `emptied_at` in the same transaction, and the room is deleted later by the cleanup job (see "Empty chat room cleanup")
+GET /chat
+
+- there are separate functions for retrieving direct and group rooms; both return the rooms that have `req.user` as a member, and the one for direct rooms uses the other user's name as the room's name and their avatar url (when it is not null) as the room's avatar url
+- the `lastMessage` lookup skips deleted messages: a deleted message has no content left, so showing it would give the room list a blank preview. The order follows the message that is shown, which is why deleting the newest message moves the room down the list
+- the rooms' unread counts come from one query for the whole list (`countUnreadMessages`, raw SQL because the threshold is a column of each room's own membership row; the `(chat_id, id)` index serves it), not one per room. Only the requester's own marker matters
+- a member added to a room that already has messages starts with a marker at the newest message, so the rule that their `unreadCount` is `0` is stored data, not a special case in the count (see `POST /chat/:chatid/member`)
+- the rooms are sorted by how recent the last message is, and the rooms with no message by the time they were created
+
+GET /chat/:chatid
+
+- same summary function as `GET /chat` for one room, plus the requester's `role`
+
+PATCH /chat/:chatid
+
+- guarded by `requireGroupRoom` and `requireChatAdmin`; validation is `validateUpdateChatRoomBody`; the response is the room's own columns only (no summary fields)
+
+DELETE /chat/:chatid
+
+- guarded by `requireGroupRoom` and `requireChatAdmin`; the foreign keys cascade to the messages and memberships
+
+GET /chat/:chatid/member
+
+- no group-only or admin-only guard: membership alone is required. It is how the frontend shows who is in an existing room and builds the promote/remove screens; member lists otherwise only appear in the responses of room creation, add-members and change-role
+- the sort is done in the service, so the order does not depend on the database's collation; members whose names compare equal keep user-ID order
+
+POST /chat/:chatid/member
+
+- guarded by `requireGroupRoom` and `requireChatAdmin`; new members are inserted with role `member`
+- the marker for a new member is the room's newest message that has not been deleted. Everyone added by one request gets the same marker, and a user who left and is added again starts fresh, because leaving deleted their marker. The newest message is looked up just before the insert, not in the same statement, so a message sent in between stays unread for the new member, which is right because it was sent after they joined. A deleted message above that marker never counted as unread anyway
+- users who are already members are skipped and left unchanged (so an existing admin is never demoted) and are not checked for friendship, so they are skipped even if they are no longer friends
+- the friendship check is `findNonFriendIds` (see "Friendship and messaging"); it runs after validation and after the group-room and admin guards
+
+DELETE /chat/:chatid/member/:userid
+
+- `:userid` is validated like the other ids (`400 Invalid user id`)
+- the only-admin rule: the target being the room's only remaining admin while other members are present is a `409`. It does not apply to a direct room, since both of its members are admins
+- this endpoint never deletes the ChatRoom record itself: when the last member leaves, no ChatMember record links to the room any more, and it stamps the room's `emptied_at` in the same transaction; the room (and its messages) is deleted later by the cleanup job (see "Empty chat room cleanup")
 - the room row is locked (`SELECT ... FOR UPDATE`) while the removal runs, so two admins leaving at the same moment cannot both pass the only-admin check and leave a room with members but no admin
 
-PATCH /chat/:chatid/member/:userid (implemented)
+PATCH /chat/:chatid/member/:userid
 
-- change a member's role in the given room
-- only valid for type: group rooms
-- requires admin
-- incoming body: { role: 'admin' | 'member' }
-- setting a member's role to the one they already hold is allowed and simply confirms it
-- reject with 409 if the target is the room's only remaining admin, the new role is 'member', and other members are still present (the same only-admin invariant `DELETE /chat/:chatid/member/:userid` enforces on removal); this rule doesn't apply when the target is the room's only member
-- `:userid` must be a positive integer user ID, otherwise `400`
-- responds `404` when the target user is not a member of this room
-- incoming body:
+- guarded by `requireGroupRoom` and `requireChatAdmin`; the `409` is the same only-admin invariant `DELETE /chat/:chatid/member/:userid` enforces on removal, applied to a demotion; it does not apply when the target is the room's only member
 
-  ```json
-  {
-    "role": "admin"
-  }
-  ```
+POST /chat/:chatid/message
 
-- return body (`200`):
+- no group-only or admin-only guard: membership alone is required. Validation is `validateSendMessageBody`
 
-  ```json
-  {
-    "member": {
-      "chatId": 1,
-      "role": "admin",
-      "lastReadMessageId": null,
-      "member": {
-        "id": 2,
-        "name": "Bob",
-        "avatarUrl": null
-      }
-    }
-  }
-  ```
+GET /chat/:chatid/message
 
-POST /chat/:chatid/message (implemented)
+- no group-only or admin-only guard, same as sending. `before` and `limit` are validated the same way `:chatid` and `:userid` are (positive integer, within the Postgres integer range)
 
-- post a new message to the chat room
-- both admins and regular members may send, in direct or group rooms alike; membership alone is required (no group-only or admin-only guard on this route)
-- incoming body: `{ content }`, a non-empty string (whitespace-only is rejected) trimmed and capped at 4000 characters
-- incoming body:
+PATCH /chat/:chatid/message/:message_id
 
-  ```json
-  {
-    "content": "Hello!"
-  }
-  ```
-
-- return body (`201`):
-
-  ```json
-  {
-    "message": {
-      "id": 1,
-      "chatId": 1,
-      "senderId": 1,
-      "content": "Hello!",
-      "createdAt": "2026-09-25T12:00:00.000Z",
-      "editedAt": null,
-      "deletedAt": null,
-      "sender": {
-        "id": 1,
-        "name": "JohnDoe",
-        "avatarUrl": null
-      }
-    }
-  }
-  ```
-
-- responds `400` when `content` is missing, blank, not a string, or over the length limit
-
-GET /chat/:chatid/message?before=<message_id>&limit=50 (implemented)
-
-- retrieve messages in the room, newest first
-- both admins and regular members may read, in direct or group rooms alike; membership alone is required (no group-only or admin-only guard on this route), same as sending
-- `before` is optional; when given, only messages with a smaller id are returned, so paging further back means passing the id of the oldest message already loaded. Validated the same way `:chatid`/`:userid` are (positive integer, within the Postgres integer range)
-- `limit` is optional, defaults to 50, and is capped at 100
-- responds `400` when `before` or `limit` fail validation
-- return body (`200`):
-
-  ```json
-  {
-    "messages": [
-      {
-        "id": 3,
-        "chatId": 1,
-        "senderId": 1,
-        "content": "Third message",
-        "createdAt": "2026-09-25T12:00:02.000Z",
-        "editedAt": null,
-        "deletedAt": null,
-        "sender": {
-          "id": 1,
-          "name": "JohnDoe",
-          "avatarUrl": null
-        }
-      }
-    ],
-    "hasMore": true
-  }
-  ```
-
-- `hasMore` is `true` when older messages remain beyond the returned page
-- a message whose author deleted their account has `senderId` and `sender` set to `null` (see `DELETE /account/me`), and a deleted message keeps its place in the list with `content: ""` and a non-null `deletedAt`
-
-PATCH /chat/:chatid/message/:message_id (implemented)
-
-- edit a message's content
-- only the message's own sender may edit it, in direct or group rooms alike; there is no admin-moderation override for other members' messages (see the permission model above). Membership alone gets a request to the controller, the sender check happens in the service, same as deleting
-- incoming body: `{ content }`, held to exactly the same rules as sending a message: a non-empty string (whitespace-only is rejected), trimmed and capped at 4000 characters
-- incoming body:
-
-  ```json
-  {
-    "content": "Hello, world!"
-  }
-  ```
-
-- `:message_id` must be a positive integer, otherwise `400`
-- a successful edit stamps `editedAt` (so clients can show an "edited" label) and leaves `createdAt` alone: the message keeps its place in the room's history and the room list keeps its order. When the edited message is the room's latest, `lastMessage` in the room summaries shows the new content
-- saving the content the message already has (after trimming) is allowed and simply confirms it: `200` with the message as it is, and `editedAt` is not stamped, so nothing looks edited that didn't change
-- only the current content is kept: there is no edit history and no edit time limit
+- membership alone gets a request to the controller; the sender check happens in the service, same as deleting. Validation is `validateEditMessageBody`, held to the same rules as sending
 - a deleted message can never be edited back to life: the write itself is conditional on the message not being deleted, so an edit racing with a delete gets the same `404` as an edit sent after it
-- return body (`200`):
 
-  ```json
-  {
-    "message": {
-      "id": 1,
-      "chatId": 1,
-      "senderId": 1,
-      "content": "Hello, world!",
-      "createdAt": "2026-09-25T12:00:00.000Z",
-      "editedAt": "2026-09-28T09:30:00.000Z",
-      "deletedAt": null,
-      "sender": {
-        "id": 1,
-        "name": "JohnDoe",
-        "avatarUrl": null
-      }
-    }
-  }
-  ```
+DELETE /chat/:chatid/message/:message_id
 
-- responds `400` when `:message_id` is not a valid ID, or when `content` is missing, blank, not a string, or over the length limit
-- responds `403` when the requester is not the message's sender
-- responds `404` when the message does not exist, does not belong to this room, or was deleted
+- a soft delete: the message row stays, but `content` is cleared and `deleted_at` is stamped, so it keeps its place in the room's history instead of leaving a gap in the id sequence. The sender check happens in the service. Deleting a message never deletes the underlying `ChatRoom` or affects other members' access to the room
 
-DELETE /chat/:chatid/message/:message_id (implemented)
+PUT /chat/:chatid/read
 
-- delete a message from the chat room; the default (and only) behavior is to delete the message for everyone in the room, not just the requester
-- soft delete: the message row stays, but `content` is cleared and `deleted_at` is stamped, so it keeps its place in the room's history instead of leaving a gap in the id sequence; a later `GET /chat/:chatid/message` reports it with `content: ""` and a non-null `deletedAt`
-- only the message's own sender may delete it, in direct or group rooms alike; there is no admin-moderation override for other members' messages (see the permission model above)
-- `:message_id` must be a positive integer, otherwise `400`
-- responds `204 No Content` (no response body) when the message was deleted
-- responds `403` when the requester is not the message's sender
-- responds `404` when the message does not exist in this room, does not belong to this room, or was already deleted
-- deleting a message never deletes the underlying `ChatRoom` or affects other members' access to the room
-- a deleted message drops out of the room summaries: `lastMessage` shows the message before it, and it no longer counts in anyone's `unreadCount`
+- sets the requester's own `ChatMember.lastReadMessageId`, which every member payload returns; membership alone is required (no group-only or admin-only guard)
+- the marker only moves forward with one conditional `updateMany` (`lastReadMessageId` is null or lower than the new value) rather than read-then-write, so requests racing each other end at the highest id. The marker is read afterwards only when the update changed nothing
+- if the requester left the room while the request was running, it answers `404 { "error": "Chat room not found" }`, the same as the membership check
 
-PUT /chat/:chatid/read (implemented)
-
-- mark the room as read up to a message, for the requester only: it sets the requester's own `ChatMember.lastReadMessageId`, which every member payload returns. Other members' markers are never touched. Membership alone is required, in direct or group rooms alike (no group-only or admin-only guard on this route)
-- incoming body: `{ "message_id": 42 }`. `message_id` is a JSON number (like the ids in `member_ids`): a positive integer within the Postgres integer range, otherwise `400`
-- responds `404` with `{ "error": "Message not found in this chat room" }` when no message with this id exists in this room; a message of another room gets the same answer. A soft-deleted message is still valid, because it keeps its place in the room's history
-- the marker only moves forward: a `message_id` at or below the current marker changes nothing and still returns `200`, so out-of-order requests from several tabs can't move it back. It is one conditional `updateMany` (`lastReadMessageId` is null or lower than the new value) rather than read-then-write, so requests racing each other end at the highest id. The marker is read afterwards only when the update changed nothing
-- return body (`200`): `{ "lastReadMessageId": 42 }` (the marker as it stands after the call, which is the later message when the marker was already ahead)
-- if the requester left the room while the request was running, it answers `404` with `{ "error": "Chat room not found" }`, the same as the membership check
-
-#### Friend endpoints (implemented)
+#### Friend endpoints
 
 Friend flows get their own module, `src/modules/friends/` (routes, controller, validator(s), service), mounted in `app.ts` behind `requireUserAuth` like the chat routes. A user is always returned to other users as `{ id, name, avatarUrl }`, never with `email` or `tel`.
 
@@ -746,166 +284,61 @@ Schema changes for this milestone (done, in migration `20260928120000_add_friend
 - `PendingFriendRequest.createdAt` (`DateTime @default(now())`), needed to sort the inbox and to expire stale requests later
 - `@@index([receiverId])` on `PendingFriendRequest`: the existing `@@unique([senderId, receiverId])` index only serves lookups that start with the sender, and the inbox query filters by receiver
 
-ID conventions: `/friend/:id` takes a *user* ID. Every `/friend/requests/:id` route takes a *request* ID (`PendingFriendRequest.id`), not the other user's ID. With a user ID, `DELETE /friend/requests/:id` would be ambiguous when two users have sent each other a request at the same moment (reject theirs, or cancel yours?). Every `:id` must be a positive integer within the Postgres integer range, otherwise `400`.
+ID conventions: `/friend/:id` takes a *user* ID. Every `/friend/requests/:id` route takes a *request* ID (`PendingFriendRequest.id`), not the other user's ID. With a user ID, `DELETE /friend/requests/:id` would be ambiguous when two users have sent each other a request at the same moment (reject theirs, or cancel yours?).
 
-GET /friend/search/:tel (implemented)
+GET /friend/search/:tel
 
-- look up one user by phone number, so the requester can send them a friend request
-- `:tel` must be a full E.164 number, validated with the same libphonenumber-js rule signup uses (`400` otherwise), and it must also be in canonical spelling: a `+` followed by at most 15 digits, with no spaces, dashes, parentheses or extension. That rule alone (`isValidPhoneNumber`) also accepts `+1 (415) 555-2671` and `+14155552671x123`, and because the lookup is an exact string match, accepting them would answer "nobody found" for a number that is registered. It is a path parameter on purpose: `+` is kept as-is in a path (`/friend/search/+84912345678` and `/friend/search/%2B84912345678` both work), whereas in a query string `+` decodes to a space
-- exact match only, so the endpoint can't be used to browse or list users. It still lets any signed-in user test whether a number is registered, which is inherent to phone lookup, so it is rate limited per user (30 per 15 minutes, `429` with `{ "error": ... }` afterwards; every request past the sign-in check counts, `400`s included) and returns nothing beyond what the friend UI needs
-- `relationship` tells the client which button to show: `self`, `friend`, `request_sent`, `request_received` or `none`. For the two request states, `requestId` is included so the client can cancel or accept without another call. When more than one applies, the first of `self`, `friend`, `request_received`, `request_sent` wins; the two request states only coexist through the send-at-the-same-instant race described under `POST /friend/requests`, and `request_received` wins because accepting it clears both
-- finding nobody is a normal outcome, not an error: `200` with `user: null`
-- return body (`200`):
+- `:tel` is validated with the same libphonenumber-js rule signup uses, and must also be in canonical spelling. That rule alone (`isValidPhoneNumber`) also accepts `+1 (415) 555-2671` and `+14155552671x123`, and because the lookup is an exact string match, accepting them would answer "nobody found" for a number that is registered. It is a path parameter on purpose: `+` is kept as-is in a path, whereas in a query string `+` decodes to a space
+- exact match only, so the endpoint can't be used to browse or list users. It still lets any signed-in user test whether a number is registered, which is inherent to phone lookup, so it is rate limited per user (every request past the sign-in check counts, `400`s included) and returns nothing beyond what the friend UI needs
+- the two request states only coexist through the send-at-the-same-instant race described under `POST /friend/requests`, and `request_received` wins because accepting it clears both
 
-  ```json
-  {
-    "user": {
-      "id": 2,
-      "name": "JaneDoe",
-      "avatarUrl": null,
-      "relationship": "request_received",
-      "requestId": 7
-    }
-  }
-  ```
+POST /friend/requests
 
-POST /friend/requests (implemented)
-
-- send a friend request; incoming body: `{ receiver_id }`
-- incoming body:
-
-  ```json
-  {
-    "receiver_id": 2
-  }
-  ```
-
-- responds `400` when `receiver_id` is not a valid ID, is the requester's own ID, or does not refer to an existing user (unlike `POST /chat`, which answers `403` for an unknown user and a stranger alike)
-- responds `409` when the two are already friends, or when the requester already has a pending request to this user
-- responds `409` when the receiver already sent the requester a request: deny it and point to the inbox flow instead. The body carries that request's `requestId` so the client can offer "Accept" directly
-- rate limited per user (20 per hour, `429` with `{ "error": ... }` afterwards; like search, every request past the sign-in check counts, `400`s and `409`s included) to keep it from being used to spam
+- an unknown `receiver_id` is a `400` here, unlike `POST /chat`, which answers `403` for an unknown user and a stranger alike
+- rate limited per user to keep it from being used to spam; like search, every request past the sign-in check counts, `400`s and `409`s included
 - a duplicate that slips past the checks (double click, two tabs) is caught by the unique constraint and answered with the same `409`
-- return body (`201`), where `user` is the receiver:
-
-  ```json
-  {
-    "request": {
-      "id": 7,
-      "createdAt": "2026-09-28T09:00:00.000Z",
-      "user": {
-        "id": 2,
-        "name": "JaneDoe",
-        "avatarUrl": null
-      }
-    }
-  }
-  ```
-
 - known and accepted race: if two users send each other a request at the same instant, both can be stored (the unique constraint is per direction). This is harmless because accepting deletes the pair's requests in both directions (see below), so no hand-written database constraint is needed
 
-GET /friend/requests (implemented)
+GET /friend/requests
 
-- retrieve the requester's pending friend requests, newest first
-- `direction` query parameter: `incoming` (default; requests others sent to the requester, the inbox) or `outgoing` (requests the requester sent, so the UI can show "request sent" and offer to cancel); `400` with `{ "error": "'direction' must be 'incoming' or 'outgoing'" }` for any other value, including an empty one (`?direction=`), a different case (`Incoming`) and a repeated parameter (`?direction=incoming&direction=outgoing`). Other query parameters are ignored
-- `user` is always the *other* party: the sender for `incoming`, the receiver for `outgoing`. It is selected down to `{ id, name, avatarUrl }` in the query itself, so `email` and `tel` are never read
+- `user` is selected down to `{ id, name, avatarUrl }` in the query itself, so `email` and `tel` are never read
 - sorted by `createdAt` descending, with the request `id` descending as the tie-break, so requests with the same timestamp always come back in the same order
-- an empty list is a normal outcome: `200` with `requests: []`
 - no pagination and no rate limiter: it only lists requests that already involve the requester, so it reveals nothing about other users. Add `limit`/`before` in the style of `GET /chat/:chatid/message` if an inbox can grow large
-- return body (`200`):
 
-  ```json
-  {
-    "requests": [
-      {
-        "id": 7,
-        "createdAt": "2026-09-28T09:00:00.000Z",
-        "user": {
-          "id": 2,
-          "name": "JaneDoe",
-          "avatarUrl": null
-        }
-      }
-    ]
-  }
-  ```
+POST /friend/requests/:id/accept
 
-POST /friend/requests/:id/accept (implemented)
-
-- accept a pending friend request; `:id` is the request ID (`400` with `{ "error": "Invalid friend request id" }` when it is not a valid ID)
-- only the receiver can accept. Responds `404` with `{ "error": "Friend request not found" }` when the request does not exist or is not addressed to the requester, so nobody can probe other users' requests. A request that was already accepted is gone, so repeating the call answers `404`
 - in one transaction: create both `FriendListMember` rows (`createMany` with `skipDuplicates`, so it is safe to repeat and completes a friendship that only has one of its two rows), then delete every pending request between the two users in either direction
 - the two rows are always created in the same order (lower user ID first), whoever accepts. Two users who sent each other a request at the same instant can also accept at the same instant, and if each transaction inserted its own side first, Postgres could abort one of them as a deadlock
-- a double click or a second tab sending the same accept twice at once is answered with `201` and `201`, or `201` and `404`, never a `5xx`; either way there is one friendship and no request left
+- a double click or a second tab sending the same accept twice at once is answered with `201` and `201`, or `201` and `404`, never a `5xx`; either way there is one friendship and no request left. If the sender's account is deleted while the request is being accepted, the answer is the same `404`
 - no rate limiter: it only works on a request addressed to the requester, so it reveals nothing about other users
-- if the sender's account is deleted while the request is being accepted, the answer is the same `404`
-- does not create a chat room; the client calls `POST /chat` with `type: "direct"`, which reuses an existing room
-- return body (`201`), where `friend` is the sender who is now a friend:
 
-  ```json
-  {
-    "friend": {
-      "id": 2,
-      "name": "JaneDoe",
-      "avatarUrl": null
-    }
-  }
-  ```
+DELETE /friend/requests/:id
 
-DELETE /friend/requests/:id (implemented)
-
-- delete a pending friend request; `:id` is the request ID (`400` with `{ "error": "Invalid friend request id" }` when it is not a valid ID)
-- either party may call it: the receiver rejects, the sender cancels. Same effect, so one endpoint
-- responds `204 No Content` with no body when the request was deleted
-- responds `404` with `{ "error": "Friend request not found" }` when the request does not exist or the requester is neither its sender nor its receiver. The two are not told apart, so nobody can probe other users' requests (the same answer `POST /friend/requests/:id/accept` gives)
 - it deletes only the request `:id` names. When two users sent each other a request at the same instant, the other request of the pair stays: it is a different request (which is why `:id` is a request ID and not a user ID), and accepting it still clears the pair
 - the permission check and the delete are one `deleteMany` statement narrowed to requests the requester is a party to, not a lookup followed by a delete. A double click or a second tab sending the same call twice at once, or the sender cancelling while the receiver rejects, is therefore answered with `204` and `404`, never a `5xx`; either way the request is gone
 - no rate limiter: it only works on a request the requester is a party to, so it reveals nothing about other users
-- the other party is not notified of a rejection, and nothing is recorded about it: there is no "rejected" state and no block, so afterwards either user can send the other a new request
 
-GET /friend (implemented)
+GET /friend
 
-- retrieve the requester's friends list, sorted by name (case-insensitive). Names that differ only in case (`bob` and `Bob`) are ordered by user ID, so the order never changes from one call to the next
 - it reads the requester's *own* friend-list rows, the same rows `GET /friend/search/:tel`, `DELETE /friend/:id` and the friendship check of the chat-room endpoints read, so every endpoint agrees on who is a friend. A half-written friendship (only one of the two rows, which the API itself never produces) is therefore listed for the user whose row exists and not for the other
 - each friend is selected down to `{ id, name, avatarUrl }` in the query itself, so `email` and `tel` are never read
-- the sort is done in `listFriends`, not by the database: Prisma cannot order by `lower(name)`, and a plain `orderBy` follows the database's collation, which differs between installations (a case-sensitive one puts every capitalised name before every lower-case one). Names are letters and digits only, so lower-casing them is enough. When the list gets `limit`/`before`, the order has to move into the query (a raw `ORDER BY lower(name), id`)
-- an empty list is a normal outcome: `200` with `friends: []`
-- no rate limiter: it only lists the requester's own friends, so it reveals nothing about other users
-- no pagination yet (friend lists are small); add `limit`/`before` in the style of `GET /chat/:chatid/message` if that stops being true
-- return body (`200`):
+- the sort is done in `listFriends`, not by the database: Prisma cannot order by `lower(name)`, and a plain `orderBy` follows the database's collation, which differs between installations (a case-sensitive one puts every capitalised name before every lower-case one). Names that differ only in case (`bob` and `Bob`) are ordered by user ID, so the order never changes from one call to the next. Names are letters and digits only, so lower-casing them is enough. When the list gets `limit`/`before`, the order has to move into the query (a raw `ORDER BY lower(name), id`)
+- no rate limiter: it only lists the requester's own friends, so it reveals nothing about other users. No pagination yet (friend lists are small); add `limit`/`before` in the style of `GET /chat/:chatid/message` if that stops being true
 
-  ```json
-  {
-    "friends": [
-      {
-        "id": 2,
-        "name": "JaneDoe",
-        "avatarUrl": null
-      }
-    ]
-  }
-  ```
+DELETE /friend/:id
 
-DELETE /friend/:id (implemented)
-
-- unfriend a user: delete both `FriendListMember` rows of the pair (`deleteMany` with an `OR` over the two directions, in one transaction). `:id` is a *user* ID (`400` with `{ "error": "Invalid user id" }` when it is not a valid ID)
-- responds `204 No Content` with no body when the friendship was removed. Either friend can call it, and both rows go whoever does
-- responds `404` with `{ "error": "You are not friends with this user" }` when the requester and `:id` are not friends. Two users are friends when the *requester's own* row names `:id`, the same row `GET /friend` and `GET /friend/search/:tel` read. A user who does not exist, a stranger and the requester's own ID all get this same `404`, so nobody can probe which user IDs exist. A half-written friendship (only one of the two rows, which the API itself never produces) is therefore removed, both rows, by the user whose row exists, and answers `404` for the user whose row is missing
-- no rate limiter: it only works on the requester's own friend list, so it reveals nothing about other users
+- deletes both `FriendListMember` rows of the pair (`deleteMany` with an `OR` over the two directions, in one transaction). Two users are friends when the *requester's own* row names `:id`, the same row `GET /friend` and `GET /friend/search/:tel` read. A user who does not exist, a stranger and the requester's own ID all get the same `404`, so nobody can probe which user IDs exist. A half-written friendship (only one of the two rows, which the API itself never produces) is therefore removed, both rows, by the user whose row exists, and answers `404` for the user whose row is missing
 - a double click or a second tab sending the same request twice at once, or both friends unfriending each other at the same instant, is answered with `204` and `204`, or `204` and `404`, never a `5xx` (unlike accepting, the two rows are removed by one `DELETE` statement, so no fixed row order is needed); either way the friendship is gone
-- does not touch pending friend requests (a pair that are friends has none, because accepting clears them), so after unfriending either user can send the other a new request
-- leaves any existing direct room between the two users, and its messages, untouched, and they can keep messaging in it. What unfriending stops is new conversations between them: a new direct room, or adding one to a group of the other (see "Friendship and messaging" below)
+- no rate limiter: it only works on the requester's own friend list, so it reveals nothing about other users
+- it does not touch pending friend requests (a pair that are friends has none, because accepting clears them)
 
 Friendship and messaging (implemented)
 
-Friendship is required to start a conversation. Before this rule `POST /chat` and `POST /chat/:chatid/member` accepted any existing user ID, and user IDs are sequential integers, so anyone signed in could start a conversation with anyone, and read their name and avatar from the response. The rules:
+The rules are in `./api.doc.md`, "Friendship requirement". Friendship is required to start a conversation because, before this rule, `POST /chat` and `POST /chat/:chatid/member` accepted any existing user ID, and user IDs are sequential integers, so anyone signed in could start a conversation with anyone, and read their name and avatar from the response.
 
-- `POST /chat`: for a direct room the other user must be a friend of the requester; for a group room every `member_ids` entry must be (the requester's own ID is dropped first, as before). A group room created with no `member_ids` needs no friends
-- `POST /chat/:chatid/member`: every user who would be *added* must be a friend of the requester. A user who is already a member (the requester included) is skipped as before, friend or not, so a repeated request does not start failing because of someone who is already in the room
-- "friend" means the requester's *own* friend-list row names the user, the same rule `GET /friend`, `GET /friend/search/:tel` and `DELETE /friend/:id` use. The members of a group do not have to be friends with each other, only with whoever adds them
-- respond `403` with `{ "error": "Only your friends can be added to a chat room" }` and change nobody, in line with the all-or-nothing rule these endpoints already follow: one user who is not a friend refuses the whole request, and a room is never created without its members. The check runs after validation (`400`) and, on `POST /chat/:chatid/member`, after the group-room and admin guards (`403` with their own bodies)
-- a user ID that does not exist gets the same `403` as a stranger, so nobody can probe which user IDs exist. This replaces the old `400` for an unknown ID on these two endpoints. A member ID below 1 or above 2147483647 is still a `400` on both, because the database would refuse the lookup (`POST /chat` used to answer `500` for such an ID)
-- for a direct room the check comes before the lookup of an existing room: two former friends get `403` from `POST /chat`, not their old room back with `200`. The room itself is untouched
-- unfriending never removes anyone from an existing room, and the room keeps working: the former friends can still read and send messages in it, and `GET /chat` still lists it. What it stops is *new* conversations: a new direct room, or adding that user to a group. If harassment after unfriending becomes a concern, that is what a block feature would be for, and it is out of scope here
+- the all-or-nothing answer matches the rule these endpoints already follow: one user who is not a friend refuses the whole request, and a room is never created without its members
+- a user ID that does not exist gets the same `403` as a stranger, so nobody can probe which user IDs exist. This replaced the old `400` for an unknown ID on these two endpoints. A member ID below 1 or above 2147483647 is still a `400` on both, because the database would refuse the lookup (`POST /chat` used to answer `500` for such an ID)
+- unfriending never removes anyone from an existing room. If harassment after unfriending becomes a concern, that is what a block feature would be for, and it is out of scope here
 - the check is not locked against a concurrent unfriend: a friendship removed at the same instant counts as the friendship it was when checked. A user deleted after the check but before the insert fails the foreign key and gets the same `403`
 - the check lives in `findNonFriendIds` (`friend.service.ts`), which the chat-room services call; it is the only place where the chat-room module reads the friend list
 
@@ -928,7 +361,7 @@ Shared by email verification and password reset. The mailer, its settings and th
 
 ### Email verification (implemented)
 
-Goal: prove that the owner of an account can read mail sent to its address. An unverified address can be a typo or someone else's, and a password reset link takes over an account, so reset must not be sent to an address nobody has proven. The two endpoints are specified under "Auth endpoints (implemented)" (`POST /account/email/verify` and `POST /account/email/verification`); this section is the design behind them. The code is `modules/account/emailVerification.service.ts` (the database work), `emailVerification.mail.ts` (the link, the mail and the settings check) and `emailVerification.validator.ts`; the two handlers are in `account.controller.ts`.
+Goal: prove that the owner of an account can read mail sent to its address. An unverified address can be a typo or someone else's, and a password reset link takes over an account, so reset must not be sent to an address nobody has proven. The two endpoints are specified in `./api.doc.md` (`POST /account/email/verify` and `POST /account/email/verification`); this section is the design behind them. The code is `modules/account/emailVerification.service.ts` (the database work), `emailVerification.mail.ts` (the link, the mail and the settings check) and `emailVerification.validator.ts`; the two handlers are in `account.controller.ts`.
 
 Database (migration `20261004120000_add_email_verification`):
 
@@ -976,7 +409,7 @@ The two frontend pieces (the banner with a resend button, and the page that read
 
 ### Password reset (implemented)
 
-A signed-out user who forgot their password asks for a link by email, opens it, and sets a new password. It is two endpoints and one table, on top of the mailer from "Email delivery" and the verified addresses from "Email verification (implemented)". The two endpoints are specified under "Auth endpoints (implemented)" (`POST /account/password/reset-request` and `POST /account/password/reset`); this section is the design behind them. The code is `modules/account/passwordReset.service.ts` (the database work), `passwordReset.mail.ts` (the settings check and the two mails) and `passwordReset.validator.ts`; the two handlers are in `account.controller.ts`.
+A signed-out user who forgot their password asks for a link by email, opens it, and sets a new password. It is two endpoints and one table, on top of the mailer from "Email delivery" and the verified addresses from "Email verification (implemented)". The two endpoints are specified in `./api.doc.md` (`POST /account/password/reset-request` and `POST /account/password/reset`); this section is the design behind them. The code is `modules/account/passwordReset.service.ts` (the database work), `passwordReset.mail.ts` (the settings check and the two mails) and `passwordReset.validator.ts`; the two handlers are in `account.controller.ts`.
 
 Decisions:
 
@@ -1028,14 +461,11 @@ The two frontend pages (a form that asks for the email and shows the `202` messa
 
 ### Real-time events (planned)
 
-Socket.io stays a notification layer on top of the REST endpoints rather than a second way to write data, so validation, permissions and tests are reused as they are:
+The events and the handshake are specified in `./api.doc.md` ("Real-time events"). The server side is meant to stay a notification layer on top of the REST endpoints rather than a second way to write data, so validation, permissions and tests are reused as they are:
 
 - a controller (or a small `events` module) emits after the service call succeeds. Services keep returning a result the caller can inspect, like `editMessage`'s `edited` / `unchanged`, so only real changes are broadcast. Services still never import Socket.io
 - handshake: read the session cookie and resolve it with the same `getSessionUser` lookup; reject the connection without a valid session. In development the browser reaches Socket.io through the frontend's dev proxy (`/socket.io` with `ws: true`, to be added to `frontend/vite.config.ts` in step 6 of the frontend plan), so the handshake carries the same first-party cookie as the REST calls
-- on connect, the socket joins `user:<id>` (friend events, being added to a room) and `chat:<chatId>` for every room the user is a member of
 - leaving, being removed, or a deleted room must also remove the affected sockets from `chat:<chatId>` (`socketsLeave`), otherwise a removed member keeps receiving that room's messages
-- events: `message:new`, `message:updated` (payload identical to the `PATCH` response's `message`), `message:deleted` (`{ chatId, messageId, deletedAt }`), `chat:updated`, `chat:removed`, `member:added`, `member:removed`, `member:role_changed`, `read:updated`, `friend:request`, `friend:accepted`
-- typing indicators are socket-only and never stored
 
 ## Project Structure
 

@@ -242,7 +242,7 @@ export async function changeChatRoomMemberRole(req: Request, res: Response, next
 
 // Route chain (see chatRoom.routes.ts): loadChatMembership only - both admins
 // and regular members may send messages, in direct or group rooms alike (see
-// the permission model in backend.doc.md), so there's no
+// the permission model in api.doc.md), so there's no
 // requireGroupRoom / requireChatAdmin guard on this route. By the time this
 // runs the room exists and the requester is a member of it.
 export async function sendChatRoomMessage(req: Request, res: Response, next: NextFunction) {
@@ -266,7 +266,7 @@ export async function sendChatRoomMessage(req: Request, res: Response, next: Nex
 
 // Route chain (see chatRoom.routes.ts): loadChatMembership only - reading
 // messages requires membership alone, in direct or group rooms alike, same
-// as sending (see the permission model in backend.doc.md), so
+// as sending (see the permission model in api.doc.md), so
 // there's no requireGroupRoom / requireChatAdmin guard on this route. By the
 // time this runs the room exists and the requester is a member of it.
 export async function getChatRoomMessages(req: Request, res: Response, next: NextFunction) {

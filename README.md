@@ -42,7 +42,7 @@ Next priorities:
 
 ## Repository Layout
 
-- Root project files: README.md, backend.doc.md (server plan and API reference), frontend.doc.md (frontend plan and API contract), CLAUDE_SANDBOX_NOTES.md
+- Root project files: README.md, api.doc.md (the API specification), backend.doc.md (server plan and implementation notes), frontend.doc.md (frontend plan), CLAUDE_SANDBOX_NOTES.md
 - Frontend workspace: frontend/ (plan and conventions: frontend.doc.md)
 - Backend server: server/
 - App entry point: server/src/app.ts
@@ -142,7 +142,7 @@ The protected chat routes are implemented on the server and include:
 - POST, GET /friend/requests, POST /friend/requests/:id/accept and DELETE /friend/requests/:id
 - GET /friend and DELETE /friend/:id
 
-The request and response of every endpoint, with its status codes, are specified in `backend.doc.md`; the remaining work is real-time messaging and the frontend.
+The request and response of every endpoint, with its status codes, are specified in `api.doc.md`; the remaining work is real-time messaging and the frontend.
 
 ## Database Model
 

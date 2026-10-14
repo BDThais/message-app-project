@@ -66,12 +66,12 @@ export type DeleteMessageResult =
  * stays so its slot in the room's history isn't lost, but `deletedAt` is
  * stamped and `content` is cleared, so future reads (getMessagesForChatRoom)
  * report it as deleted instead of returning the original content. This is
- * the "delete for everyone" behavior described in backend.doc.md;
+ * the "delete for everyone" behavior specified in api.doc.md;
  * there is no separate "delete for me" mode.
  *
  * Deleting is limited to the message's own sender, in direct or group rooms
  * alike - there is no admin-moderation override for other members' messages
- * (see the permission model in backend.doc.md). Membership in
+ * (see the permission model in api.doc.md). Membership in
  * `chatId` is already guaranteed by loadChatMembership by the time this
  * runs; this only additionally confirms the message belongs to that room and
  * isn't already deleted.

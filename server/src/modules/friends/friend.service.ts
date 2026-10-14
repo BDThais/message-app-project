@@ -37,7 +37,7 @@ export type UserSearchResult = {
  * When more than one applies, the first match wins, in this order: self,
  * friend, request_received, request_sent. Two requests can only coexist in
  * both directions through the known send-at-the-same-instant race (see
- * "Friend endpoints" in the planning doc); "received" wins because accepting it
+ * "Friend endpoints" in backend.doc.md); "received" wins because accepting it
  * clears both.
  */
 export async function findUserByTel(
@@ -124,7 +124,7 @@ function isPrismaError(err: unknown, code: string): boolean {
  * caught it. A receiver deleted in that gap fails the foreign key (P2003) and
  * is reported as `receiver_not_found`. Two users sending each other a request
  * at the same instant can both succeed; that race is accepted (see "Friend
- * endpoints" in the planning doc) because accepting clears both directions.
+ * endpoints" in backend.doc.md) because accepting clears both directions.
  */
 export async function createFriendRequest(
   senderId: number,
@@ -235,7 +235,7 @@ export type AcceptFriendRequestResult =
  *
  * One transaction: create both friend-list rows, then delete every pending
  * request between the two users in either direction (this also clears the
- * send-at-the-same-instant race, see "Friend endpoints" in the planning doc).
+ * send-at-the-same-instant race, see "Friend endpoints" in backend.doc.md).
  * The rows are created with `skipDuplicates`, so a half-written friendship is
  * completed and a repeated or concurrent accept does not fail. They are also
  * always created in the same order, so concurrent accepts do not deadlock on
@@ -368,7 +368,7 @@ export async function listFriends(requesterId: number): Promise<PublicUser[]> {
 /**
  * Which of `userIds` are not friends of the requester. Used by the chat-room
  * endpoints, which only let people start a conversation with their friends
- * (see "Friendship and messaging" in the planning doc). Two users are friends
+ * (see "Friendship and messaging" in backend.doc.md). Two users are friends
  * when the requester's *own* friend-list row names the other one, the same row
  * GET /friend, GET /friend/search/:tel and DELETE /friend/:id read, so every
  * endpoint agrees on who is a friend.
