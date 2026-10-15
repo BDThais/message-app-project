@@ -18,3 +18,5 @@ yarn-error.log*
 # Optional IDE settings
 .vscode/
 .idea/
+
+*NOTES.md
