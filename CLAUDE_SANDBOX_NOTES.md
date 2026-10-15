@@ -2,6 +2,16 @@
 
 Notes to self from earlier sessions, so a new session does not re-discover them. They describe the claude.ai chat sandbox only, not the developer's machine (there, `npm test` with Docker works as documented in `backend.doc.md`). Last verified 2026-10-13. If something below no longer matches reality, fix this file in the same patch.
 
+## Standing instruction from the user: flag bad practices
+
+The user asked (2026-10-15) to be told whenever I spot an anti-pattern, a bad practice or a bad design choice, together with a suggestion for how to address it. It applies to the server, the frontend, the tests, the docs, the tooling and to whatever I am asked to build, and it applies even when the finding has nothing to do with the task at hand.
+
+- Say it in the reply, every time, after the result of the task. Do not drop a finding because the code was already like that, because the user wrote it, because a convention in `backend.doc.md` or `frontend.doc.md` produced it, or because fixing it is out of scope. If a documented convention is itself the problem, say so and propose the change instead of quietly working around it.
+- Per finding: what it is and where (file and line), why it hurts in this project (a concrete failure, cost or inconsistency, not a textbook rule), how I would fix it, and a rough size (a line, a file, a refactor). Most important first, and short: a few real findings beat a long list of style opinions.
+- Report, do not fix. The patch holds what the user asked for; the fix is offered as a follow-up. The exception is a trivial fix that is part of the requested change itself, and then the reply says that I did it.
+- Be honest about confidence: say when something is a judgement call or when I could not check it, and never invent a problem to have something to report. When there is nothing to flag, say nothing about it: no empty "findings" section.
+- Do not soften or skip a finding to keep the mood. The user wants the criticism.
+
 ## What the sandbox can and cannot do
 
 - Runs as root on Ubuntu 24 with Node 22. **No Docker**, no Postgres preinstalled. The file system resets between sessions, so the setup below is needed every time (check first: `pg_isready -h /tmp -p 55432`; in a fresh sandbox it prints "not found" because `postgresql-client` is not installed yet, which also means step 1 is needed).
