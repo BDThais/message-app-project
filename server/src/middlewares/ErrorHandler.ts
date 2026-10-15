@@ -16,6 +16,14 @@ function clientErrorStatus(err: unknown): number | null {
     : null;
 }
 
+// Registered in app.ts after every route and right before `errorHandler`: a request no
+// route answered (a typo, a path without the /api prefix, a method the path does not
+// have) gets the same `{ error }` body as every other error instead of Express's
+// default HTML page.
+export function notFoundHandler(_req: Request, res: Response) {
+  res.status(404).json({ error: 'Route not found' });
+}
+
 // Must keep all four parameters, even though `next` is only used in one branch -
 // Express recognizes error-handling middleware purely by function arity (4 params).
 // Register this last in app.ts, after every route, so errors from any of them reach it.

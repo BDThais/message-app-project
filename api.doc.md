@@ -14,6 +14,7 @@ The specification of the HTTP API the server exposes: what a client sends and wh
 - Timestamps are ISO 8601 strings in UTC (`"2026-09-13T12:00:00.000Z"`).
 - Every `4xx` and `5xx` has the body `{ "error": string }`. Two errors carry one extra key: `chatIds` (the `409` of `DELETE /api/account/me`) and `requestId` (the `409` "they already sent you a request" of `POST /api/friend/requests`). A malformed JSON body is a `400`.
 - Without a session, every endpoint except the public ones answers `401 { "error": "Unauthorized Access" }`. Public: signup, login, logout, `GET /api/account/me` (never a 401), `POST /api/account/email/verify`, `POST /api/account/password/reset-request`, `POST /api/account/password/reset`.
+- A path no route serves (a typo, a path without the `/api` prefix, a method the path does not have) answers `404 { "error": "Route not found" }`. Under `/api/chat` and `/api/friend` the session check runs first, so a signed-out client gets the `401` above there too.
 - `204` has no body. `429` is a rate limit and its text is in `error` (the limits are in "Rate limits" at the end).
 - Every `/api/chat/:chatid/...` path answers `400 Invalid chat room id` for an invalid `:chatid` and `404 { "error": "Chat room not found" }` when the requester is not a member (a room that does not exist gets the same answer). Both are left out of the endpoint lists below.
 - A user is always shown to other users as `{ id, name, avatarUrl }`, never with `email` or `tel`.

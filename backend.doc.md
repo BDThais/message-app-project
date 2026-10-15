@@ -97,6 +97,7 @@ Completed:
 - Unit tests for the password reset (the settings checks, the two mails and their send helpers, the two body validators), for the key of the per-email limiter, and for how `PASSWORD_RESET_TTL_MS` is read
 - Frontend scaffold (step 1 of `./frontend.doc.md`): Vite + React + TypeScript in `frontend/`, a dev proxy that forwards `/api` to this server, the fetch wrapper and query client, TanStack Router with the signed-in/signed-out route guards (they use `GET /api/account/me`), a thin login page, and tests for all of it
 - Every route is served under the `/api` prefix: `app.ts` mounts the routers at `/api/account`, `/api/chat` and `/api/friend`, the frontend's dev proxy forwards `/api` unchanged (it used to strip the prefix), and the integration tests call the prefixed paths
+- Routes nothing serves answer `404 { "error": "Route not found" }` through `notFoundHandler` (in `middlewares/ErrorHandler.ts`, registered in `app.ts` after the routers and before `errorHandler`), so Express's own HTML 404 page no longer breaks the rule that every error body is `{ error }`
 
 Still planned or not yet implemented:
 
@@ -508,7 +509,7 @@ message-app/
     │   │   ├── prisma.ts
     │   │   └── validation.ts        // isValidHttpUrl, isRecord (used by the chat and account validators)
     │   ├── middlewares/             // shared by several features
-    │   │   ├── ErrorHandler.ts      // every error body is { error }; keeps the status of 4xx errors Express raises
+    │   │   ├── ErrorHandler.ts      // every error body is { error }; keeps the status of 4xx errors Express raises; notFoundHandler answers unmatched routes with a 404
     │   │   ├── SessionCookie.ts     // set/clear/read the session cookie
     │   │   └── UserSessionAuth.ts   // requireUserAuth
     │   └── modules/
@@ -591,7 +592,7 @@ message-app/
         │   └── randomToken.unit.test.ts          // generateToken and hashToken
         ├── middlewares/                      // mirrors src/middlewares/
         │   ├── errorHandler.unit.test.ts     // the handler alone, with a fake response
-        │   └── errorHandler.test.ts          // errors Express raises itself (malformed JSON, bad percent-encoding)
+        │   └── errorHandler.test.ts          // errors Express raises itself (malformed JSON, bad percent-encoding) and the 404 for routes nothing serves
         ├── chatrooms/
         │   ├── chatRoom.test.ts              // create, list, get, update and delete a room
         │   ├── chatRoom.permissions.test.ts  // sign-in, membership, group-only and admin-only guards, per route
@@ -628,7 +629,7 @@ Conventions:
 - A fixed technical limit shared by more than one module (for example the Postgres INTEGER max, reused as both an ID ceiling and a `setInterval`/`setTimeout` delay ceiling) is declared once in `src/lib/constants.ts` and imported everywhere it's needed, instead of being redeclared per file.
 - Services never import Express (no `req`, `res` or cookies). HTTP concerns live in controllers and middleware, so other entry points, such as the future Socket.io handlers, can call the same services.
 - Middleware used by a single feature lives in that feature's folder (for example `chatRoomAuth.middleware.ts`, `accountRateLimit.middleware.ts`, `friendRateLimit.middleware.ts`); `src/middlewares/` only holds middleware shared across features. Rate limiters follow the same rule: each feature keeps its own limiters, keyed by IP where nobody is signed in yet (`loginLimiter`) and by user id after `requireUserAuth` (`friendSearchLimiter`, `passwordCheckLimiter`).
-- Error bodies: every `4xx` and `5xx` response has the shape `{ "error": "<text>" }`, whichever layer sends it (controller, feature middleware, rate limiter, `errorHandler`). `message` is not used for errors because it is already a success-body key for a chat message (`POST` and `PATCH /api/chat/:chatid/message` return `{ "message": { ... } }`), so a client could otherwise get a string and an object under the same key from one endpoint. Validators keep their own internal `{ valid: false, message }` result; the controller puts that text under `error`. A success body that only confirms an action (`201 { "message": "Account created successfully" }` from signup) is not an error body and is unchanged.
+- Error bodies: every `4xx` and `5xx` response has the shape `{ "error": "<text>" }`, whichever layer sends it (controller, feature middleware, rate limiter, `errorHandler`, `notFoundHandler`). `message` is not used for errors because it is already a success-body key for a chat message (`POST` and `PATCH /api/chat/:chatid/message` return `{ "message": { ... } }`), so a client could otherwise get a string and an object under the same key from one endpoint. Validators keep their own internal `{ valid: false, message }` result; the controller puts that text under `error`. A success body that only confirms an action (`201 { "message": "Account created successfully" }` from signup) is not an error body and is unchanged.
 - Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.
 - Background jobs live in the folder of the feature they belong to and are started from `server.ts`, never from `app.ts`, so tests that import the app do not start timers.
 - `server.ts` checks the callback of `app.listen`: Express 5 passes a failed listen (a port that is already taken, for one) to it instead of throwing, so the callback logs the error and exits with code 1. Without the check the process printed "Server is running" and idled on the cleanup job's timer, serving nothing.

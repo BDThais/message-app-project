@@ -42,7 +42,7 @@ Next priorities:
 
 ## Repository Layout
 
-- Root project files: README.md, api.doc.md (the API specification), backend.doc.md (server plan and implementation notes), frontend.doc.md (frontend plan), CLAUDE_SANDBOX_NOTES.md
+- Root project files: README.md, api.doc.md (the API specification), backend.doc.md (server plan and implementation notes), frontend.doc.md (frontend plan)
 - Frontend workspace: frontend/ (plan and conventions: frontend.doc.md)
 - Backend server: server/
 - App entry point: server/src/app.ts
@@ -52,97 +52,56 @@ Next priorities:
 
 ## API
 
+Every endpoint is served under the `/api` prefix. The tables below only list what exists. The request and response of each endpoint, its status codes, error texts, rate limits and who may call it are specified in [`api.doc.md`](./api.doc.md), the one place to read them and to change them.
+
+The endpoints marked public need no session; every other endpoint answers `401` without one.
+
 ### Account endpoints
 
-#### POST /api/account/signup
-
-Creates a new user account.
-
-Request body:
-
-```json
-{
-  "name": "John Doe",
-  "email": "john@example.com",
-  "password": "Str0ng!Pass",
-  "tel": "+1234567890"
-}
-```
-
-Response:
-
-```json
-{
-  "message": "Account created successfully"
-}
-```
-
-`tel` must be a valid phone number with its country code. It is stored in canonical E.164 form (`+` and digits only), so `+1 (415) 555-2671` is saved as `+14155552671`, and registering the same number in another spelling answers `409`. Error responses across the API have the shape `{ "error": "..." }`.
-
-After answering `201`, signup mails a verification link to the new address (see `POST /api/account/email/verify`). The account starts unverified, signup does not sign the user in, and a mail that cannot be sent does not fail the signup.
-
-#### POST /api/account/login
-
-Authenticates a user and sets a session cookie. The returned `user` is `{ id, name, email, tel, avatarUrl, emailVerified }`; the same shape comes back from `GET /api/account/me` and `PATCH /api/account/me`.
-
-#### GET /api/account/me
-
-Returns the current authenticated user or null when no valid session exists.
-
-#### POST /api/account/logout
-
-Deletes the active session and clears the auth cookie.
-
-#### PATCH /api/account/me
-
-Updates the signed-in user's `name` and/or `avatar_url` (`null` clears the avatar) and returns the updated `{ user }`, which now includes `avatarUrl`.
-
-#### POST /api/account/password
-
-Changes the signed-in user's password. Body: `{ "current_password": "...", "new_password": "..." }`. Answers `204`, signs the account out of every other session, and answers `401` when the current password is wrong.
-
-#### DELETE /api/account/me
-
-Deletes the signed-in user's account. Body: `{ "password": "..." }`. Answers `204` and clears the session cookie; the user's sessions, memberships, friendships and friend requests go with the account, while their messages stay in the rooms without a sender. Answers `401` when the password is wrong and `409` (with the room ids in `chatIds`) while the user is the only admin of a group room that still has other members.
-
-#### POST /api/account/email/verify
-
-Confirms an email address with the token from a verification mail. No session is needed. Body: `{ "token": "..." }`. Answers `204`, or `400` when the token is unknown, already used, expired, replaced by a newer link, or was issued for an address the account no longer has (one message for all of them). A link works once. Limited to 10 requests per 15 minutes per IP.
-
-The mailed link is `EMAIL_VERIFICATION_URL#token=...`: the token is in the URL fragment, so the frontend page reads it and sends it to this endpoint as a `POST`. Links work for `EMAIL_VERIFICATION_TTL_MS` (24 hours by default). `EMAIL_VERIFICATION_URL` defaults to `http://localhost:5173/verify-email` outside production and must be set in production; both settings are checked when the server starts. Without `MAIL_TRANSPORT=resend` the mail is printed to the server log, so the token can be copied from there.
-
-#### POST /api/account/email/verification
-
-Mails a new verification link to the signed-in user's address and replaces the old one. Answers `204`, `409` when the address is already verified, and `429` while the last link is younger than a minute. Limited to 5 requests per hour per user. This is also how accounts created before email verification get verified.
-
-#### POST /api/account/password/reset-request
-
-Asks for a password reset link. No session is needed. Body: `{ "email": "..." }`. Answers `202 { "message": "If an account exists for that email, a reset link is on its way" }` for every well-formed email, whether or not an account has it, so it cannot be used to find out who is registered; `400` for something that is not an email. A verified account is mailed a link (an unverified one is mailed a verification link instead, because a reset link goes only to an address someone has proven); an unknown address, or an account asked for less than a minute ago, gets nothing. Limited to 10 requests per 15 minutes per IP and 3 per hour per email.
-
-#### POST /api/account/password/reset
-
-Sets a new password with the token from a reset mail. No session is needed. Body: `{ "token": "...", "new_password": "..." }`. `new_password` follows the signup password rules (a weak one is a `400` that does not use up the link). Answers `204`, or `400` when the token is unknown, already used, expired or replaced by a newer link (one message for all of them). A link works once. It signs the account out of every session and does not sign the user in: they log in with the new password, and a "your password was changed" mail goes to the account's address. Limited to 10 requests per 15 minutes per IP.
-
-The mailed link is `PASSWORD_RESET_URL#token=...`, with the token in the URL fragment like the verification link. Links work for `PASSWORD_RESET_TTL_MS` (30 minutes by default, at most 24 hours). `PASSWORD_RESET_URL` defaults to `http://localhost:5173/reset-password` outside production and must be set in production; both settings are checked when the server starts. Without `MAIL_TRANSPORT=resend` the mail is printed to the server log, so the token can be copied from there.
+| Endpoint | What it does |
+| --- | --- |
+| `POST /api/account/signup` | Create an account (public; it does not sign the user in) |
+| `POST /api/account/login` | Sign in and set the session cookie (public) |
+| `GET /api/account/me` | The current user, or `null` without a session (public) |
+| `POST /api/account/logout` | Delete the session and clear the cookie (public) |
+| `PATCH /api/account/me` | Update your name and/or avatar |
+| `POST /api/account/password` | Change your password (your other sessions are signed out) |
+| `DELETE /api/account/me` | Delete your account |
+| `POST /api/account/email/verify` | Confirm an email address with the token from a mail (public) |
+| `POST /api/account/email/verification` | Mail a new verification link |
+| `POST /api/account/password/reset-request` | Ask for a password reset link (public) |
+| `POST /api/account/password/reset` | Set a new password with the token from a reset mail (public) |
 
 ### Chatroom endpoints
 
-The protected chat routes are implemented on the server and include:
-
-- POST /api/chat, GET /api/chat, GET /api/chat/:chatid, PATCH /api/chat/:chatid, DELETE /api/chat/:chatid
-- GET, POST /api/chat/:chatid/member and DELETE, PATCH /api/chat/:chatid/member/:userid
-- POST, GET /api/chat/:chatid/message and PATCH, DELETE /api/chat/:chatid/message/:message_id
-- PUT /api/chat/:chatid/read
-- Room membership logic for direct and group rooms
-- Admin-only room management controls
+| Endpoint | What it does |
+| --- | --- |
+| `POST /api/chat` | Create a room, or reuse the direct room between two users |
+| `GET /api/chat` | List your rooms, with the latest message and the unread count |
+| `GET /api/chat/:chatid` | One room, with your role |
+| `PATCH /api/chat/:chatid` | Rename a group room or change its avatar (admin) |
+| `DELETE /api/chat/:chatid` | Delete a group room with its messages (admin) |
+| `GET /api/chat/:chatid/member` | List the members of a room |
+| `POST /api/chat/:chatid/member` | Add members to a group room (admin) |
+| `DELETE /api/chat/:chatid/member/:userid` | Remove a member, or leave the room |
+| `PATCH /api/chat/:chatid/member/:userid` | Change a member's role (admin) |
+| `POST /api/chat/:chatid/message` | Send a message |
+| `GET /api/chat/:chatid/message` | List the messages of a room, newest first |
+| `PATCH /api/chat/:chatid/message/:message_id` | Edit your message |
+| `DELETE /api/chat/:chatid/message/:message_id` | Delete your message |
+| `PUT /api/chat/:chatid/read` | Mark the room as read |
 
 ### Friend endpoints
 
-- GET /api/friend/search/:tel
-- POST, GET /api/friend/requests, POST /api/friend/requests/:id/accept and DELETE /api/friend/requests/:id
-- GET /api/friend and DELETE /api/friend/:id
-
-The request and response of every endpoint, with its status codes, are specified in `api.doc.md`; the remaining work is real-time messaging and the frontend.
+| Endpoint | What it does |
+| --- | --- |
+| `GET /api/friend/search/:tel` | Find a user by phone number |
+| `POST /api/friend/requests` | Send a friend request |
+| `GET /api/friend/requests` | List your pending friend requests |
+| `POST /api/friend/requests/:id/accept` | Accept a friend request |
+| `DELETE /api/friend/requests/:id` | Reject or cancel a friend request |
+| `GET /api/friend` | List your friends |
+| `DELETE /api/friend/:id` | Unfriend a user |
 
 ## Database Model
 
