@@ -4,7 +4,7 @@ import app from '../../src/app';
 import { prisma } from '../../src/lib/prisma';
 import { createUser, loginAs } from '../helpers/users';
 
-const route = '/account/me';
+const route = '/api/account/me';
 
 describe(`PATCH ${route}`, () => {
   it('returns 401 without a session', async () => {

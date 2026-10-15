@@ -51,51 +51,52 @@ The backend is now at a broader API MVP than the original plan. The active imple
 
 Completed:
 
-- POST /account/signup
-- POST /account/login
-- GET /account/me
-- POST /account/logout
-- PATCH /account/me
-- POST /account/password
-- DELETE /account/me
-- POST /account/email/verify
-- POST /account/email/verification
-- POST /account/password/reset-request
-- POST /account/password/reset
-- POST /chat
-- GET /chat
-- GET /chat/:chatid
-- PATCH /chat/:chatid
-- DELETE /chat/:chatid
-- GET /chat/:chatid/member
-- POST /chat/:chatid/member
-- DELETE /chat/:chatid/member/:userid
-- PATCH /chat/:chatid/member/:userid
-- POST /chat/:chatid/message
-- GET /chat/:chatid/message
-- PATCH /chat/:chatid/message/:message_id
-- DELETE /chat/:chatid/message/:message_id
-- PUT /chat/:chatid/read
-- GET /friend/search/:tel
-- POST /friend/requests
-- GET /friend/requests
-- POST /friend/requests/:id/accept
-- DELETE /friend/requests/:id
-- GET /friend
-- DELETE /friend/:id
+- POST /api/account/signup
+- POST /api/account/login
+- GET /api/account/me
+- POST /api/account/logout
+- PATCH /api/account/me
+- POST /api/account/password
+- DELETE /api/account/me
+- POST /api/account/email/verify
+- POST /api/account/email/verification
+- POST /api/account/password/reset-request
+- POST /api/account/password/reset
+- POST /api/chat
+- GET /api/chat
+- GET /api/chat/:chatid
+- PATCH /api/chat/:chatid
+- DELETE /api/chat/:chatid
+- GET /api/chat/:chatid/member
+- POST /api/chat/:chatid/member
+- DELETE /api/chat/:chatid/member/:userid
+- PATCH /api/chat/:chatid/member/:userid
+- POST /api/chat/:chatid/message
+- GET /api/chat/:chatid/message
+- PATCH /api/chat/:chatid/message/:message_id
+- DELETE /api/chat/:chatid/message/:message_id
+- PUT /api/chat/:chatid/read
+- GET /api/friend/search/:tel
+- POST /api/friend/requests
+- GET /api/friend/requests
+- POST /api/friend/requests/:id/accept
+- DELETE /api/friend/requests/:id
+- GET /api/friend
+- DELETE /api/friend/:id
 - Chat membership validation and admin/role enforcement
 - Direct-room reuse and group-room creation flows
 - Friendship requirement for creating a room and adding members (see "Friendship and messaging")
 - Room summaries with the latest message that has not been deleted and the requester's unread count
 - Automatic cleanup of chat rooms that stay empty (see "Empty chat room cleanup")
 - Email delivery: the `Mailer` in `src/lib/mailer.ts` with a console transport and a Resend transport, chosen by `MAIL_TRANSPORT` and checked when the server starts (see "Email delivery").
-- Email verification (see "Email verification (implemented)"): a link is mailed at signup and on request, `POST /account/email/verify` uses it, and the user shape carries `emailVerified`. It is the first feature that sends mail
-- Password reset (see "Password reset (implemented)"): a signed-out user asks for a link by email (`POST /account/password/reset-request`), opens it, and sets a new password (`POST /account/password/reset`). Only verified addresses get a link. It is the second feature that sends mail
+- Email verification (see "Email verification (implemented)"): a link is mailed at signup and on request, `POST /api/account/email/verify` uses it, and the user shape carries `emailVerified`. It is the first feature that sends mail
+- Password reset (see "Password reset (implemented)"): a signed-out user asks for a link by email (`POST /api/account/password/reset-request`), opens it, and sets a new password (`POST /api/account/password/reset`). Only verified addresses get a link. It is the second feature that sends mail
 - Integration tests for the account endpoints (including profile update, password change, account deletion, email verification and password reset), the chat-room endpoints (including the `lastMessage` and `unreadCount` of the room summaries), the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the reject/cancel-friend-request endpoint, the list-friends endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
 - Unit tests for the mailer (the startup checks of the mail settings, the console transport, and the Resend transport run through the real Resend SDK with a stubbed `fetch`), and a test that guards the mail outbox wiring of the test setup
 - Unit tests for email verification (the settings checks, the link and the send helper, the body validator), for `hashToken`, and for how `EMAIL_VERIFICATION_TTL_MS` is read
 - Unit tests for the password reset (the settings checks, the two mails and their send helpers, the two body validators), for the key of the per-email limiter, and for how `PASSWORD_RESET_TTL_MS` is read
-- Frontend scaffold (step 1 of `./frontend.doc.md`): Vite + React + TypeScript in `frontend/`, a dev proxy that forwards `/api` to this server, the fetch wrapper and query client, TanStack Router with the signed-in/signed-out route guards (they use `GET /account/me`), a thin login page, and tests for all of it
+- Frontend scaffold (step 1 of `./frontend.doc.md`): Vite + React + TypeScript in `frontend/`, a dev proxy that forwards `/api` to this server, the fetch wrapper and query client, TanStack Router with the signed-in/signed-out route guards (they use `GET /api/account/me`), a thin login page, and tests for all of it
+- Every route is served under the `/api` prefix: `app.ts` mounts the routers at `/api/account`, `/api/chat` and `/api/friend`, the frontend's dev proxy forwards `/api` unchanged (it used to strip the prefix), and the integration tests call the prefixed paths
 
 Still planned or not yet implemented:
 
@@ -124,65 +125,65 @@ All of the endpoints below are routed after the auth middleware, so they can rea
 
 ### Account endpoints
 
-POST /account/signup
+POST /api/account/signup
 
 - Validation is `validateAccountBody` in `signup.validator.ts`: it checks that all four fields are there, then name, email (`validator.isEmail`), tel and password in that order, and returns the first message that fails
-- `avatar_url` is deliberately not a signup field: `users.avatar_url` is a nullable column with no default, so a new account always has `avatarUrl: null` and the user adds an avatar later through `PATCH /account/me`. Extra fields in the signup body are ignored
-- Stores `tel` in its canonical E.164 spelling (`+` and digits only), not as typed: `isValidPhoneNumber` accepts spaces, dashes, parentheses, non-ASCII digits and extensions, and the unique constraint compares raw strings, so `+1 (415) 555-2671` and `+14155552671` would otherwise both register, and `GET /friend/search/:tel` (an exact match) could never find the first. `normalizeTel` in `signup.validator.ts` validates with `isValidPhoneNumber` (so the set of accepted numbers is unchanged) and then takes `parsePhoneNumberFromString(tel).number`; an extension is dropped. The duplicate check and the insert both use the normalized number, so another spelling of a registered number answers `409`
+- `avatar_url` is deliberately not a signup field: `users.avatar_url` is a nullable column with no default, so a new account always has `avatarUrl: null` and the user adds an avatar later through `PATCH /api/account/me`. Extra fields in the signup body are ignored
+- Stores `tel` in its canonical E.164 spelling (`+` and digits only), not as typed: `isValidPhoneNumber` accepts spaces, dashes, parentheses, non-ASCII digits and extensions, and the unique constraint compares raw strings, so `+1 (415) 555-2671` and `+14155552671` would otherwise both register, and `GET /api/friend/search/:tel` (an exact match) could never find the first. `normalizeTel` in `signup.validator.ts` validates with `isValidPhoneNumber` (so the set of accepted numbers is unchanged) and then takes `parsePhoneNumberFromString(tel).number`; an extension is dropped. The duplicate check and the insert both use the normalized number, so another spelling of a registered number answers `409`
 - Numbers stored before this change are rewritten by `npm run db:normalize-tels` (`scripts/normalize-tels.mjs`, run from `server/` against the database in `DATABASE_URL`). It is a dry run that lists the changes; add `-- --apply` to write them, in one transaction. It never touches a number that is no longer valid or accounts that would end up with the same number: it lists them, exits with code `1`, and leaves the merge or delete to you
 - Hashes the password before saving
-- Mails a verification link to the new address after responding (see "Email verification (implemented)"): the account starts unverified, and a mail that cannot be sent does not fail the signup (it is logged, and the user asks again with `POST /account/email/verification`)
+- Mails a verification link to the new address after responding (see "Email verification (implemented)"): the account starts unverified, and a mail that cannot be sent does not fail the signup (it is logged, and the user asks again with `POST /api/account/email/verification`)
 - the duplicate check and the insert are two statements, so two simultaneous signups for the same email or number can both pass the check. The database then refuses the second insert (a unique violation, Prisma `P2002`) and the answer is the same `409`, naming the column that really collided: `Email already exists` or `Phone number already exists`. Where Prisma reports that column depends on its setup: with the `PrismaPg` driver adapter this project uses, `meta.target` is absent and the column is in `meta.driverAdapterError.cause.constraint` (`fields`, or `index` for the constraint's name), so a handler that only reads `meta.target` never finds it (the old one answered `Phone number already exists` whatever the cause). `uniqueViolationMessage` in `signup.validator.ts` reads both places, and says `Email or phone number already exists` when the error names neither
 
-POST /account/login
+POST /api/account/login
 
 - Returns the same generic message for an unknown email and for a wrong password (the lookup answers `null` for both)
 - Deletes any expired session already stored for the same user
 - Creates a new session and sets the session cookie. The session id is 32 random bytes from `crypto.randomBytes`, base64url-encoded (43 characters), made by `generateToken` (`src/lib/randomToken.ts`) in `createSession`; `sessions.id` has no default in the schema, so a session cannot be created without one. Sessions created before this change keep their old ids and work until they expire; to sign everybody out at once, run `DELETE FROM sessions;`
 - The limiter is `loginLimiter`, in `modules/account/accountRateLimit.middleware.ts`
 
-GET /account/me
+GET /api/account/me
 
-- `avatarUrl` is part of the user shape everywhere: `findSessionUser` selects it, so `GET /account/me` and `req.user` carry it, and login returns it. `emailVerified` is part of the user shape everywhere too (login, `GET /account/me`, `PATCH /account/me`, `req.user`): it is `true` once the address is verified, and the timestamp itself (`email_verified_at`) is never sent. `toPublicUser` (`account.service.ts`) builds the shape from `userSelect`, so the bodies cannot drift apart
+- `avatarUrl` is part of the user shape everywhere: `findSessionUser` selects it, so `GET /api/account/me` and `req.user` carry it, and login returns it. `emailVerified` is part of the user shape everywhere too (login, `GET /api/account/me`, `PATCH /api/account/me`, `req.user`): it is `true` once the address is verified, and the timestamp itself (`email_verified_at`) is never sent. `toPublicUser` (`account.service.ts`) builds the shape from `userSelect`, so the bodies cannot drift apart
 
-POST /account/logout
+POST /api/account/logout
 
 - Invalidates the current session if it exists and clears the cookie
 
-PATCH /account/me
+PATCH /api/account/me
 
 - Validation lives in `profile.validator.ts`. The two checks that both it and the chat-room validators need (`isValidHttpUrl`, `isRecord`) live in `src/lib/validation.ts`. The service is `updateUserProfile` (`account.service.ts`)
 
-POST /account/password
+POST /api/account/password
 
 - Validation lives in `password.validator.ts`
 - `changePassword` (`account.service.ts`) only writes when the stored hash is still the one that was verified, so a stale "current password" cannot overwrite a newer one: if the password was changed by another request between the check and the write, the answer is the same `401 Current password is incorrect`
 - in one transaction, stores the new hash and deletes all the user's other sessions (expired ones too), so a leaked session stops working; other users' sessions are untouched. It also deletes the account's password reset token, so a link asked for earlier cannot outlive a deliberate password change
-- rate limited because otherwise a stolen session cookie could guess the password here without the limit login has. `passwordCheckLimiter` lives in `modules/account/accountRateLimit.middleware.ts`, is keyed by user id, and so is mounted after `requireUserAuth`. Every request that gets past `requireUserAuth` counts, including ones answered with a `400`. `DELETE /account/me` uses the same limiter instance, so the two routes share one budget
+- rate limited because otherwise a stolen session cookie could guess the password here without the limit login has. `passwordCheckLimiter` lives in `modules/account/accountRateLimit.middleware.ts`, is keyed by user id, and so is mounted after `requireUserAuth`. Every request that gets past `requireUserAuth` counts, including ones answered with a `400`. `DELETE /api/account/me` uses the same limiter instance, so the two routes share one budget
 
-DELETE /account/me
+DELETE /api/account/me
 
-- Validation lives in `deleteAccount.validator.ts`. The password is asked for the same reason `POST /account/password` asks for the current one: deleting is irreversible, so a session cookie alone (a stolen one, or a browser left signed in) must not be enough
+- Validation lives in `deleteAccount.validator.ts`. The password is asked for the same reason `POST /api/account/password` asks for the current one: deleting is irreversible, so a session cookie alone (a stolen one, or a browser left signed in) must not be enough
 - `deleteAccount` (`account.service.ts`) only deletes when the stored hash is still the one that was verified, like `changePassword`, and answers the same `401` otherwise
-- the `409` is the only-admin rule of `DELETE /chat/:chatid/member/:userid`, applied to the whole account, so a room with members always keeps an admin. Nothing is deleted, not even the rooms where the requester is only a member
+- the `409` is the only-admin rule of `DELETE /api/chat/:chatid/member/:userid`, applied to the whole account, so a room with members always keeps an admin. Nothing is deleted, not even the rooms where the requester is only a member
 - everything runs in one transaction. The foreign keys delete the user's sessions (all of them, expired ones too), room memberships, friend-list entries (in both directions) and friend requests (sent and received). The user's messages stay in their rooms with `senderId` and `sender` set to `null`, so the other members keep the conversation; nobody can edit or delete such a message afterwards, because both are sender-only. A direct room stays with its remaining member, who still lists and reads it
 - a room whose only member was the requester gets `emptied_at` in the same transaction, so the retention clock of the cleanup job starts right away (see "Empty chat room cleanup")
-- every room the requester is in is locked (`SELECT ... FOR UPDATE`, in id order so two deletions that share rooms cannot deadlock) before the admin check, for the same reason as on `DELETE /chat/:chatid/member/:userid`: two admins of one room deleting their accounts at the same moment could otherwise both pass the check and leave the room with members but no admin
-- the limiter is the one `POST /account/password` uses (`passwordCheckLimiter`)
+- every room the requester is in is locked (`SELECT ... FOR UPDATE`, in id order so two deletions that share rooms cannot deadlock) before the admin check, for the same reason as on `DELETE /api/chat/:chatid/member/:userid`: two admins of one room deleting their accounts at the same moment could otherwise both pass the check and leave the room with members but no admin
+- the limiter is the one `POST /api/account/password` uses (`passwordCheckLimiter`)
 
-POST /account/email/verify
+POST /api/account/email/verify
 
 - No session is needed because the token is the credential, and the link is often opened on another device than the one that is signed in. Validation lives in `emailVerification.validator.ts`
 - One message for every kind of bad token, so the answer says nothing about which it was. A link works once, even for two simultaneous requests
 - The limiter is `emailVerifyLimiter` (`modules/account/accountRateLimit.middleware.ts`); every request counts, including ones answered with a `400`
 - how links are made, stored and mailed is under "Email verification (implemented)"
 
-POST /account/email/verification
+POST /api/account/email/verification
 
 - This is the "resend" button, and how accounts created before email verification verify. The mail goes out after the response
 - `emailVerificationRequestLimiter` is keyed by user id, so it is mounted after `requireUserAuth`; every request that gets past it counts, including ones answered with a `409` or the cooldown's `429`. The cooldown itself is not a limiter: it is the age of the stored link (see "Email verification (implemented)")
 
-POST /account/password/reset-request
+POST /api/account/password/reset-request
 
 - No session is needed: whoever asks has forgotten the password. Validation lives in `passwordReset.validator.ts`
 - answers `202` for every well-formed email, whether or not an account has it, and whatever else happens below, so the answer cannot be used to find out who is registered. (Signup still answers `409` for a registered email, so registration is not hidden as long as that stays.)
@@ -190,7 +191,7 @@ POST /account/password/reset-request
 - two limiters, in this order: per IP and per email. Every request counts, known email or not and valid body or not, so a `429` reveals nothing either. The per-email key is the lower-cased address from the body, or the client's IP when the body has no usable address (not a string, or longer than 254 characters); keys have an `email:` or `ip:` prefix, so an address that looks like an IP cannot use up that IP's budget. The limiters live in `modules/account/accountRateLimit.middleware.ts`
 - how links are made, stored and mailed is under "Password reset (implemented)"
 
-POST /account/password/reset
+POST /api/account/password/reset
 
 - No session is needed: the token is the credential, and the link is often opened on another device. Validation lives in `passwordReset.validator.ts`; the password rules are checked first, so a weak password does not use up the link
 - One message for every kind of bad token. A link works once, even for two simultaneous requests; every session of the account is deleted (expired ones too); the "your password was changed" mail goes out after the response
@@ -198,78 +199,78 @@ POST /account/password/reset
 
 ### Room, message and friend endpoints
 
-Roles are enforced by `loadChatMembership` (the membership check every `/chat/:chatid` route starts with, `404` for a non-member), `requireGroupRoom` and `requireChatAdmin`, all in `chatRoomAuth.middleware.ts`; the permission table is in `./api.doc.md`. A direct room has no name/avatar to edit, its members cannot add or remove the other member from the room, and all of its members are admins.
+Roles are enforced by `loadChatMembership` (the membership check every `/api/chat/:chatid` route starts with, `404` for a non-member), `requireGroupRoom` and `requireChatAdmin`, all in `chatRoomAuth.middleware.ts`; the permission table is in `./api.doc.md`. A direct room has no name/avatar to edit, its members cannot add or remove the other member from the room, and all of its members are admins.
 
-POST /chat
+POST /api/chat
 
-- Validation is `validateCreateChatRoomInput` in `chatRoom.validator.ts`; the group name limit is `MAX_CHAT_NAME_LENGTH`, shared with `validateUpdateChatRoomBody` so create and rename cannot drift apart, and `avatar_url` goes through `isValidHttpUrl` like on `PATCH /chat/:chatid`
+- Validation is `validateCreateChatRoomInput` in `chatRoom.validator.ts`; the group name limit is `MAX_CHAT_NAME_LENGTH`, shared with `validateUpdateChatRoomBody` so create and rename cannot drift apart, and `avatar_url` goes through `isValidHttpUrl` like on `PATCH /api/chat/:chatid`
 - `createChatRoom` (`chatRoom.service.ts`) runs in one transaction and checks the friendships (`findNonFriendIds`, see "Friendship and messaging") before anything is written, so a refused request creates no room and no members. For a direct room the check also comes before the lookup of an existing room
 - a direct room is reused with a `findFirst` for a direct room that has both users as members, so hitting "message" on a friend never creates a duplicate; the requester and the other user are both added as admins
-- a group room: the requester is added as admin and the invitees as members, with the same default role `POST /chat/:chatid/member` uses
+- a group room: the requester is added as admin and the invitees as members, with the same default role `POST /api/chat/:chatid/member` uses
 - the room is returned with its `members` and nothing else of the cleanup job's: `emptiedAt` is left out of the query (`omit` in `roomWithMembersArgs`, `chatRoom.service.ts`), and `chatRoom.test.ts` pins the exact set of keys so a new column cannot leak in unnoticed
 - each entry of `members` is built from `memberResponseArgs` (`chatMember.service.ts`), the shape every member payload shares: the user is only under `member`, there is no separate `memberId`, it would repeat `member.id`
 
-GET /chat
+GET /api/chat
 
 - there are separate functions for retrieving direct and group rooms; both return the rooms that have `req.user` as a member, and the one for direct rooms uses the other user's name as the room's name and their avatar url (when it is not null) as the room's avatar url
 - the `lastMessage` lookup skips deleted messages: a deleted message has no content left, so showing it would give the room list a blank preview. The order follows the message that is shown, which is why deleting the newest message moves the room down the list
 - the rooms' unread counts come from one query for the whole list (`countUnreadMessages`, raw SQL because the threshold is a column of each room's own membership row; the `(chat_id, id)` index serves it), not one per room. Only the requester's own marker matters
-- a member added to a room that already has messages starts with a marker at the newest message, so the rule that their `unreadCount` is `0` is stored data, not a special case in the count (see `POST /chat/:chatid/member`)
+- a member added to a room that already has messages starts with a marker at the newest message, so the rule that their `unreadCount` is `0` is stored data, not a special case in the count (see `POST /api/chat/:chatid/member`)
 - the rooms are sorted by how recent the last message is, and the rooms with no message by the time they were created
 
-GET /chat/:chatid
+GET /api/chat/:chatid
 
-- same summary function as `GET /chat` for one room, plus the requester's `role`
+- same summary function as `GET /api/chat` for one room, plus the requester's `role`
 
-PATCH /chat/:chatid
+PATCH /api/chat/:chatid
 
 - guarded by `requireGroupRoom` and `requireChatAdmin`; validation is `validateUpdateChatRoomBody`; the response is the room's own columns only (no summary fields)
 
-DELETE /chat/:chatid
+DELETE /api/chat/:chatid
 
 - guarded by `requireGroupRoom` and `requireChatAdmin`; the foreign keys cascade to the messages and memberships
 
-GET /chat/:chatid/member
+GET /api/chat/:chatid/member
 
 - no group-only or admin-only guard: membership alone is required. It is how the frontend shows who is in an existing room and builds the promote/remove screens; member lists otherwise only appear in the responses of room creation, add-members and change-role
 - the sort is done in the service, so the order does not depend on the database's collation; members whose names compare equal keep user-ID order
 
-POST /chat/:chatid/member
+POST /api/chat/:chatid/member
 
 - guarded by `requireGroupRoom` and `requireChatAdmin`; new members are inserted with role `member`
 - the marker for a new member is the room's newest message that has not been deleted. Everyone added by one request gets the same marker, and a user who left and is added again starts fresh, because leaving deleted their marker. The newest message is looked up just before the insert, not in the same statement, so a message sent in between stays unread for the new member, which is right because it was sent after they joined. A deleted message above that marker never counted as unread anyway
 - users who are already members are skipped and left unchanged (so an existing admin is never demoted) and are not checked for friendship, so they are skipped even if they are no longer friends
 - the friendship check is `findNonFriendIds` (see "Friendship and messaging"); it runs after validation and after the group-room and admin guards
 
-DELETE /chat/:chatid/member/:userid
+DELETE /api/chat/:chatid/member/:userid
 
 - `:userid` is validated like the other ids (`400 Invalid user id`)
 - the only-admin rule: the target being the room's only remaining admin while other members are present is a `409`. It does not apply to a direct room, since both of its members are admins
 - this endpoint never deletes the ChatRoom record itself: when the last member leaves, no ChatMember record links to the room any more, and it stamps the room's `emptied_at` in the same transaction; the room (and its messages) is deleted later by the cleanup job (see "Empty chat room cleanup")
 - the room row is locked (`SELECT ... FOR UPDATE`) while the removal runs, so two admins leaving at the same moment cannot both pass the only-admin check and leave a room with members but no admin
 
-PATCH /chat/:chatid/member/:userid
+PATCH /api/chat/:chatid/member/:userid
 
-- guarded by `requireGroupRoom` and `requireChatAdmin`; the `409` is the same only-admin invariant `DELETE /chat/:chatid/member/:userid` enforces on removal, applied to a demotion; it does not apply when the target is the room's only member
+- guarded by `requireGroupRoom` and `requireChatAdmin`; the `409` is the same only-admin invariant `DELETE /api/chat/:chatid/member/:userid` enforces on removal, applied to a demotion; it does not apply when the target is the room's only member
 
-POST /chat/:chatid/message
+POST /api/chat/:chatid/message
 
 - no group-only or admin-only guard: membership alone is required. Validation is `validateSendMessageBody`
 
-GET /chat/:chatid/message
+GET /api/chat/:chatid/message
 
 - no group-only or admin-only guard, same as sending. `before` and `limit` are validated the same way `:chatid` and `:userid` are (positive integer, within the Postgres integer range)
 
-PATCH /chat/:chatid/message/:message_id
+PATCH /api/chat/:chatid/message/:message_id
 
 - membership alone gets a request to the controller; the sender check happens in the service, same as deleting. Validation is `validateEditMessageBody`, held to the same rules as sending
 - a deleted message can never be edited back to life: the write itself is conditional on the message not being deleted, so an edit racing with a delete gets the same `404` as an edit sent after it
 
-DELETE /chat/:chatid/message/:message_id
+DELETE /api/chat/:chatid/message/:message_id
 
 - a soft delete: the message row stays, but `content` is cleared and `deleted_at` is stamped, so it keeps its place in the room's history instead of leaving a gap in the id sequence. The sender check happens in the service. Deleting a message never deletes the underlying `ChatRoom` or affects other members' access to the room
 
-PUT /chat/:chatid/read
+PUT /api/chat/:chatid/read
 
 - sets the requester's own `ChatMember.lastReadMessageId`, which every member payload returns; membership alone is required (no group-only or admin-only guard)
 - the marker only moves forward with one conditional `updateMany` (`lastReadMessageId` is null or lower than the new value) rather than read-then-write, so requests racing each other end at the highest id. The marker is read afterwards only when the update changed nothing
@@ -284,60 +285,60 @@ Schema changes for this milestone (done, in migration `20260928120000_add_friend
 - `PendingFriendRequest.createdAt` (`DateTime @default(now())`), needed to sort the inbox and to expire stale requests later
 - `@@index([receiverId])` on `PendingFriendRequest`: the existing `@@unique([senderId, receiverId])` index only serves lookups that start with the sender, and the inbox query filters by receiver
 
-ID conventions: `/friend/:id` takes a *user* ID. Every `/friend/requests/:id` route takes a *request* ID (`PendingFriendRequest.id`), not the other user's ID. With a user ID, `DELETE /friend/requests/:id` would be ambiguous when two users have sent each other a request at the same moment (reject theirs, or cancel yours?).
+ID conventions: `/api/friend/:id` takes a *user* ID. Every `/api/friend/requests/:id` route takes a *request* ID (`PendingFriendRequest.id`), not the other user's ID. With a user ID, `DELETE /api/friend/requests/:id` would be ambiguous when two users have sent each other a request at the same moment (reject theirs, or cancel yours?).
 
-GET /friend/search/:tel
+GET /api/friend/search/:tel
 
 - `:tel` is validated with the same libphonenumber-js rule signup uses, and must also be in canonical spelling. That rule alone (`isValidPhoneNumber`) also accepts `+1 (415) 555-2671` and `+14155552671x123`, and because the lookup is an exact string match, accepting them would answer "nobody found" for a number that is registered. It is a path parameter on purpose: `+` is kept as-is in a path, whereas in a query string `+` decodes to a space
 - exact match only, so the endpoint can't be used to browse or list users. It still lets any signed-in user test whether a number is registered, which is inherent to phone lookup, so it is rate limited per user (every request past the sign-in check counts, `400`s included) and returns nothing beyond what the friend UI needs
-- the two request states only coexist through the send-at-the-same-instant race described under `POST /friend/requests`, and `request_received` wins because accepting it clears both
+- the two request states only coexist through the send-at-the-same-instant race described under `POST /api/friend/requests`, and `request_received` wins because accepting it clears both
 
-POST /friend/requests
+POST /api/friend/requests
 
-- an unknown `receiver_id` is a `400` here, unlike `POST /chat`, which answers `403` for an unknown user and a stranger alike
+- an unknown `receiver_id` is a `400` here, unlike `POST /api/chat`, which answers `403` for an unknown user and a stranger alike
 - rate limited per user to keep it from being used to spam; like search, every request past the sign-in check counts, `400`s and `409`s included
 - a duplicate that slips past the checks (double click, two tabs) is caught by the unique constraint and answered with the same `409`
 - known and accepted race: if two users send each other a request at the same instant, both can be stored (the unique constraint is per direction). This is harmless because accepting deletes the pair's requests in both directions (see below), so no hand-written database constraint is needed
 
-GET /friend/requests
+GET /api/friend/requests
 
 - `user` is selected down to `{ id, name, avatarUrl }` in the query itself, so `email` and `tel` are never read
 - sorted by `createdAt` descending, with the request `id` descending as the tie-break, so requests with the same timestamp always come back in the same order
-- no pagination and no rate limiter: it only lists requests that already involve the requester, so it reveals nothing about other users. Add `limit`/`before` in the style of `GET /chat/:chatid/message` if an inbox can grow large
+- no pagination and no rate limiter: it only lists requests that already involve the requester, so it reveals nothing about other users. Add `limit`/`before` in the style of `GET /api/chat/:chatid/message` if an inbox can grow large
 
-POST /friend/requests/:id/accept
+POST /api/friend/requests/:id/accept
 
 - in one transaction: create both `FriendListMember` rows (`createMany` with `skipDuplicates`, so it is safe to repeat and completes a friendship that only has one of its two rows), then delete every pending request between the two users in either direction
 - the two rows are always created in the same order (lower user ID first), whoever accepts. Two users who sent each other a request at the same instant can also accept at the same instant, and if each transaction inserted its own side first, Postgres could abort one of them as a deadlock
 - a double click or a second tab sending the same accept twice at once is answered with `201` and `201`, or `201` and `404`, never a `5xx`; either way there is one friendship and no request left. If the sender's account is deleted while the request is being accepted, the answer is the same `404`
 - no rate limiter: it only works on a request addressed to the requester, so it reveals nothing about other users
 
-DELETE /friend/requests/:id
+DELETE /api/friend/requests/:id
 
 - it deletes only the request `:id` names. When two users sent each other a request at the same instant, the other request of the pair stays: it is a different request (which is why `:id` is a request ID and not a user ID), and accepting it still clears the pair
 - the permission check and the delete are one `deleteMany` statement narrowed to requests the requester is a party to, not a lookup followed by a delete. A double click or a second tab sending the same call twice at once, or the sender cancelling while the receiver rejects, is therefore answered with `204` and `404`, never a `5xx`; either way the request is gone
 - no rate limiter: it only works on a request the requester is a party to, so it reveals nothing about other users
 
-GET /friend
+GET /api/friend
 
-- it reads the requester's *own* friend-list rows, the same rows `GET /friend/search/:tel`, `DELETE /friend/:id` and the friendship check of the chat-room endpoints read, so every endpoint agrees on who is a friend. A half-written friendship (only one of the two rows, which the API itself never produces) is therefore listed for the user whose row exists and not for the other
+- it reads the requester's *own* friend-list rows, the same rows `GET /api/friend/search/:tel`, `DELETE /api/friend/:id` and the friendship check of the chat-room endpoints read, so every endpoint agrees on who is a friend. A half-written friendship (only one of the two rows, which the API itself never produces) is therefore listed for the user whose row exists and not for the other
 - each friend is selected down to `{ id, name, avatarUrl }` in the query itself, so `email` and `tel` are never read
 - the sort is done in `listFriends`, not by the database: Prisma cannot order by `lower(name)`, and a plain `orderBy` follows the database's collation, which differs between installations (a case-sensitive one puts every capitalised name before every lower-case one). Names that differ only in case (`bob` and `Bob`) are ordered by user ID, so the order never changes from one call to the next. Names are letters and digits only, so lower-casing them is enough. When the list gets `limit`/`before`, the order has to move into the query (a raw `ORDER BY lower(name), id`)
-- no rate limiter: it only lists the requester's own friends, so it reveals nothing about other users. No pagination yet (friend lists are small); add `limit`/`before` in the style of `GET /chat/:chatid/message` if that stops being true
+- no rate limiter: it only lists the requester's own friends, so it reveals nothing about other users. No pagination yet (friend lists are small); add `limit`/`before` in the style of `GET /api/chat/:chatid/message` if that stops being true
 
-DELETE /friend/:id
+DELETE /api/friend/:id
 
-- deletes both `FriendListMember` rows of the pair (`deleteMany` with an `OR` over the two directions, in one transaction). Two users are friends when the *requester's own* row names `:id`, the same row `GET /friend` and `GET /friend/search/:tel` read. A user who does not exist, a stranger and the requester's own ID all get the same `404`, so nobody can probe which user IDs exist. A half-written friendship (only one of the two rows, which the API itself never produces) is therefore removed, both rows, by the user whose row exists, and answers `404` for the user whose row is missing
+- deletes both `FriendListMember` rows of the pair (`deleteMany` with an `OR` over the two directions, in one transaction). Two users are friends when the *requester's own* row names `:id`, the same row `GET /api/friend` and `GET /api/friend/search/:tel` read. A user who does not exist, a stranger and the requester's own ID all get the same `404`, so nobody can probe which user IDs exist. A half-written friendship (only one of the two rows, which the API itself never produces) is therefore removed, both rows, by the user whose row exists, and answers `404` for the user whose row is missing
 - a double click or a second tab sending the same request twice at once, or both friends unfriending each other at the same instant, is answered with `204` and `204`, or `204` and `404`, never a `5xx` (unlike accepting, the two rows are removed by one `DELETE` statement, so no fixed row order is needed); either way the friendship is gone
 - no rate limiter: it only works on the requester's own friend list, so it reveals nothing about other users
 - it does not touch pending friend requests (a pair that are friends has none, because accepting clears them)
 
 Friendship and messaging (implemented)
 
-The rules are in `./api.doc.md`, "Friendship requirement". Friendship is required to start a conversation because, before this rule, `POST /chat` and `POST /chat/:chatid/member` accepted any existing user ID, and user IDs are sequential integers, so anyone signed in could start a conversation with anyone, and read their name and avatar from the response.
+The rules are in `./api.doc.md`, "Friendship requirement". Friendship is required to start a conversation because, before this rule, `POST /api/chat` and `POST /api/chat/:chatid/member` accepted any existing user ID, and user IDs are sequential integers, so anyone signed in could start a conversation with anyone, and read their name and avatar from the response.
 
 - the all-or-nothing answer matches the rule these endpoints already follow: one user who is not a friend refuses the whole request, and a room is never created without its members
-- a user ID that does not exist gets the same `403` as a stranger, so nobody can probe which user IDs exist. This replaced the old `400` for an unknown ID on these two endpoints. A member ID below 1 or above 2147483647 is still a `400` on both, because the database would refuse the lookup (`POST /chat` used to answer `500` for such an ID)
+- a user ID that does not exist gets the same `403` as a stranger, so nobody can probe which user IDs exist. This replaced the old `400` for an unknown ID on these two endpoints. A member ID below 1 or above 2147483647 is still a `400` on both, because the database would refuse the lookup (`POST /api/chat` used to answer `500` for such an ID)
 - unfriending never removes anyone from an existing room. If harassment after unfriending becomes a concern, that is what a block feature would be for, and it is out of scope here
 - the check is not locked against a concurrent unfriend: a friendship removed at the same instant counts as the friendship it was when checked. A user deleted after the check but before the insert fails the foreign key and gets the same `403`
 - the check lives in `findNonFriendIds` (`friend.service.ts`), which the chat-room services call; it is the only place where the chat-room module reads the friend list
@@ -354,14 +355,14 @@ Shared by email verification and password reset. The mailer, its settings and th
 - The console mailer prints the recipient, the subject and the whole text between two marker lines, so a link or token can be copied from the server log in development. It refuses to run in production for that reason.
 - A refused or failed Resend call rejects with `Resend could not send the email (<error name>, HTTP <status>): <Resend's message>` (no status for a network failure; the recipient is not in the message, so logging it does not log an address), and the SDK's own error object is its `cause`. The SDK prints API errors itself outside production, so a failure shows up twice in a development log.
 - New settings in `config.ts`, validated when the server starts like the cleanup job's: `MAIL_TRANSPORT` (`console` | `resend`; default `console`, and `resend` is required when `NODE_ENV=production`), `RESEND_API_KEY` and `MAIL_FROM` (for example `Message App <no-reply@yourdomain.com>`). `resend` without a key or a `MAIL_FROM` stops the server at start, as do an unknown `MAIL_TRANSPORT` and `console` in production (the message says which setting is wrong). Nothing needs configuring in development. To try Resend for real, create an API key in the Resend dashboard and put `MAIL_TRANSPORT=resend`, `RESEND_API_KEY=re_...` and `MAIL_FROM=Message App <onboarding@resend.dev>` in `server/.env`; until a domain is verified, the only recipient that works is the Resend account's own address.
-- A request never waits for the mail (a rule for the controllers that send, not for the mailer; signup and `POST /account/email/verification` follow it, through `sendVerificationEmail`, which never rejects): the controller responds first, then sends inside a `try/catch` that logs a failure. The response time must not show whether a mail was sent (the reset flow depends on that), and a provider outage must not turn signup into a `500`. The price is that a failed mail is lost and the user asks again; if that proves too unreliable, the next step is an outbox table drained by a job like the cleanup job.
+- A request never waits for the mail (a rule for the controllers that send, not for the mailer; signup and `POST /api/account/email/verification` follow it, through `sendVerificationEmail`, which never rejects): the controller responds first, then sends inside a `try/catch` that logs a failure. The response time must not show whether a mail was sent (the reset flow depends on that), and a provider outage must not turn signup into a `500`. The price is that a failed mail is lost and the user asks again; if that proves too unreliable, the next step is an outbox table drained by a job like the cleanup job.
 - Mails are plain text: one sentence of context and the link.
 - **Trying a real delivery by hand:** `npm run try:email -- <address>` (`scripts/try-email-flows.mjs`, run from `server/` while the server runs with `MAIL_TRANSPORT=resend`) signs up a throwaway account with that address, asks you to paste the link from each mail that arrives (the verification mail, the reset mail) and whether the password-changed notice came, checks the endpoints' answers around them (a changed token, a reused link, a weak password, the old session and password after the reset), and deletes the account again so the address can be reused. It is the only check of an actual delivery; with the `onboarding@resend.dev` sender the address has to be the Resend account's own. A reset can be asked for 3 times an hour per address, so it can run 3 times an hour with the same one.
 - Tests: `test/lib/mailer.unit.test.ts` (no database: the settings checks, the console mailer, `getMailer` / `setMailer`, and the Resend mailer through the real SDK with `fetch` stubbed, so the request it builds and its handling of a `403`, a non-JSON `502` and a network failure are checked without a key or network) and `test/lib/mailerOutbox.test.ts` (the outbox is the app's mailer and is emptied between tests). Not covered, because it needs a real key and a verified domain: an actual delivery.
 
 ### Email verification (implemented)
 
-Goal: prove that the owner of an account can read mail sent to its address. An unverified address can be a typo or someone else's, and a password reset link takes over an account, so reset must not be sent to an address nobody has proven. The two endpoints are specified in `./api.doc.md` (`POST /account/email/verify` and `POST /account/email/verification`); this section is the design behind them. The code is `modules/account/emailVerification.service.ts` (the database work), `emailVerification.mail.ts` (the link, the mail and the settings check) and `emailVerification.validator.ts`; the two handlers are in `account.controller.ts`.
+Goal: prove that the owner of an account can read mail sent to its address. An unverified address can be a typo or someone else's, and a password reset link takes over an account, so reset must not be sent to an address nobody has proven. The two endpoints are specified in `./api.doc.md` (`POST /api/account/email/verify` and `POST /api/account/email/verification`); this section is the design behind them. The code is `modules/account/emailVerification.service.ts` (the database work), `emailVerification.mail.ts` (the link, the mail and the settings check) and `emailVerification.validator.ts`; the two handlers are in `account.controller.ts`.
 
 Database (migration `20261004120000_add_email_verification`):
 
@@ -376,11 +377,11 @@ Settings in `config.ts`, checked when the server starts by `checkEmailVerificati
 
 Flow:
 
-1. `POST /account/signup` creates the user as it does now (same `201` and body, `email_verified_at` null) and stores the token row in the same statement (`createUser` does a nested create), so an account never exists without the link that was mailed for it. After responding, the controller mails the link through `sendVerificationEmail`. Signup does not log in. A refused signup (`400`, `409`, including the one that loses a race for the address) stores and mails nothing.
-2. The mail is plain text, subject `Confirm your email address`, one sentence and the link `EMAIL_VERIFICATION_URL#token=...`. A fragment is never sent to a server, so the token stays out of access logs and `Referer` headers. The frontend page reads it and sends it to the API as a `POST`, not as a link straight to a `GET` endpoint, because mail scanners and link previewers open links on their own and would use up the token before the user does. `sendVerificationEmail` never rejects: a request does not wait for its mail (see "Email delivery"), so a failed send is logged (without the address or the token) and the mail is lost. The user asks again with `POST /account/email/verification`.
-3. `POST /account/email/verify` (`verifyEmailToken`) runs in one transaction: it finds the row by the token's hash, deletes it only while `expires_at` is still in the future, and then sets `email_verified_at` on the user only if the user still has the row's address and is not verified yet. Only one of two simultaneous requests can delete the row (the other waits for the first transaction, then finds it gone), so a link works once. If any step finds nothing, the answer is the same `400`, for an unknown, used, expired or replaced token and for a link issued for an address the user no longer has. An account that is verified already keeps its first timestamp and the answer is still `204`. An expired row is left where it is; a link for another address is consumed, since nothing could use it.
-4. `POST /account/email/verification` (`issueEmailVerification`) locks the user's row (`SELECT ... FOR UPDATE`) before it looks at the stored link. Without the lock two simultaneous requests could both find the link older than a minute and both send a mail; with it the second waits, sees the link the first one stored, and is told to wait. The new link replaces the old one in the same row (an upsert on `user_id`, which also resets `created_at`, the start of the next cooldown). The caller is signed in, so there is nothing to hide and the answers are explicit. This is the "resend" button, and how accounts created before email verification verify.
-5. The user shape (login, `GET /account/me`, `PATCH /account/me`, and `req.user`) gains `emailVerified: boolean`, so the frontend can show a "verify your email" banner. The timestamp itself is never sent. `toPublicUser` (`account.service.ts`) builds the shape from `userSelect`, and `findSessionUser`, `updateUserProfile` and login all use it, so the three bodies cannot drift apart.
+1. `POST /api/account/signup` creates the user as it does now (same `201` and body, `email_verified_at` null) and stores the token row in the same statement (`createUser` does a nested create), so an account never exists without the link that was mailed for it. After responding, the controller mails the link through `sendVerificationEmail`. Signup does not log in. A refused signup (`400`, `409`, including the one that loses a race for the address) stores and mails nothing.
+2. The mail is plain text, subject `Confirm your email address`, one sentence and the link `EMAIL_VERIFICATION_URL#token=...`. A fragment is never sent to a server, so the token stays out of access logs and `Referer` headers. The frontend page reads it and sends it to the API as a `POST`, not as a link straight to a `GET` endpoint, because mail scanners and link previewers open links on their own and would use up the token before the user does. `sendVerificationEmail` never rejects: a request does not wait for its mail (see "Email delivery"), so a failed send is logged (without the address or the token) and the mail is lost. The user asks again with `POST /api/account/email/verification`.
+3. `POST /api/account/email/verify` (`verifyEmailToken`) runs in one transaction: it finds the row by the token's hash, deletes it only while `expires_at` is still in the future, and then sets `email_verified_at` on the user only if the user still has the row's address and is not verified yet. Only one of two simultaneous requests can delete the row (the other waits for the first transaction, then finds it gone), so a link works once. If any step finds nothing, the answer is the same `400`, for an unknown, used, expired or replaced token and for a link issued for an address the user no longer has. An account that is verified already keeps its first timestamp and the answer is still `204`. An expired row is left where it is; a link for another address is consumed, since nothing could use it.
+4. `POST /api/account/email/verification` (`issueEmailVerification`) locks the user's row (`SELECT ... FOR UPDATE`) before it looks at the stored link. Without the lock two simultaneous requests could both find the link older than a minute and both send a mail; with it the second waits, sees the link the first one stored, and is told to wait. The new link replaces the old one in the same row (an upsert on `user_id`, which also resets `created_at`, the start of the next cooldown). The caller is signed in, so there is nothing to hide and the answers are explicit. This is the "resend" button, and how accounts created before email verification verify.
+5. The user shape (login, `GET /api/account/me`, `PATCH /api/account/me`, and `req.user`) gains `emailVerified: boolean`, so the frontend can show a "verify your email" banner. The timestamp itself is never sent. `toPublicUser` (`account.service.ts`) builds the shape from `userSelect`, and `findSessionUser`, `updateUserProfile` and login all use it, so the three bodies cannot drift apart.
 
 All the times in the service are JS `Date`s handed to Prisma (the same as everywhere else in the project), never the database's `now()` and never a column default: `created_at` is set from the same `now` as `expires_at`, so a link lives exactly `EMAIL_VERIFICATION_TTL_MS`. The columns are `timestamp` without a time zone, so comparing one with `now()` is off by the session's UTC offset on any connection whose `TimeZone` is not UTC. The tests run in such a zone (see "Test database setup"), which is what makes that mistake fail in them. The service functions take `now` as an optional argument, which is how the tests check the expiry and the cooldown to the millisecond.
 
@@ -388,9 +389,9 @@ What verification gates:
 
 - Required: password reset sends only to verified addresses (see "Password reset (implemented)").
 - Not gated: login, chat and friends. Blocking login until verified would lock out someone who mistyped the address, who can never receive the link and has no way yet to change the address.
-- Optional later: a `requireVerifiedEmail` middleware on the actions spammers want (for example `POST /friend/requests` and `POST /chat`), so throwaway accounts are less useful. Best added once the frontend can prompt for verification.
+- Optional later: a `requireVerifiedEmail` middleware on the actions spammers want (for example `POST /api/friend/requests` and `POST /api/chat`), so throwaway accounts are less useful. Best added once the frontend can prompt for verification.
 
-Changing the address (optional and not built; it is the way out of a typo): `POST /account/email`, signed in, body `{ email, password }` (the password like `DELETE /account/me` asks for it; the email follows signup's rules; `409` when it belongs to another account). It writes a token row whose `email` is the new address, replacing any pending one, and sends the link to the new address only. Confirming through `POST /account/email/verify` then sets the user's `email` from the row and `email_verified_at` in one transaction (a unique violation there is `409 { "error": "Email already in use" }`), and the old address gets a "your email was changed" mail. Until then the old address stays the login. Building it changes step 3 above: the update there currently requires the user to still have the row's address, and would instead apply the row's address.
+Changing the address (optional and not built; it is the way out of a typo): `POST /api/account/email`, signed in, body `{ email, password }` (the password like `DELETE /api/account/me` asks for it; the email follows signup's rules; `409` when it belongs to another account). It writes a token row whose `email` is the new address, replacing any pending one, and sends the link to the new address only. Confirming through `POST /api/account/email/verify` then sets the user's `email` from the row and `email_verified_at` in one transaction (a unique violation there is `409 { "error": "Email already in use" }`), and the old address gets a "your email was changed" mail. Until then the old address stays the login. Building it changes step 3 above: the update there currently requires the user to still have the row's address, and would instead apply the row's address.
 
 Known limit: signup answers `409` for a registered address even when it was never verified, so someone can register an address they do not own and keep its real owner out. If that matters, a signup for an address held by an unverified account older than some number of days could take the account over. Out of scope here.
 
@@ -399,7 +400,7 @@ Account deletion needs no change: the token row is deleted with the user (covere
 Tests (all with the in-memory outbox):
 
 - `emailVerification.service.test.ts`: a link works until the moment it expires and not at that moment, once even for two simultaneous requests, and not after a newer link replaced it; a verified account keeps its first timestamp; a link for another address is refused; the cooldown lasts exactly 60 seconds; two simultaneous resends issue one link; `409` and a missing account.
-- `emailVerify.test.ts` and `emailVerifyLimiter.test.ts` for `POST /account/email/verify`, and `emailVerificationResend.test.ts` for `POST /account/email/verification` (`401`, `204` and the mail, replacing the old link, `409`, `429`, a failing or hanging mailer, the per-user limiter).
+- `emailVerify.test.ts` and `emailVerifyLimiter.test.ts` for `POST /api/account/email/verify`, and `emailVerificationResend.test.ts` for `POST /api/account/email/verification` (`401`, `204` and the mail, replacing the old link, `409`, `429`, a failing or hanging mailer, the per-user limiter).
 - `signup.test.ts`: signup mails exactly one working link and stores only its hash, does not log in, mails nothing when refused, and does not fail or wait when the mail does.
 - `emailVerified` in the three user bodies (`session.test.ts`, `profile.test.ts`); a table of bad bodies in `emailVerification.validator.unit.test.ts`; the settings checks, the link and the send helper in `emailVerification.mail.unit.test.ts`; `hashToken` in `randomToken.unit.test.ts`; how every numeric setting is read in `config.unit.test.ts`, and `checkSessionSettings` in `session.settings.unit.test.ts`.
 
@@ -409,7 +410,7 @@ The two frontend pieces (the banner with a resend button, and the page that read
 
 ### Password reset (implemented)
 
-A signed-out user who forgot their password asks for a link by email, opens it, and sets a new password. It is two endpoints and one table, on top of the mailer from "Email delivery" and the verified addresses from "Email verification (implemented)". The two endpoints are specified in `./api.doc.md` (`POST /account/password/reset-request` and `POST /account/password/reset`); this section is the design behind them. The code is `modules/account/passwordReset.service.ts` (the database work), `passwordReset.mail.ts` (the settings check and the two mails) and `passwordReset.validator.ts`; the two handlers are in `account.controller.ts`.
+A signed-out user who forgot their password asks for a link by email, opens it, and sets a new password. It is two endpoints and one table, on top of the mailer from "Email delivery" and the verified addresses from "Email verification (implemented)". The two endpoints are specified in `./api.doc.md` (`POST /api/account/password/reset-request` and `POST /api/account/password/reset`); this section is the design behind them. The code is `modules/account/passwordReset.service.ts` (the database work), `passwordReset.mail.ts` (the settings check and the two mails) and `passwordReset.validator.ts`; the two handlers are in `account.controller.ts`.
 
 Decisions:
 
@@ -428,14 +429,14 @@ Settings in `config.ts`, checked when the server starts by `checkPasswordResetSe
 - `PASSWORD_RESET_TTL_MS`: how long a link works. A whole number of milliseconds from 1 to 24 hours, default 30 minutes (`1800000`). The ceiling is lower than the verification link's year because a reset link takes over the account: a longer lifetime is a typo in the unit. Read with `Number`, so `30m` is `NaN` and stops the server.
 - `PASSWORD_RESET_URL`: the frontend page the link opens, an absolute `http` or `https` URL with no `#` in it. Default `http://localhost:5173/reset-password` outside production; required when `NODE_ENV=production`. The URL rules are shared with email verification (`checkFrontendPageUrl` and `buildTokenLink` in `src/lib/frontendLink.ts`), so the two cannot drift apart.
 
-`POST /account/password/reset-request` (`issuePasswordReset`):
+`POST /api/account/password/reset-request` (`issuePasswordReset`):
 
 1. One transaction. It locks the account's row (`SELECT ... FOR UPDATE`, found by the exact address), as `issueEmailVerification` does: without the lock two simultaneous requests could both find the stored link older than 60 seconds, and both send a mail. With it the second waits, sees the link the first one stored, and gets nothing.
 2. An unverified account gets the verification link instead, stored by `issueEmailVerification` inside the same transaction (it takes the optional transaction as its last argument), so the account cannot become verified between the check and the store. Its cooldown is the verification one.
 3. For a verified account, a stored link younger than 60 seconds means nothing is stored or sent; otherwise a new token replaces the old one (an upsert on `user_id`, which also resets `created_at`, the start of the next cooldown).
 4. The result tells the controller what to mail (`reset_link`, `verification_link`) or that there is nothing to send (`unknown_email`, `cooldown`). The controller answers the same `202` for all four.
 
-`POST /account/password/reset` (`resetPasswordWithToken`):
+`POST /api/account/password/reset` (`resetPasswordWithToken`):
 
 1. The controller validates the body, including the password rules, and hashes the new password before it looks at the token, so a weak password does not use up the link and an unknown token takes as long to answer as a good one.
 2. One transaction: find the row by the token's hash; lock the user's row; delete the token row while `expires_at` is still in the future (`deleteMany` with `expiresAt: { gt: now }`, `now` a JS `Date` and not the database's `now()`, for the reason given under "Email verification (implemented)"; a count of `1` means this request claimed the token); store the new hash; delete all of the user's sessions (expired ones too). Of two simultaneous requests with the same token only one can claim the row (the other waits for the user row, then finds the token gone), so a link works once, and a failure rolls everything back, so the link survives it.
@@ -513,20 +514,20 @@ message-app/
     │   └── modules/
     │       ├── account/
     │       │   ├── account.routes.ts
-    │       │   ├── accountRateLimit.middleware.ts   // loginLimiter, emailVerifyLimiter, passwordResetRequestIpLimiter and passwordResetLimiter (per IP), passwordCheckLimiter (per user; POST /account/password and DELETE /account/me share it), emailVerificationRequestLimiter (per user), passwordResetRequestEmailLimiter (per email; its key is passwordResetEmailKey)
+    │       │   ├── accountRateLimit.middleware.ts   // loginLimiter, emailVerifyLimiter, passwordResetRequestIpLimiter and passwordResetLimiter (per IP), passwordCheckLimiter (per user; POST /api/account/password and DELETE /api/account/me share it), emailVerificationRequestLimiter (per user), passwordResetRequestEmailLimiter (per email; its key is passwordResetEmailKey)
     │       │   ├── account.controller.ts
     │       │   ├── account.service.ts
     │       │   ├── session.service.ts   // session database operations; checkSessionSettings (SESSION_TTL_MS, checked at startup)
     │       │   ├── emailVerification.service.ts   // newVerificationToken, issueEmailVerification (resend), verifyEmailToken
     │       │   ├── emailVerification.mail.ts      // settings check, the link, sendVerificationEmail (never rejects)
-    │       │   ├── emailVerification.validator.ts // POST /account/email/verify body
+    │       │   ├── emailVerification.validator.ts // POST /api/account/email/verify body
     │       │   ├── passwordReset.service.ts       // newPasswordResetToken, issuePasswordReset (reset-request, under a row lock), resetPasswordWithToken
     │       │   ├── passwordReset.mail.ts          // settings check, sendPasswordResetEmail and sendPasswordChangedEmail (never reject)
-    │       │   ├── passwordReset.validator.ts     // POST /account/password/reset-request and /reset bodies
+    │       │   ├── passwordReset.validator.ts     // POST /api/account/password/reset-request and /reset bodies
     │       │   ├── login.validator.ts
-    │       │   ├── deleteAccount.validator.ts   // DELETE /account/me body
-    │       │   ├── password.validator.ts   // POST /account/password body
-    │       │   ├── profile.validator.ts    // PATCH /account/me body
+    │       │   ├── deleteAccount.validator.ts   // DELETE /api/account/me body
+    │       │   ├── password.validator.ts   // POST /api/account/password body
+    │       │   ├── profile.validator.ts    // PATCH /api/account/me body
     │       │   └── signup.validator.ts
     │       ├── chatrooms/
     │       │   ├── chatRoom.routes.ts
@@ -547,7 +548,7 @@ message-app/
     └── test/
         ├── setup.ts
         ├── helpers/                          // shared fixtures, not test files
-        │   ├── users.ts                      // createUser, loginAs (session cookie without going through /account/login), createSessionRow
+        │   ├── users.ts                      // createUser, loginAs (session cookie without going through /api/account/login), createSessionRow
         │   ├── chatRooms.ts                  // createGroupRoom, createDirectRoom, promoteToAdmin, memberIdsOf
         │   ├── emailVerification.ts          // tokenFromMail (the token in a mailed link), createVerificationLink (stores a link in a chosen state)
         │   ├── friends.ts                    // makeFriends, createFriendRequest (optional createdAt)
@@ -556,22 +557,22 @@ message-app/
         ├── account/
         │   ├── session.test.ts               // login, me, logout (and emailVerified in their bodies)
         │   ├── signup.test.ts                // includes the canonical-number and duplicate-spelling cases, the 409 when the insert loses a race, and the verification mail
-        │   ├── profile.test.ts               // PATCH /account/me (and emailVerified in its body)
-        │   ├── password.test.ts              // POST /account/password, and changePassword's stale-hash guard
+        │   ├── profile.test.ts               // PATCH /api/account/me (and emailVerified in its body)
+        │   ├── password.test.ts              // POST /api/account/password, and changePassword's stale-hash guard
         │   ├── emailVerificationToken.schema.test.ts   // the hand-written migration's rules: one token per user, unique hash, deleted with the user
         │   ├── emailVerification.service.test.ts       // expiry, one use, cooldown, row lock: the service called directly, with the races
-        │   ├── emailVerify.test.ts           // POST /account/email/verify (keep it under the IP limiter's 10 requests)
+        │   ├── emailVerify.test.ts           // POST /api/account/email/verify (keep it under the IP limiter's 10 requests)
         │   ├── emailVerifyLimiter.test.ts    // its per-IP limiter, in a file of its own because the test uses the whole budget
-        │   ├── emailVerificationResend.test.ts   // POST /account/email/verification
+        │   ├── emailVerificationResend.test.ts   // POST /api/account/email/verification
         │   ├── passwordResetToken.schema.test.ts   // the hand-written migration's rules: one token per user, unique hash, deleted with the user
         │   ├── passwordReset.service.test.ts       // expiry, one use, cooldown, row lock, rollback: the service called directly, with the races
         │   ├── passwordReset.lockOrder.test.ts     // a reset that overlaps a deletion of the same account does not deadlock
-        │   ├── passwordResetRequest.test.ts        // POST /account/password/reset-request (keep it under the IP limiter's 10 requests)
-        │   ├── passwordResetConfirm.test.ts        // POST /account/password/reset (keep it under 10 requests, and under loginLimiter's 10 logins)
+        │   ├── passwordResetRequest.test.ts        // POST /api/account/password/reset-request (keep it under the IP limiter's 10 requests)
+        │   ├── passwordResetConfirm.test.ts        // POST /api/account/password/reset (keep it under 10 requests, and under loginLimiter's 10 logins)
         │   ├── passwordResetRequestIpLimiter.test.ts   // per-IP limiter of reset-request, in a file of its own
         │   ├── passwordResetRequestLimiter.test.ts     // per-email limiter of reset-request, in a file of its own
-        │   ├── passwordResetLimiter.test.ts        // limiter of POST /account/password/reset, in a file of its own
-        │   ├── deleteAccount.test.ts         // DELETE /account/me, and deleteAccount's stale-hash guard and room lock
+        │   ├── passwordResetLimiter.test.ts        // limiter of POST /api/account/password/reset, in a file of its own
+        │   ├── deleteAccount.test.ts         // DELETE /api/account/me, and deleteAccount's stale-hash guard and room lock
         │   ├── profile.validator.unit.test.ts
         │   ├── deleteAccount.validator.unit.test.ts
         │   ├── password.validator.unit.test.ts
@@ -603,18 +604,18 @@ message-app/
         │   ├── chatRoomMessages.edit.test.ts
         │   ├── chatRoomMessages.delete.test.ts
         │   ├── chatRoomRead.test.ts
-        │   ├── chatRoomSummary.test.ts       // lastMessage and unreadCount of GET /chat and GET /chat/:chatid
+        │   ├── chatRoomSummary.test.ts       // lastMessage and unreadCount of GET /api/chat and GET /api/chat/:chatid
         │   ├── chatRoom.validator.unit.test.ts
         │   ├── chatRoomCleanup.service.test.ts
         │   └── chatRoomCleanup.job.unit.test.ts
         └── friends/
-            ├── friendSearch.test.ts          // GET /friend/search/:tel
-            ├── friendRequests.send.test.ts   // POST /friend/requests
-            ├── friendRequests.get.test.ts    // GET /friend/requests
-            ├── friendRequests.accept.test.ts // POST /friend/requests/:id/accept
-            ├── friendRequests.delete.test.ts // DELETE /friend/requests/:id
-            ├── friends.list.test.ts          // GET /friend
-            ├── friends.remove.test.ts        // DELETE /friend/:id
+            ├── friendSearch.test.ts          // GET /api/friend/search/:tel
+            ├── friendRequests.send.test.ts   // POST /api/friend/requests
+            ├── friendRequests.get.test.ts    // GET /api/friend/requests
+            ├── friendRequests.accept.test.ts // POST /api/friend/requests/:id/accept
+            ├── friendRequests.delete.test.ts // DELETE /api/friend/requests/:id
+            ├── friends.list.test.ts          // GET /api/friend
+            ├── friends.remove.test.ts        // DELETE /api/friend/:id
             ├── friend.permissions.test.ts    // sign-in guard, per route
             └── friend.validator.unit.test.ts
 ```
@@ -622,17 +623,17 @@ message-app/
 Conventions:
 
 - File names follow `<subject>.<role>.ts`, for example `chatRoom.service.ts` or `login.validator.ts`.
-- A new feature gets its own folder under `src/modules/` with its routes, controller, validator(s) and service(s); its router is mounted in `app.ts`.
+- A new feature gets its own folder under `src/modules/` with its routes, controller, validator(s) and service(s); its router is mounted in `app.ts` under `/api/<feature>`.
 - All database operations are kept in the `*.service.ts` files and go through the shared Prisma client from `src/lib/prisma.ts`. There is no separate repositories layer, so a transaction (room creation, member removal) stays inside one service function.
 - A fixed technical limit shared by more than one module (for example the Postgres INTEGER max, reused as both an ID ceiling and a `setInterval`/`setTimeout` delay ceiling) is declared once in `src/lib/constants.ts` and imported everywhere it's needed, instead of being redeclared per file.
 - Services never import Express (no `req`, `res` or cookies). HTTP concerns live in controllers and middleware, so other entry points, such as the future Socket.io handlers, can call the same services.
 - Middleware used by a single feature lives in that feature's folder (for example `chatRoomAuth.middleware.ts`, `accountRateLimit.middleware.ts`, `friendRateLimit.middleware.ts`); `src/middlewares/` only holds middleware shared across features. Rate limiters follow the same rule: each feature keeps its own limiters, keyed by IP where nobody is signed in yet (`loginLimiter`) and by user id after `requireUserAuth` (`friendSearchLimiter`, `passwordCheckLimiter`).
-- Error bodies: every `4xx` and `5xx` response has the shape `{ "error": "<text>" }`, whichever layer sends it (controller, feature middleware, rate limiter, `errorHandler`). `message` is not used for errors because it is already a success-body key for a chat message (`POST` and `PATCH /chat/:chatid/message` return `{ "message": { ... } }`), so a client could otherwise get a string and an object under the same key from one endpoint. Validators keep their own internal `{ valid: false, message }` result; the controller puts that text under `error`. A success body that only confirms an action (`201 { "message": "Account created successfully" }` from signup) is not an error body and is unchanged.
+- Error bodies: every `4xx` and `5xx` response has the shape `{ "error": "<text>" }`, whichever layer sends it (controller, feature middleware, rate limiter, `errorHandler`). `message` is not used for errors because it is already a success-body key for a chat message (`POST` and `PATCH /api/chat/:chatid/message` return `{ "message": { ... } }`), so a client could otherwise get a string and an object under the same key from one endpoint. Validators keep their own internal `{ valid: false, message }` result; the controller puts that text under `error`. A success body that only confirms an action (`201 { "message": "Account created successfully" }` from signup) is not an error body and is unchanged.
 - Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.
 - Background jobs live in the folder of the feature they belong to and are started from `server.ts`, never from `app.ts`, so tests that import the app do not start timers.
 - `server.ts` checks the callback of `app.listen`: Express 5 passes a failed listen (a port that is already taken, for one) to it instead of throwing, so the callback logs the error and exits with code 1. Without the check the process printed "Server is running" and idled on the cleanup job's timer, serving nothing.
 - Mail goes out through `getMailer()` from `src/lib/mailer.ts` and nowhere else: a feature never imports a mail provider's SDK, and services never send mail themselves. The real mailer is installed from `server.ts`, never `app.ts`; the tests install the outbox in `test/setup.ts`. A feature's mail (subject, text, link, and the send helper that logs a failure instead of throwing) is composed in its own `<feature>.mail.ts`, for example `emailVerification.mail.ts` and `passwordReset.mail.ts`.
-- Tests live in `server/test/`, in a folder per feature that mirrors `src/modules/` (`test/account/`, `test/chatrooms/`, `test/friends/`; `test/middlewares/` mirrors `src/middlewares/`, `test/lib/` mirrors `src/lib/` and `test/config/` mirrors `src/config/`), and import from `../../src/...`. Shared fixtures live in `test/helpers/`. `loginAs(user)` creates the session row and sends its cookie directly, so no test outside `test/account/` depends on `/account/login` or its rate limiter.
+- Tests live in `server/test/`, in a folder per feature that mirrors `src/modules/` (`test/account/`, `test/chatrooms/`, `test/friends/`; `test/middlewares/` mirrors `src/middlewares/`, `test/lib/` mirrors `src/lib/` and `test/config/` mirrors `src/config/`), and import from `../../src/...`. Shared fixtures live in `test/helpers/`. `loginAs(user)` creates the session row and sends its cookie directly, so no test outside `test/account/` depends on `/api/account/login` or its rate limiter.
 - A rate limiter keeps its count for as long as its module is loaded, which in a test is the whole test file. Per-user limiters need no care (every test makes new users, with new ids), but a per-IP limiter (`loginLimiter`, `emailVerifyLimiter`, `passwordResetRequestIpLimiter`, `passwordResetLimiter`) is shared by every request the file sends from the test client, and so is a limiter keyed by something the body carries (`passwordResetRequestEmailLimiter`, one budget per address): keep such a file under the limiter's budget, and put the test that uses the budget up in a file of its own (`emailVerifyLimiter.test.ts`, `passwordResetLimiter.test.ts`).
 - Numeric settings in `config.ts` (`PORT`, `SESSION_TTL_MS`, the cleanup job's two, `EMAIL_VERIFICATION_TTL_MS`, `PASSWORD_RESET_TTL_MS`) are read by `numberSetting`, which uses `Number()` and treats a blank value as not set (`0` is a value). Never `parseInt`: `parseInt('7d')` is `7`, a session that lasts 7 milliseconds, with nothing at startup to say so, while `Number('7d')` is `NaN`, which the startup check of the feature that owns the setting refuses (`checkSessionSettings`, `checkEmailVerificationSettings`, `checkPasswordResetSettings`, `startEmptyChatRoomCleanup`; `listen` refuses a `NaN` `PORT`). A new setting gets a check like those, and a case in `config.unit.test.ts`.
 - Times are JS `Date`s handed to Prisma (`expiresAt: { gt: now }`), never the database's `now()` in SQL: the `timestamp` columns hold UTC without a zone, so `now()` is off by the session's UTC offset wherever the database is not in UTC. A time that the code later compares with the JS clock is set explicitly instead of left to a column default. The `@default(now())` columns are filled by Prisma Client with the JS clock (checked on `email_verification_tokens.created_at` with the database in UTC+7), and the tests run in UTC+7 so a mistake here fails them (see "Test database setup").
@@ -641,7 +642,7 @@ Conventions:
 
 ## Empty chat room cleanup
 
-A room whose last member has left is not deleted on the spot. `DELETE /chat/:chatid/member/:userid` stamps the room's `emptied_at` column in the same transaction as the removal (`DELETE /account/me` does the same for a room whose only member was the deleted user), and a job running inside the API process deletes the room once it has stayed empty for the retention period. Deleting the room cascades to its messages.
+A room whose last member has left is not deleted on the spot. `DELETE /api/chat/:chatid/member/:userid` stamps the room's `emptied_at` column in the same transaction as the removal (`DELETE /api/account/me` does the same for a room whose only member was the deleted user), and a job running inside the API process deletes the room once it has stayed empty for the retention period. Deleting the room cascades to its messages.
 The job is `modules/chatrooms/chatRoomCleanup.job.ts` (timer, validation of the two settings below) and the database work is `chatRoomCleanup.service.ts` (`purgeExpiredEmptyChatRooms`).
 
 - `EMPTY_ROOM_RETENTION_MS`: how long a room stays empty before it is deleted (default 7 days)
@@ -649,11 +650,11 @@ The job is `modules/chatrooms/chatRoomCleanup.job.ts` (timer, validation of the 
 - each sweep first stamps any empty room that has no `emptied_at` yet (a safety net: the two endpoints above already stamp the room themselves), so its retention clock starts then, and then deletes rooms whose stamp is older than the retention period
 - a room that has members is never deleted, whatever its `emptied_at` says
 - the job is started from `server.ts`, not `app.ts`, so tests that import the app do not start a timer
-- a room with no members cannot be reached through the API (every `/chat/:chatid` route requires membership), so nothing can add members back to a room that is waiting for cleanup
+- a room with no members cannot be reached through the API (every `/api/chat/:chatid` route requires membership), so nothing can add members back to a room that is waiting for cleanup
 
 ## Cookie / CORS Notes
 
-In development the frontend does not need CORS: its dev server (`http://localhost:5173`) proxies every request that starts with `/api` to this server (`http://localhost:3000`) and removes the prefix, so the browser sees one origin and the session cookie is a first-party cookie (see `./frontend.doc.md`, "How the frontend talks to the server"). The frontend sends every request with `credentials: 'include'`.
+In development the frontend does not need CORS: its dev server (`http://localhost:5173`) proxies every request that starts with `/api` to this server (`http://localhost:3000`) unchanged (the routes themselves start with `/api`), so the browser sees one origin and the session cookie is a first-party cookie (see `./frontend.doc.md`, "How the frontend talks to the server"). The frontend sends every request with `credentials: 'include'`.
 
 The session cookie is `HttpOnly` and `SameSite=Lax` (and `Secure` in production), so in production the frontend and the API have to be on the same site, for example behind one reverse proxy that routes `/api` here. Two things to do for that setup:
 
@@ -674,14 +675,14 @@ The backend follows a layered request flow:
 
 - Express receives the request and parses JSON bodies with `express.json()`.
 - `cookie-parser` makes the session cookie available through `req.cookies`.
-- The request is sent to the matching route under `/account`, `/chat` or `/friend`.
+- The request is sent to the matching route under `/api/account`, `/api/chat` or `/api/friend`.
 
 2.**Authentication**
 
 - Account signup and login validate the incoming body in their controllers before calling the account services. Signup also makes the verification token (`newVerificationToken`), stores it with the user, and mails the link after it has responded.
 - Login verifies the password, then `createSession` (`session.service.ts`) deletes the user's expired sessions and stores a new one (with a random 256-bit id from `generateToken`), and `setSessionCookie` (`middlewares/SessionCookie.ts`) sends the session cookie in the response.
 - Protected chat-room and friend routes run `requireUserAuth`, which calls `getSessionUser` in `middlewares/SessionCookie.ts`: it reads the session cookie, resolves it through `findSessionUser` in `session.service.ts`, clears the cookie when the session has expired, and returns the user (the public shape, with `emailVerified`), which `requireUserAuth` attaches to `req.user`.
-- `/account/me` uses the same `getSessionUser` lookup but returns `user: null` when no valid session exists. Logout deletes the session when present and clears the cookie.
+- `/api/account/me` uses the same `getSessionUser` lookup but returns `user: null` when no valid session exists. Logout deletes the session when present and clears the cookie.
 
 3.**Route-level authorization**
 
@@ -707,7 +708,7 @@ The backend follows a layered request flow:
 - Successful service results are mapped to JSON responses by the controller and returned to the client.
 - Validation and authorization failures return directly from the relevant controller or middleware with an appropriate `4xx` status and an `{ error }` body.
 - Unexpected service or Prisma errors are forwarded with `next(error)` and handled by the application's final error-handler middleware.
-- The error handler answers `500 { "error": "Internal server error" }` for those and logs them. An error that carries its own `4xx` status (Express and body-parser set one) is answered with that status instead: a malformed JSON body or a path param with broken percent-encoding, such as `/chat/%E0%A4%A` or `/friend/search/%E0%A4%A`, is a `400`, not a `500`. Such an error is the client's mistake, so it is not logged, and its text is only sent to the client when the error marks it as safe to expose (otherwise the plain status text, for example `Bad Request`).
+- The error handler answers `500 { "error": "Internal server error" }` for those and logs them. An error that carries its own `4xx` status (Express and body-parser set one) is answered with that status instead: a malformed JSON body or a path param with broken percent-encoding, such as `/api/chat/%E0%A4%A` or `/api/friend/search/%E0%A4%A`, is a `400`, not a `500`. Such an error is the client's mistake, so it is not logged, and its text is only sent to the client when the error marks it as safe to expose (otherwise the plain status text, for example `Bad Request`).
 
 For a typical protected request, the flow is:
 

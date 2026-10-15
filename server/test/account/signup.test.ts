@@ -9,7 +9,7 @@ import * as accountService from '../../src/modules/account/account.service';
 import { createVerificationLink, tokenFromMail } from '../helpers/emailVerification';
 import { outbox } from '../helpers/mailer';
 
-const signUpRoute = '/account/signup';
+const signUpRoute = '/api/account/signup';
 
 const validBody = {
   name: 'johndoe',

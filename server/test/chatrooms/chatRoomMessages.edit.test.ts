@@ -9,7 +9,7 @@ import { createDirectRoom, createGroupRoom } from '../helpers/chatRooms';
 // list of bad bodies are in chatRoom.validator.unit.test.ts.
 
 const messageUrl = (chatId: number, messageId: number | string) =>
-  `/chat/${chatId}/message/${messageId}`;
+  `/api/chat/${chatId}/message/${messageId}`;
 
 describe('PATCH /chat/:chatid/message/:message_id', () => {
   it('lets the sender edit their own message in a group room', async () => {
@@ -17,7 +17,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
     const member = await createUser('Bob');
     const room = await createGroupRoom(admin.id, [member.id]);
     const agent = await loginAs(member);
-    const sent = await agent.post(`/chat/${room.id}/message`).send({ content: 'Helo!' });
+    const sent = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Helo!' });
 
     const res = await agent
       .patch(messageUrl(room.id, sent.body.message.id))
@@ -44,7 +44,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
     const bob = await createUser('Bob');
     const room = await createDirectRoom(alice.id, bob.id);
     const agent = await loginAs(bob);
-    const sent = await agent.post(`/chat/${room.id}/message`).send({ content: 'Hi Alcie' });
+    const sent = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Hi Alcie' });
 
     const res = await agent
       .patch(messageUrl(room.id, sent.body.message.id))
@@ -58,13 +58,13 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
     const user = await createUser('Alice');
     const room = await createGroupRoom(user.id);
     const agent = await loginAs(user);
-    const first = await agent.post(`/chat/${room.id}/message`).send({ content: 'First' });
-    const second = await agent.post(`/chat/${room.id}/message`).send({ content: 'Second' });
+    const first = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'First' });
+    const second = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Second' });
 
     await agent.patch(messageUrl(room.id, first.body.message.id)).send({ content: 'First (fixed)' });
-    const messages = await agent.get(`/chat/${room.id}/message`);
+    const messages = await agent.get(`/api/chat/${room.id}/message`);
     await agent.patch(messageUrl(room.id, second.body.message.id)).send({ content: 'Second (fixed)' });
-    const rooms = await agent.get('/chat');
+    const rooms = await agent.get('/api/chat');
 
     // Still oldest, and it reports its new content plus the edited stamp.
     expect(messages.body.messages.map((m: { content: string }) => m.content)).toEqual([
@@ -80,7 +80,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
     const user = await createUser('Alice');
     const room = await createGroupRoom(user.id);
     const agent = await loginAs(user);
-    const sent = await agent.post(`/chat/${room.id}/message`).send({ content: 'Same' });
+    const sent = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Same' });
 
     const res = await agent
       .patch(messageUrl(room.id, sent.body.message.id))
@@ -98,7 +98,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
     const member = await createUser('Bob');
     const room = await createGroupRoom(admin.id, [member.id]);
     const memberAgent = await loginAs(member);
-    const sent = await memberAgent.post(`/chat/${room.id}/message`).send({ content: 'Mine' });
+    const sent = await memberAgent.post(`/api/chat/${room.id}/message`).send({ content: 'Mine' });
     const adminAgent = await loginAs(admin);
 
     const res = await adminAgent
@@ -117,7 +117,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
     const user = await createUser('Alice');
     const room = await createGroupRoom(user.id);
     const agent = await loginAs(user);
-    const sent = await agent.post(`/chat/${room.id}/message`).send({ content: 'Once' });
+    const sent = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Once' });
     await agent.delete(messageUrl(room.id, sent.body.message.id));
 
     const noSuchMessage = await agent.patch(messageUrl(room.id, 999_999)).send({ content: 'Hi' });
@@ -138,7 +138,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
     const roomA = await createGroupRoom(user.id, [], 'Room A');
     const roomB = await createGroupRoom(user.id, [], 'Room B');
     const agent = await loginAs(user);
-    const sent = await agent.post(`/chat/${roomA.id}/message`).send({ content: 'In room A' });
+    const sent = await agent.post(`/api/chat/${roomA.id}/message`).send({ content: 'In room A' });
 
     const res = await agent.patch(messageUrl(roomB.id, sent.body.message.id)).send({ content: 'Moved' });
 
@@ -153,7 +153,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
     const user = await createUser('Alice');
     const room = await createGroupRoom(user.id);
     const agent = await loginAs(user);
-    const sent = await agent.post(`/chat/${room.id}/message`).send({ content: 'Keep me' });
+    const sent = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Keep me' });
 
     const res = await agent.patch(messageUrl(room.id, sent.body.message.id)).send({ content: '   ' });
 

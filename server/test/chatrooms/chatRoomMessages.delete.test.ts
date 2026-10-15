@@ -8,7 +8,7 @@ import { createDirectRoom, createGroupRoom } from '../helpers/chatRooms';
 // chatRoom.validator.unit.test.ts.
 
 const messageUrl = (chatId: number, messageId: number | string) =>
-  `/chat/${chatId}/message/${messageId}`;
+  `/api/chat/${chatId}/message/${messageId}`;
 
 describe('DELETE /chat/:chatid/message/:message_id', () => {
   it('lets the sender delete their own message in a group room', async () => {
@@ -16,7 +16,7 @@ describe('DELETE /chat/:chatid/message/:message_id', () => {
     const member = await createUser('Bob');
     const room = await createGroupRoom(admin.id, [member.id]);
     const agent = await loginAs(member);
-    const sent = await agent.post(`/chat/${room.id}/message`).send({ content: 'Hello!' });
+    const sent = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Hello!' });
 
     const res = await agent.delete(messageUrl(room.id, sent.body.message.id));
 
@@ -32,7 +32,7 @@ describe('DELETE /chat/:chatid/message/:message_id', () => {
     const bob = await createUser('Bob');
     const room = await createDirectRoom(alice.id, bob.id);
     const agent = await loginAs(bob);
-    const sent = await agent.post(`/chat/${room.id}/message`).send({ content: 'Hi Alice' });
+    const sent = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Hi Alice' });
 
     const res = await agent.delete(messageUrl(room.id, sent.body.message.id));
 
@@ -46,10 +46,10 @@ describe('DELETE /chat/:chatid/message/:message_id', () => {
     const user = await createUser('Alice');
     const room = await createGroupRoom(user.id);
     const agent = await loginAs(user);
-    const sent = await agent.post(`/chat/${room.id}/message`).send({ content: 'Oops' });
+    const sent = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Oops' });
 
     await agent.delete(messageUrl(room.id, sent.body.message.id));
-    const res = await agent.get(`/chat/${room.id}/message`);
+    const res = await agent.get(`/api/chat/${room.id}/message`);
 
     expect(res.body.messages[0]).toMatchObject({
       id: sent.body.message.id,
@@ -63,7 +63,7 @@ describe('DELETE /chat/:chatid/message/:message_id', () => {
     const member = await createUser('Bob');
     const room = await createGroupRoom(admin.id, [member.id]);
     const memberAgent = await loginAs(member);
-    const sent = await memberAgent.post(`/chat/${room.id}/message`).send({ content: 'Mine' });
+    const sent = await memberAgent.post(`/api/chat/${room.id}/message`).send({ content: 'Mine' });
     const adminAgent = await loginAs(admin);
 
     const res = await adminAgent.delete(messageUrl(room.id, sent.body.message.id));
@@ -79,7 +79,7 @@ describe('DELETE /chat/:chatid/message/:message_id', () => {
     const user = await createUser('Alice');
     const room = await createGroupRoom(user.id);
     const agent = await loginAs(user);
-    const sent = await agent.post(`/chat/${room.id}/message`).send({ content: 'Once' });
+    const sent = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Once' });
     await agent.delete(messageUrl(room.id, sent.body.message.id));
 
     const noSuchMessage = await agent.delete(messageUrl(room.id, 999_999));
@@ -96,7 +96,7 @@ describe('DELETE /chat/:chatid/message/:message_id', () => {
     const roomA = await createGroupRoom(user.id, [], 'Room A');
     const roomB = await createGroupRoom(user.id, [], 'Room B');
     const agent = await loginAs(user);
-    const sent = await agent.post(`/chat/${roomA.id}/message`).send({ content: 'In room A' });
+    const sent = await agent.post(`/api/chat/${roomA.id}/message`).send({ content: 'In room A' });
 
     const res = await agent.delete(messageUrl(roomB.id, sent.body.message.id));
 

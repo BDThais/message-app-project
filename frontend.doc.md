@@ -58,7 +58,7 @@ npm run build      # vite build, then the type check
 
 ## How the frontend talks to the server
 
-**Development.** The browser only talks to the Vite dev server. Requests to `/api/...` are forwarded to `http://localhost:3000/...` with the `/api` prefix removed. So the session cookie is a first-party cookie, and no CORS configuration is needed. The prefix is there because the server's route names (`/account`, `/chat`, `/friend`) are also the names of pages (`/chat/:chatId`).
+**Development.** The browser only talks to the Vite dev server. Requests to `/api/...` are forwarded to `http://localhost:3000/api/...` unchanged: the server's routes start with `/api` themselves. So the session cookie is a first-party cookie, and no CORS configuration is needed. The prefix keeps the API's paths (`/api/account`, `/api/chat`, `/api/friend`) from colliding with the names of pages (`/chat/:chatId`).
 
 **Cookie.** The session cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` in production (`middlewares/SessionCookie.ts`). The frontend never reads it. Every request is sent with `credentials: 'include'`.
 
@@ -67,9 +67,9 @@ npm run build      # vite build, then the type check
 - CORS is only needed if the two end up on different origins. Then `cors` has to be added (see "Cookie / CORS Notes" in `./backend.doc.md`) and the cookie changed to `SameSite=None; Secure`, as the comment in `SessionCookie.ts` says.
 - Behind a reverse proxy, every request arrives from the proxy's address unless Express is told to trust the proxy's `X-Forwarded-For` header (`app.set('trust proxy', ...)`; `app.ts` does not set it today). The rate limiters key on the IP, so without it all users would share one limit.
 
-**Errors.** `api` throws an `ApiError` (`status`, `message`, `body`) for every non-2xx answer. `message` is the server's `{ error }` text, `body` keeps the whole parsed body for the few errors that carry more (`chatIds` on the `409` of `DELETE /account/me`). A request that never got an answer is an `ApiError` with status `0`. Endpoints that answer `204` resolve to `undefined`.
+**Errors.** `api` throws an `ApiError` (`status`, `message`, `body`) for every non-2xx answer. `message` is the server's `{ error }` text, `body` keeps the whole parsed body for the few errors that carry more (`chatIds` on the `409` of `DELETE /api/account/me`). A request that never got an answer is an `ApiError` with status `0`. Endpoints that answer `204` resolve to `undefined`.
 
-**A 401 does not always mean "signed out".** `POST /account/password` and `DELETE /account/me` answer `401` for a wrong password with the session still fine, and login answers `401` for bad credentials. So the query client does not sign anyone out on a 401: it calls `onUnauthorized` (set in `createApp.ts`), which refetches `GET /account/me`. That endpoint answers `user: null` when the session really is gone, and the `_app` layout then sends the person to `/login`.
+**A 401 does not always mean "signed out".** `POST /api/account/password` and `DELETE /api/account/me` answer `401` for a wrong password with the session still fine, and login answers `401` for bad credentials. So the query client does not sign anyone out on a 401: it calls `onUnauthorized` (set in `createApp.ts`), which refetches `GET /api/account/me`. That endpoint answers `user: null` when the session really is gone, and the `_app` layout then sends the person to `/login`.
 
 ## Foundation: server state and UI state
 
@@ -150,7 +150,7 @@ Planned additions: `features/chats/`, `features/messages/`, `features/friends/` 
 
 How the guards work:
 
-- `_app` runs `requireUser` in `beforeLoad`: it asks the cache for `me` (one `GET /account/me` the first time, then the cached answer for 5 minutes) and redirects to `/login?redirect=<where they were going>` when nobody is signed in. Because it runs before the route renders, no page behind it ever starts a request without a session.
+- `_app` runs `requireUser` in `beforeLoad`: it asks the cache for `me` (one `GET /api/account/me` the first time, then the cached answer for 5 minutes) and redirects to `/login?redirect=<where they were going>` when nobody is signed in. Because it runs before the route renders, no page behind it ever starts a request without a session.
 - `_guest` runs `redirectIfSignedIn`, so a signed-in user who opens `/login` lands on `/chat`.
 - `/verify-email` and `/reset-password` are plain top-level routes: the links in the emails must work whether or not the person happens to be signed in.
 - After signing in, the login page goes to the `redirect` parameter, but only through `safeRedirectPath`: it must start with a single `/`. Anything else (`https://...`, `//host`, `/\host`) falls back to `/chat`, so a crafted login link cannot send people to another site.
@@ -170,21 +170,21 @@ The API itself (every endpoint's request, response, status codes, error texts, r
 
 ### Rooms and members
 
-- Start a direct chat from the friends list with `POST /chat` and use the returned `id`, whether it answered `200` or `201`. Two people who are no longer friends get a `403` there, but their old room keeps working from the room list.
-- `POST /chat` and `PATCH /chat/:chatid` return the room as stored, not a summary: merge them into the cached room list or invalidate `GET /chat`, and for a direct room show the other member from `members`.
+- Start a direct chat from the friends list with `POST /api/chat` and use the returned `id`, whether it answered `200` or `201`. Two people who are no longer friends get a `403` there, but their old room keeps working from the room list.
+- `POST /api/chat` and `PATCH /api/chat/:chatid` return the room as stored, not a summary: merge them into the cached room list or invalidate `GET /api/chat`, and for a direct room show the other member from `members`.
 - Show room actions according to the permission table in `./api.doc.md`, and rely on the server's answers for the rest. A group's only admin cannot leave while others remain (`409`): offer to promote someone first.
 
 ### Messages
 
-- `GET /chat/:chatid/message` is newest first: reverse it for display, and page back with `before` set to the oldest id loaded.
+- `GET /api/chat/:chatid/message` is newest first: reverse it for display, and page back with `before` set to the oldest id loaded.
 - Show a placeholder such as "message deleted" for a deleted message, an "edited" label for `editedAt`, and a placeholder name with no actions when `sender` is `null`.
 - Mark a room as read with the id of the newest message loaded (`lastMessage` has no id to use), then set that room's `unreadCount` to 0 in the cache.
 
 ### Friends
 
-- Strip spaces, dashes and parentheses from the typed phone number before `GET /friend/search/:tel`, and encode the segment with `encodeURIComponent`: the server accepts only the canonical form.
+- Strip spaces, dashes and parentheses from the typed phone number before `GET /api/friend/search/:tel`, and encode the segment with `encodeURIComponent`: the server accepts only the canonical form.
 - `relationship` decides the button: `none` shows "Add friend", `request_sent` shows "Cancel" (`requestId`), `request_received` shows "Accept" (`requestId`), `friend` shows "Message", `self` shows nothing.
-- `/friend/requests/:id...` takes a request id, `DELETE /friend/:id` a user id.
+- `/api/friend/requests/:id...` takes a request id, `DELETE /api/friend/:id` a user id.
 
 ### Forms that hit a rate limit
 
@@ -199,25 +199,25 @@ See "Current Implementation Status".
 ### Step 2 — account screens
 
 - Sign-up form (hints, server errors, then a "check your email" notice; signup does not sign in), forgot-password form, `/verify-email` and `/reset-password` pages as described above.
-- A "verify your email" banner in the `_app` header when `emailVerified` is `false`, with a resend button (`POST /account/email/verification`; show the `409` and `429` messages).
+- A "verify your email" banner in the `_app` header when `emailVerified` is `false`, with a resend button (`POST /api/account/email/verification`; show the `409` and `429` messages).
 - Replace the thin login page: links to the other forms, and the verification notice.
 
 ### Step 3 — chat core
 
-- Room list in a sidebar from `GET /chat` (`lastMessage`, `unreadCount`), the open conversation at `/chat/$chatId`.
+- Room list in a sidebar from `GET /api/chat` (`lastMessage`, `unreadCount`), the open conversation at `/chat/$chatId`.
 - Messages with `useInfiniteQuery`: pages arrive newest first, `getNextPageParam` is the oldest id when `hasMore`, and the list is reversed for display. Keep the scroll position when older messages are prepended (the fiddly part: budget time for it).
 - Send, edit and delete (sender only). On success, put the message the API returned into the cache; no refetch.
-- Mark as read: `PUT /chat/:chatid/read` while a room is open and its latest message is in view; update `unreadCount` in the room list's cache.
+- Mark as read: `PUT /api/chat/:chatid/read` while a room is open and its latest message is in view; update `unreadCount` in the room list's cache.
 - Until step 6, give the messages query a `refetchInterval` so the screen feels alive. Step 6 removes it.
 - Stop here for a day and use it: this is where the API's shapes get tested for real.
 
 ### Step 4 — friends
 
-- Search by phone number (`GET /friend/search/:tel`), send a request, the lists of incoming and outgoing requests, accept, reject, cancel, the friend list, unfriend, and "message" from a friend (creates or reuses the direct room).
+- Search by phone number (`GET /api/friend/search/:tel`), send a request, the lists of incoming and outgoing requests, accept, reject, cancel, the friend list, unfriend, and "message" from a friend (creates or reuses the direct room).
 
 ### Step 5 — account settings and room management
 
-- `/settings`: change name and avatar URL (`PATCH /account/me`), change password (`POST /account/password`), delete account (`DELETE /account/me`; show the rooms from the `409`'s `chatIds`).
+- `/settings`: change name and avatar URL (`PATCH /api/account/me`), change password (`POST /api/account/password`), delete account (`DELETE /api/account/me`; show the rooms from the `409`'s `chatIds`).
 - Create a group room, the member list, add and remove members, promote and demote, leave, rename. Show actions according to the permission table in `./api.doc.md`, and rely on the server's answers for the rest.
 
 ### Step 6 — Socket.io, together with the server
@@ -260,7 +260,7 @@ Client side:
 ## Decisions
 
 - **Dev proxy instead of CORS.** One origin in development, the same shape as production. CORS stays a later option.
-- **`/api` prefix** in the browser, stripped by the proxy: the server keeps its route names.
+- **`/api` prefix** on every API path, on the server as well as in the browser: the proxy forwards requests unchanged, so an endpoint has one path everywhere (it used to be stripped by the proxy).
 - **`strictPort` on 5173**, because the mails link there.
 - **`me` returns `user: null`** and is the single source of "who is signed in", cached for 5 minutes and rechecked on any 401.
 - **No blanket sign-out on 401** (see "How the frontend talks to the server").
@@ -278,6 +278,6 @@ Client side:
 - ESLint and Prettier: neither the server nor the frontend has them yet.
 - Optimistic updates for sending a message (show it at once, mark it failed if the request fails): worth it after step 3 has been used for a while.
 - Long conversations: virtualized message list if scrolling gets slow.
-- Pagination for `GET /chat` and `GET /friend` once the lists can grow (the server notes this already).
+- Pagination for `GET /api/chat` and `GET /api/friend` once the lists can grow (the server notes this already).
 - Browser notifications and an unread count in the tab title.
 - Shared types between server and frontend.

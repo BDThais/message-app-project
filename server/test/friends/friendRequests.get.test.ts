@@ -7,7 +7,7 @@ import { createFriendRequest } from '../helpers/friends';
 // friend.permissions.test.ts; the full list of bad `direction` values is in
 // friend.validator.unit.test.ts.
 
-const url = '/friend/requests';
+const url = '/api/friend/requests';
 
 describe('GET /friend/requests', () => {
   it('lists the requests sent to the requester by default, newest first, with the sender as user', async () => {

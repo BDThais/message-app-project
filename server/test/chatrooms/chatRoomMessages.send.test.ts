@@ -15,7 +15,7 @@ describe('POST /chat/:chatid/message', () => {
     const agent = await loginAs(member);
 
     const res = await agent
-      .post(`/chat/${room.id}/message`)
+      .post(`/api/chat/${room.id}/message`)
       .send({ content: '  Hello!  ' });
 
     expect(res.status).toBe(201);
@@ -36,7 +36,7 @@ describe('POST /chat/:chatid/message', () => {
     const room = await createDirectRoom(alice.id, bob.id);
     const agent = await loginAs(bob);
 
-    const res = await agent.post(`/chat/${room.id}/message`).send({ content: 'Hi Alice' });
+    const res = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Hi Alice' });
 
     expect(res.status).toBe(201);
     expect(res.body.message).toMatchObject({
@@ -51,10 +51,10 @@ describe('POST /chat/:chatid/message', () => {
     const room = await createGroupRoom(user.id);
     const agent = await loginAs(user);
 
-    await agent.post(`/chat/${room.id}/message`).send({ content: 'First' });
-    await agent.post(`/chat/${room.id}/message`).send({ content: 'Second' });
+    await agent.post(`/api/chat/${room.id}/message`).send({ content: 'First' });
+    await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Second' });
 
-    const res = await agent.get('/chat');
+    const res = await agent.get('/api/chat');
 
     expect(res.body.chatRooms[0]).toMatchObject({ id: room.id, lastMessage: { content: 'Second' } });
   });
@@ -64,7 +64,7 @@ describe('POST /chat/:chatid/message', () => {
     const room = await createGroupRoom(user.id);
     const agent = await loginAs(user);
 
-    const res = await agent.post(`/chat/${room.id}/message`).send({ content: '   ' });
+    const res = await agent.post(`/api/chat/${room.id}/message`).send({ content: '   ' });
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "'content' must be a non-empty string" });

@@ -19,7 +19,7 @@ describe('POST /chat/:chatid/member', () => {
     const agent = await loginAs(admin);
 
     const res = await agent
-      .post(`/chat/${room.id}/member`)
+      .post(`/api/chat/${room.id}/member`)
       .send({ member_ids: [bob.id, carol.id] });
 
     expect(res.status).toBe(201);
@@ -53,7 +53,7 @@ describe('POST /chat/:chatid/member', () => {
     const agent = await loginAs(admin);
 
     const res = await agent
-      .post(`/chat/${room.id}/member`)
+      .post(`/api/chat/${room.id}/member`)
       .send({ member_ids: [admin.id, bob.id, carol.id, carol.id] });
 
     expect(res.status).toBe(201);
@@ -92,7 +92,7 @@ describe('POST /chat/:chatid/member', () => {
     });
     const adminAgent = await loginAs(admin);
 
-    const res = await adminAgent.post(`/chat/${room.id}/member`).send({ member_ids: [bob.id, dave.id] });
+    const res = await adminAgent.post(`/api/chat/${room.id}/member`).send({ member_ids: [bob.id, dave.id] });
 
     expect(res.status).toBe(201);
     expect(res.body.addedMembers).toEqual([
@@ -102,8 +102,8 @@ describe('POST /chat/:chatid/member', () => {
     const daveAgent = await loginAs(dave);
     // The summary of this room from the list and from the single-room route.
     const summariesFor = async (agent: typeof bobAgent) => [
-      (await agent.get('/chat')).body.chatRooms.find((r: { id: number }) => r.id === room.id),
-      (await agent.get(`/chat/${room.id}`)).body.chatRoom,
+      (await agent.get('/api/chat')).body.chatRooms.find((r: { id: number }) => r.id === room.id),
+      (await agent.get(`/api/chat/${room.id}`)).body.chatRoom,
     ];
     for (const summary of await summariesFor(bobAgent)) {
       expect(summary).toMatchObject({ unreadCount: 0, lastMessage: { content: 'Second' } });
@@ -114,8 +114,8 @@ describe('POST /chat/:chatid/member', () => {
     }
 
     // Only what is sent after they joined is unread for the new member.
-    await adminAgent.post(`/chat/${room.id}/message`).send({ content: 'Third' });
-    const after = await bobAgent.get(`/chat/${room.id}`);
+    await adminAgent.post(`/api/chat/${room.id}/message`).send({ content: 'Third' });
+    const after = await bobAgent.get(`/api/chat/${room.id}`);
     expect(after.body.chatRoom.unreadCount).toBe(1);
   });
 
@@ -128,11 +128,11 @@ describe('POST /chat/:chatid/member', () => {
       data: { chatId: room.id, senderId: admin.id, content: '', deletedAt: new Date() },
     });
 
-    const res = await (await loginAs(admin)).post(`/chat/${room.id}/member`).send({ member_ids: [bob.id] });
+    const res = await (await loginAs(admin)).post(`/api/chat/${room.id}/member`).send({ member_ids: [bob.id] });
 
     expect(res.status).toBe(201);
     expect(res.body.addedMembers[0].lastReadMessageId).toBeNull();
-    expect((await (await loginAs(bob)).get(`/chat/${room.id}`)).body.chatRoom.unreadCount).toBe(0);
+    expect((await (await loginAs(bob)).get(`/api/chat/${room.id}`)).body.chatRoom.unreadCount).toBe(0);
   });
 
   it('returns 200 with nothing added when everyone is already a member', async () => {
@@ -141,7 +141,7 @@ describe('POST /chat/:chatid/member', () => {
     const room = await createGroupRoom(admin.id, [bob.id]);
     const agent = await loginAs(admin);
 
-    const res = await agent.post(`/chat/${room.id}/member`).send({ member_ids: [bob.id] });
+    const res = await agent.post(`/api/chat/${room.id}/member`).send({ member_ids: [bob.id] });
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ addedMembers: [], alreadyMemberIds: [bob.id] });
@@ -157,7 +157,7 @@ describe('POST /chat/:chatid/member', () => {
     const agent = await loginAs(admin);
 
     const res = await agent
-      .post(`/chat/${room.id}/member`)
+      .post(`/api/chat/${room.id}/member`)
       .send({ member_ids: [friend.id, stranger.id] });
 
     expect(res.status).toBe(403);
@@ -174,10 +174,10 @@ describe('POST /chat/:chatid/member', () => {
     const agent = await loginAs(admin);
 
     const forStranger = await agent
-      .post(`/chat/${room.id}/member`)
+      .post(`/api/chat/${room.id}/member`)
       .send({ member_ids: [friend.id, stranger.id] });
     const forMissing = await agent
-      .post(`/chat/${room.id}/member`)
+      .post(`/api/chat/${room.id}/member`)
       .send({ member_ids: [friend.id, 999_999] });
 
     expect(forMissing.status).toBe(forStranger.status);
@@ -194,7 +194,7 @@ describe('POST /chat/:chatid/member', () => {
     const room = await createGroupRoom(admin.id);
     const agent = await loginAs(admin);
 
-    const res = await agent.post(`/chat/${room.id}/member`).send({ member_ids: [other.id] });
+    const res = await agent.post(`/api/chat/${room.id}/member`).send({ member_ids: [other.id] });
 
     expect(res.status).toBe(403);
     expect(await memberIdsOf(room.id)).toEqual([admin.id]);
@@ -205,7 +205,7 @@ describe('POST /chat/:chatid/member', () => {
     const room = await createGroupRoom(admin.id);
     const agent = await loginAs(admin);
 
-    const res = await agent.post(`/chat/${room.id}/member`).send({ member_ids: [] });
+    const res = await agent.post(`/api/chat/${room.id}/member`).send({ member_ids: [] });
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "'member_ids' must be a non-empty array of user IDs" });

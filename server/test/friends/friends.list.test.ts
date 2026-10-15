@@ -6,7 +6,7 @@ import { createFriendRequest, makeFriends } from '../helpers/friends';
 // The session guard on this route is covered once for every friend route in
 // friend.permissions.test.ts.
 
-const url = '/friend';
+const url = '/api/friend';
 
 describe('GET /friend', () => {
   it("lists the requester's friends sorted by name without regard to case, never their email or tel", async () => {

@@ -8,13 +8,13 @@ import app from '../../src/app';
 
 // Add new routes here so they are covered too.
 const allRoutes = [
-  ['get', '/friend'],
-  ['get', '/friend/search/+14155552671'],
-  ['post', '/friend/requests'],
-  ['get', '/friend/requests'],
-  ['post', '/friend/requests/1/accept'],
-  ['delete', '/friend/requests/1'],
-  ['delete', '/friend/1'],
+  ['get', '/api/friend'],
+  ['get', '/api/friend/search/+14155552671'],
+  ['post', '/api/friend/requests'],
+  ['get', '/api/friend/requests'],
+  ['post', '/api/friend/requests/1/accept'],
+  ['delete', '/api/friend/requests/1'],
+  ['delete', '/api/friend/1'],
 ] as const;
 
 describe('every friend route', () => {

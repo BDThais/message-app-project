@@ -8,7 +8,7 @@ import { createDirectRoom } from '../helpers/chatRooms';
 // friend.permissions.test.ts; the full list of bad `:id` values is in
 // friend.validator.unit.test.ts.
 
-const unfriendUrl = (userId: number) => `/friend/${userId}`;
+const unfriendUrl = (userId: number) => `/api/friend/${userId}`;
 
 // Every friend-list row as [userId, friendId], in a fixed order.
 async function friendPairs() {
@@ -109,7 +109,7 @@ describe('DELETE /friend/:id', () => {
     await makeFriends(alice.id, bob.id);
     const agent = await loginAs(alice);
 
-    const res = await agent.delete('/friend/abc');
+    const res = await agent.delete('/api/friend/abc');
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'Invalid user id' });

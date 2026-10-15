@@ -10,7 +10,7 @@ import { createUser, loginAs } from '../helpers/users';
 describe('errorHandler with errors raised by Express', () => {
   it('answers 400 for a malformed JSON body', async () => {
     const res = await request(app)
-      .post('/account/login')
+      .post('/api/account/login')
       .set('Content-Type', 'application/json')
       .send('{"email":');
 
@@ -22,7 +22,7 @@ describe('errorHandler with errors raised by Express', () => {
     const alice = await createUser('Alice');
     const agent = await loginAs(alice);
 
-    const res = await agent.get('/friend/search/%E0%A4%A');
+    const res = await agent.get('/api/friend/search/%E0%A4%A');
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: expect.any(String) });

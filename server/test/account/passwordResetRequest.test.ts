@@ -16,7 +16,7 @@ import { createUser } from '../helpers/users';
 // to the route in all: keep it under 10. The rules that need many requests are tested on the service
 // (passwordReset.service.test.ts), the bad bodies in the validator's unit test, and the limiters in
 // the files named *Limiter.test.ts.
-const route = '/account/password/reset-request';
+const route = '/api/account/password/reset-request';
 const accepted = { message: 'If an account exists for that email, a reset link is on its way' };
 
 afterEach(() => {

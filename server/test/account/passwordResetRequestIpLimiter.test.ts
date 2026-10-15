@@ -9,11 +9,11 @@ import app from '../../src/app';
 describe('POST /account/password/reset-request (rate limit per IP)', () => {
   it('answers 429 after 10 requests from one IP in the window, whatever the addresses', async () => {
     for (let i = 0; i < 10; i++) {
-      const res = await request(app).post('/account/password/reset-request').send({ email: `nobody${i}@example.com` });
+      const res = await request(app).post('/api/account/password/reset-request').send({ email: `nobody${i}@example.com` });
       expect(res.status, `request ${i + 1}`).toBe(202);
     }
 
-    const blocked = await request(app).post('/account/password/reset-request').send({ email: 'someone.else@example.com' });
+    const blocked = await request(app).post('/api/account/password/reset-request').send({ email: 'someone.else@example.com' });
 
     expect(blocked.status).toBe(429);
     expect(blocked.body).toEqual({ error: 'Too many attempts, try again later' });

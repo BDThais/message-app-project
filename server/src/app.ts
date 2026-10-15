@@ -12,9 +12,9 @@ app.use(cookieParser());
 
 //Routes
 
-app.use('/account', accountRoutes);
-app.use('/chat', chatroomRoutes);
-app.use('/friend', friendRoutes);
+app.use('/api/account', accountRoutes);
+app.use('/api/chat', chatroomRoutes);
+app.use('/api/friend', friendRoutes);
 
 //Error Handler
 app.use(errorHandler);

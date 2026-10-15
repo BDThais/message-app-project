@@ -12,11 +12,11 @@ describe('GET /chat/:chatid/message', () => {
     const room = await createGroupRoom(user.id);
     const agent = await loginAs(user);
 
-    await agent.post(`/chat/${room.id}/message`).send({ content: 'First' });
-    await agent.post(`/chat/${room.id}/message`).send({ content: 'Second' });
-    await agent.post(`/chat/${room.id}/message`).send({ content: 'Third' });
+    await agent.post(`/api/chat/${room.id}/message`).send({ content: 'First' });
+    await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Second' });
+    await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Third' });
 
-    const res = await agent.get(`/chat/${room.id}/message`);
+    const res = await agent.get(`/api/chat/${room.id}/message`);
 
     expect(res.status).toBe(200);
     expect(res.body.messages.map((m: { content: string }) => m.content)).toEqual([
@@ -33,10 +33,10 @@ describe('GET /chat/:chatid/message', () => {
     const agent = await loginAs(user);
 
     for (const content of ['One', 'Two', 'Three']) {
-      await agent.post(`/chat/${room.id}/message`).send({ content });
+      await agent.post(`/api/chat/${room.id}/message`).send({ content });
     }
 
-    const firstPage = await agent.get(`/chat/${room.id}/message?limit=2`);
+    const firstPage = await agent.get(`/api/chat/${room.id}/message?limit=2`);
     expect(firstPage.body.messages.map((m: { content: string }) => m.content)).toEqual([
       'Three',
       'Two',
@@ -45,7 +45,7 @@ describe('GET /chat/:chatid/message', () => {
 
     const oldestLoadedId = firstPage.body.messages[1].id;
     const secondPage = await agent.get(
-      `/chat/${room.id}/message?before=${oldestLoadedId}&limit=2`
+      `/api/chat/${room.id}/message?before=${oldestLoadedId}&limit=2`
     );
 
     expect(secondPage.body.messages.map((m: { content: string }) => m.content)).toEqual(['One']);
@@ -58,10 +58,10 @@ describe('GET /chat/:chatid/message', () => {
     const room = await createDirectRoom(alice.id, bob.id);
 
     const aliceAgent = await loginAs(alice);
-    await aliceAgent.post(`/chat/${room.id}/message`).send({ content: 'Hi Bob' });
+    await aliceAgent.post(`/api/chat/${room.id}/message`).send({ content: 'Hi Bob' });
 
     const bobAgent = await loginAs(bob);
-    const res = await bobAgent.get(`/chat/${room.id}/message`);
+    const res = await bobAgent.get(`/api/chat/${room.id}/message`);
 
     expect(res.status).toBe(200);
     expect(res.body.messages).toHaveLength(1);
@@ -73,7 +73,7 @@ describe('GET /chat/:chatid/message', () => {
     const room = await createGroupRoom(user.id);
     const agent = await loginAs(user);
 
-    const res = await agent.get(`/chat/${room.id}/message?before=abc`);
+    const res = await agent.get(`/api/chat/${room.id}/message?before=abc`);
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "'before' must be a positive integer message id" });

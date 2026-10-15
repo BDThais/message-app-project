@@ -7,7 +7,7 @@ import { createFriendRequest, makeFriends } from '../helpers/friends';
 // friend.permissions.test.ts; the full list of bad `:id` values is in
 // friend.validator.unit.test.ts.
 
-const acceptUrl = (requestId: number) => `/friend/requests/${requestId}/accept`;
+const acceptUrl = (requestId: number) => `/api/friend/requests/${requestId}/accept`;
 
 // Every friend-list row as [userId, friendId], in a fixed order.
 async function friendPairs() {
@@ -142,7 +142,7 @@ describe('POST /friend/requests/:id/accept', () => {
     await createFriendRequest(bob.id, alice.id);
     const agent = await loginAs(alice);
 
-    const res = await agent.post('/friend/requests/abc/accept');
+    const res = await agent.post('/api/friend/requests/abc/accept');
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'Invalid friend request id' });

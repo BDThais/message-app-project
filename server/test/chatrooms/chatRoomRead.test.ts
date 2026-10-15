@@ -28,7 +28,7 @@ describe('PUT /chat/:chatid/read', () => {
     const second = await addMessage(room.id, alice.id, 'Second');
     const agent = await loginAs(bob);
 
-    const res = await agent.put(`/chat/${room.id}/read`).send({ message_id: second.id });
+    const res = await agent.put(`/api/chat/${room.id}/read`).send({ message_id: second.id });
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ lastReadMessageId: second.id });
@@ -42,10 +42,10 @@ describe('PUT /chat/:chatid/read', () => {
     const first = await addMessage(room.id, alice.id, 'First');
     const second = await addMessage(room.id, alice.id, 'Second');
     const agent = await loginAs(alice);
-    await agent.put(`/chat/${room.id}/read`).send({ message_id: second.id });
+    await agent.put(`/api/chat/${room.id}/read`).send({ message_id: second.id });
 
     for (const messageId of [first.id, second.id]) {
-      const res = await agent.put(`/chat/${room.id}/read`).send({ message_id: messageId });
+      const res = await agent.put(`/api/chat/${room.id}/read`).send({ message_id: messageId });
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ lastReadMessageId: second.id });
@@ -74,10 +74,10 @@ describe('PUT /chat/:chatid/read', () => {
     const bob = await createUser('Bob');
     const room = await createGroupRoom(alice.id, [bob.id]);
     const message = await addMessage(room.id, alice.id);
-    await (await loginAs(alice)).delete(`/chat/${room.id}/message/${message.id}`).expect(204);
+    await (await loginAs(alice)).delete(`/api/chat/${room.id}/message/${message.id}`).expect(204);
     const agent = await loginAs(bob);
 
-    const res = await agent.put(`/chat/${room.id}/read`).send({ message_id: message.id });
+    const res = await agent.put(`/api/chat/${room.id}/read`).send({ message_id: message.id });
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ lastReadMessageId: message.id });
@@ -92,7 +92,7 @@ describe('PUT /chat/:chatid/read', () => {
 
     // A message of another room, and an id that does not exist at all.
     for (const messageId of [elsewhere.id, elsewhere.id + 1000]) {
-      const res = await agent.put(`/chat/${room.id}/read`).send({ message_id: messageId });
+      const res = await agent.put(`/api/chat/${room.id}/read`).send({ message_id: messageId });
 
       expect(res.status, String(messageId)).toBe(404);
       expect(res.body).toEqual({ error: 'Message not found in this chat room' });
@@ -108,7 +108,7 @@ describe('PUT /chat/:chatid/read', () => {
     const message = await addMessage(room.id, alice.id);
     const agent = await loginAs(bob);
 
-    const res = await agent.put(`/chat/${room.id}/read`).send({ message_id: message.id });
+    const res = await agent.put(`/api/chat/${room.id}/read`).send({ message_id: message.id });
 
     expect(res.status).toBe(200);
     expect(await markerOf(room.id, bob.id)).toBe(message.id);
@@ -119,7 +119,7 @@ describe('PUT /chat/:chatid/read', () => {
     const room = await createGroupRoom(alice.id);
     const agent = await loginAs(alice);
 
-    const res = await agent.put(`/chat/${room.id}/read`).send({});
+    const res = await agent.put(`/api/chat/${room.id}/read`).send({});
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "'message_id' must be a positive integer message id" });

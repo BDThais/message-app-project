@@ -9,7 +9,7 @@ import { createDirectRoom, createGroupRoom, memberIdsOf, promoteToAdmin } from '
 // chatRoom.validator.unit.test.ts.
 
 const memberUrl = (chatId: number, userId: number | string) =>
-  `/chat/${chatId}/member/${userId}`;
+  `/api/chat/${chatId}/member/${userId}`;
 
 describe('DELETE /chat/:chatid/member/:userid', () => {
   describe('who may remove whom', () => {

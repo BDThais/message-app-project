@@ -9,7 +9,7 @@ import { createDirectRoom, createGroupRoom, memberIdsOf, promoteToAdmin } from '
 import { createFriendRequest, makeFriends } from '../helpers/friends';
 import { createSessionRow, createUser, loginAs } from '../helpers/users';
 
-const route = '/account/me';
+const route = '/api/account/me';
 const password = 'Str0ng!Pass';
 
 /** A user who really has `password` (the helper's hash is a placeholder). */
@@ -66,8 +66,8 @@ describe(`DELETE ${route}`, () => {
     expect(res.headers['set-cookie']?.[0]).toMatch(new RegExp(`^${config.SESSION_COOKIE}=;.*Expires=Thu, 01 Jan 1970`));
     expect(await prisma.user.count({ where: { id: alice.id } })).toBe(0);
     expect(await prisma.session.count({ where: { userId: alice.id } })).toBe(0);
-    expect((await agent.get('/account/me')).body).toEqual({ user: null });
-    expect((await bobAgent.get('/account/me')).body.user).toMatchObject({ id: bob.id });
+    expect((await agent.get('/api/account/me')).body).toEqual({ user: null });
+    expect((await bobAgent.get('/api/account/me')).body.user).toMatchObject({ id: bob.id });
   });
 
   it('frees the email so nobody can log in with the old credentials', async () => {
@@ -75,7 +75,7 @@ describe(`DELETE ${route}`, () => {
     const agent = await loginAs(alice);
 
     await agent.delete(route).send({ password });
-    const login = await request(app).post('/account/login').send({ email: alice.email, password });
+    const login = await request(app).post('/api/account/login').send({ email: alice.email, password });
 
     expect(login.status).toBe(401);
   });
@@ -113,16 +113,16 @@ describe(`DELETE ${route}`, () => {
     const room = await createGroupRoom(bob.id, [alice.id]);
     const aliceAgent = await loginAs(alice);
     const bobAgent = await loginAs(bob);
-    await aliceAgent.post(`/chat/${room.id}/message`).send({ content: 'Bye soon' });
+    await aliceAgent.post(`/api/chat/${room.id}/message`).send({ content: 'Bye soon' });
 
     const res = await aliceAgent.delete(route).send({ password });
 
     expect(res.status).toBe(204);
     expect(await memberIdsOf(room.id)).toEqual([bob.id]);
-    const messages = await bobAgent.get(`/chat/${room.id}/message`);
+    const messages = await bobAgent.get(`/api/chat/${room.id}/message`);
     expect(messages.status).toBe(200);
     expect(messages.body.messages).toMatchObject([{ content: 'Bye soon', senderId: null, sender: null }]);
-    expect((await bobAgent.post(`/chat/${room.id}/message`).send({ content: 'Still here' })).status).toBe(201);
+    expect((await bobAgent.post(`/api/chat/${room.id}/message`).send({ content: 'Still here' })).status).toBe(201);
   });
 
   it('leaves a direct room to the other person, who can still list it and read it', async () => {
@@ -131,17 +131,17 @@ describe(`DELETE ${route}`, () => {
     const room = await createDirectRoom(alice.id, bob.id);
     const aliceAgent = await loginAs(alice);
     const bobAgent = await loginAs(bob);
-    await aliceAgent.post(`/chat/${room.id}/message`).send({ content: 'Hi Bob' });
+    await aliceAgent.post(`/api/chat/${room.id}/message`).send({ content: 'Hi Bob' });
 
     await aliceAgent.delete(route).send({ password });
 
-    const list = await bobAgent.get('/chat');
+    const list = await bobAgent.get('/api/chat');
     expect(list.status).toBe(200);
     expect(list.body.chatRooms).toMatchObject([{ id: room.id, type: 'direct', name: null, avatarUrl: null }]);
-    const single = await bobAgent.get(`/chat/${room.id}`);
+    const single = await bobAgent.get(`/api/chat/${room.id}`);
     expect(single.status).toBe(200);
     expect(single.body.chatRoom).toMatchObject({ id: room.id, type: 'direct', name: null });
-    expect((await bobAgent.get(`/chat/${room.id}/message`)).body.messages).toHaveLength(1);
+    expect((await bobAgent.get(`/api/chat/${room.id}/message`)).body.messages).toHaveLength(1);
   });
 
   it('lets an admin go when another admin stays, or when nobody else is in the room', async () => {
@@ -215,7 +215,7 @@ describe(`DELETE ${route}`, () => {
     const bobAgent = await loginAs(bob);
 
     for (let i = 0; i < 5; i++) {
-      expect((await aliceAgent.post('/account/password').send({})).status, `change ${i + 1}`).toBe(400);
+      expect((await aliceAgent.post('/api/account/password').send({})).status, `change ${i + 1}`).toBe(400);
       expect((await aliceAgent.delete(route).send({})).status, `delete ${i + 1}`).toBe(400);
     }
     const blocked = await aliceAgent.delete(route).send({});

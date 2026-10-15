@@ -7,7 +7,7 @@ import { createFriendRequest, makeFriends } from '../helpers/friends';
 // friend.permissions.test.ts; the full list of bad ':tel' values is in
 // friend.validator.unit.test.ts.
 
-const searchUrl = (tel: string) => `/friend/search/${tel}`;
+const searchUrl = (tel: string) => `/api/friend/search/${tel}`;
 
 describe('GET /friend/search/:tel', () => {
   it('finds a user by exact phone number and returns only what the friend UI needs', async () => {

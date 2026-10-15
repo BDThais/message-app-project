@@ -10,13 +10,13 @@ import { createUser, loginAs } from '../helpers/users';
 // that one budget (the limiter lives as long as the file does), so keep the requests to the route
 // few: the rules that need many are tested on the service (emailVerification.service.test.ts) and
 // the bad bodies in the validator's unit test. The limiter itself is in emailVerifyLimiter.test.ts.
-const route = '/account/email/verify';
+const route = '/api/account/email/verify';
 const invalidLink = { error: 'This verification link is invalid or has expired' };
 
 describe(`POST ${route}`, () => {
   it('verifies the account whose link was mailed at signup, without a session, and only that account', async () => {
     const signup = await request(app)
-      .post('/account/signup')
+      .post('/api/account/signup')
       .send({ name: 'alice', email: 'alice@example.com', tel: '+14155552671', password: 'Str0ng!Pass' });
     expect(signup.status).toBe(201);
     const token = tokenFromMail(outbox.sent[0]);
@@ -35,7 +35,7 @@ describe(`POST ${route}`, () => {
     expect(await prisma.emailVerificationToken.count({ where: { userId: bob.id } })).toBe(1);
 
     // The frontend learns about it from the user shape.
-    const me = await (await loginAs(alice)).get('/account/me');
+    const me = await (await loginAs(alice)).get('/api/account/me');
     expect(me.body.user.emailVerified).toBe(true);
   });
 

@@ -17,7 +17,7 @@ describe('POST /chat', () => {
     await makeFriends(user.id, member.id);
     const agent = await loginAs(user);
 
-    const res = await agent.post('/chat').send({
+    const res = await agent.post('/api/chat').send({
       type: 'group',
       member_ids: [member.id],
       name: 'Project chat',
@@ -51,7 +51,7 @@ describe('POST /chat', () => {
     const user = await createUser('Alice');
     const agent = await loginAs(user);
 
-    const res = await agent.post('/chat').send({ type: 'group', name: 'Notes to self' });
+    const res = await agent.post('/api/chat').send({ type: 'group', name: 'Notes to self' });
 
     expect(res.status).toBe(201);
     expect(await memberIdsOf(res.body.id)).toEqual([user.id]);
@@ -64,8 +64,8 @@ describe('POST /chat', () => {
     const agent = await loginAs(user);
     const body = { type: 'direct', member_ids: [otherUser.id] };
 
-    const first = await agent.post('/chat').send(body);
-    const second = await agent.post('/chat').send(body);
+    const first = await agent.post('/api/chat').send(body);
+    const second = await agent.post('/api/chat').send(body);
 
     expect(first.status).toBe(201);
     expect(second.status).toBe(200);
@@ -81,7 +81,7 @@ describe('POST /chat', () => {
     const stranger = await createUser('Bob');
     const agent = await loginAs(user);
 
-    const res = await agent.post('/chat').send({ type: 'direct', member_ids: [stranger.id] });
+    const res = await agent.post('/api/chat').send({ type: 'direct', member_ids: [stranger.id] });
 
     expect(res.status).toBe(403);
     expect(res.body).toEqual(NOT_FRIENDS);
@@ -96,7 +96,7 @@ describe('POST /chat', () => {
     await makeFriends(user.id, friend.id);
     const agent = await loginAs(user);
 
-    const res = await agent.post('/chat').send({ type: 'group', member_ids: [friend.id, stranger.id] });
+    const res = await agent.post('/api/chat').send({ type: 'group', member_ids: [friend.id, stranger.id] });
 
     expect(res.status).toBe(403);
     expect(res.body).toEqual(NOT_FRIENDS);
@@ -109,8 +109,8 @@ describe('POST /chat', () => {
     const stranger = await createUser('Bob');
     const agent = await loginAs(user);
 
-    const forStranger = await agent.post('/chat').send({ type: 'group', member_ids: [stranger.id] });
-    const forMissing = await agent.post('/chat').send({ type: 'group', member_ids: [999_999] });
+    const forStranger = await agent.post('/api/chat').send({ type: 'group', member_ids: [stranger.id] });
+    const forMissing = await agent.post('/api/chat').send({ type: 'group', member_ids: [999_999] });
 
     expect(forMissing.status).toBe(forStranger.status);
     expect(forMissing.body).toEqual(forStranger.body);
@@ -125,7 +125,7 @@ describe('POST /chat', () => {
     await prisma.friendListMember.create({ data: { userId: other.id, friendId: user.id } });
     const agent = await loginAs(user);
 
-    const res = await agent.post('/chat').send({ type: 'direct', member_ids: [other.id] });
+    const res = await agent.post('/api/chat').send({ type: 'direct', member_ids: [other.id] });
 
     expect(res.status).toBe(403);
     expect(await prisma.chatRoom.count()).toBe(0);
@@ -137,16 +137,16 @@ describe('POST /chat', () => {
     const room = await createDirectRoom(user.id, former.id);
     const agent = await loginAs(user);
 
-    const res = await agent.post('/chat').send({ type: 'direct', member_ids: [former.id] });
+    const res = await agent.post('/api/chat').send({ type: 'direct', member_ids: [former.id] });
 
     // The check comes before the lookup of an existing room, so the room is not handed out here...
     expect(res.status).toBe(403);
     expect(res.body).toEqual(NOT_FRIENDS);
     // ...but it is still there, still listed, and still usable.
     expect(await memberIdsOf(room.id)).toEqual([user.id, former.id]);
-    const list = await agent.get('/chat');
+    const list = await agent.get('/api/chat');
     expect(list.body.chatRooms.map((r: { id: number }) => r.id)).toEqual([room.id]);
-    const sent = await agent.post(`/chat/${room.id}/message`).send({ content: 'still here' });
+    const sent = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'still here' });
     expect(sent.status).toBe(201);
   });
 });
@@ -184,7 +184,7 @@ describe('GET /chat', () => {
       },
     });
 
-    const res = await agent.get('/chat');
+    const res = await agent.get('/api/chat');
 
     expect(res.status).toBe(200);
     expect(res.body.chatRooms.map((room: { id: number }) => room.id)).toEqual([
@@ -205,7 +205,7 @@ describe('GET /chat/:chatid', () => {
     const room = await createGroupRoom(admin.id, [user.id]);
     const agent = await loginAs(user);
 
-    const res = await agent.get(`/chat/${room.id}`);
+    const res = await agent.get(`/api/chat/${room.id}`);
 
     expect(res.status).toBe(200);
     expect(res.body.chatRoom).toMatchObject({
@@ -224,7 +224,7 @@ describe('PATCH /chat/:chatid', () => {
     const agent = await loginAs(user);
 
     const res = await agent
-      .patch(`/chat/${room.id}`)
+      .patch(`/api/chat/${room.id}`)
       .send({ name: 'Updated project chat', avatar_url: 'https://example.com/project.png' });
 
     expect(res.status).toBe(200);
@@ -248,7 +248,7 @@ describe('DELETE /chat/:chatid', () => {
     await prisma.message.create({ data: { chatId: room.id, senderId: member.id, content: 'Hello' } });
     const agent = await loginAs(admin);
 
-    const res = await agent.delete(`/chat/${room.id}`);
+    const res = await agent.delete(`/api/chat/${room.id}`);
 
     expect(res.status).toBe(204);
     expect(await prisma.chatRoom.findUnique({ where: { id: room.id } })).toBeNull();

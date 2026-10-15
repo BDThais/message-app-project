@@ -7,7 +7,7 @@ import { changePassword } from '../../src/modules/account/account.service';
 import { createResetLink } from '../helpers/passwordReset';
 import { createSessionRow, createUser, loginAs } from '../helpers/users';
 
-const route = '/account/password';
+const route = '/api/account/password';
 const currentPassword = 'Str0ng!Pass';
 const newPassword = 'N3wer!Passw0rd';
 
@@ -61,7 +61,7 @@ describe(`POST ${route}`, () => {
     expect(res.body).toEqual({});
     const stored = (await prisma.user.findUnique({ where: { id: alice.id } }))!.passwordHash;
     expect(await verifyPassword(stored, newPassword)).toBe(true);
-    expect((await agent.get('/account/me')).body.user).toMatchObject({ id: alice.id });
+    expect((await agent.get('/api/account/me')).body.user).toMatchObject({ id: alice.id });
   });
 
   it('lets the user log in with the new password and no longer with the old one', async () => {
@@ -69,8 +69,8 @@ describe(`POST ${route}`, () => {
     const agent = await loginAs(alice);
     await agent.post(route).send({ current_password: currentPassword, new_password: newPassword });
 
-    const oldLogin = await request(app).post('/account/login').send({ email: alice.email, password: currentPassword });
-    const newLogin = await request(app).post('/account/login').send({ email: alice.email, password: newPassword });
+    const oldLogin = await request(app).post('/api/account/login').send({ email: alice.email, password: currentPassword });
+    const newLogin = await request(app).post('/api/account/login').send({ email: alice.email, password: newPassword });
 
     expect(oldLogin.status).toBe(401);
     expect(newLogin.status).toBe(200);
@@ -88,9 +88,9 @@ describe(`POST ${route}`, () => {
 
     expect(res.status).toBe(204);
     expect(await prisma.session.count({ where: { userId: alice.id } })).toBe(1);
-    expect((await agent.get('/account/me')).body.user).not.toBeNull();
-    expect((await other.get('/account/me')).body).toEqual({ user: null });
-    expect((await bobAgent.get('/account/me')).body.user).not.toBeNull();
+    expect((await agent.get('/api/account/me')).body.user).not.toBeNull();
+    expect((await other.get('/api/account/me')).body).toEqual({ user: null });
+    expect((await bobAgent.get('/api/account/me')).body.user).not.toBeNull();
   });
 
   it("deletes the account's outstanding password reset link, and nobody else's", async () => {

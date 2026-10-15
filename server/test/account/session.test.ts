@@ -6,9 +6,9 @@ import { hashPassword } from '../../src/lib/passwordHash';
 import { prisma } from '../../src/lib/prisma';
 import { createSessionRow } from '../helpers/users';
 
-const loginRoute = '/account/login';
-const meRoute = '/account/me';
-const logoutRoute = '/account/logout';
+const loginRoute = '/api/account/login';
+const meRoute = '/api/account/me';
+const logoutRoute = '/api/account/logout';
 
 const userData = {
   name: 'Alice',

@@ -23,8 +23,8 @@ async function setMarker(chatId: number, memberId: number, lastReadMessageId: nu
 
 /** The summary of one room as the list returns it and as the single-room route returns it. */
 async function summariesOf(agent: TestAgent, chatId: number) {
-  const list = await agent.get('/chat');
-  const single = await agent.get(`/chat/${chatId}`);
+  const list = await agent.get('/api/chat');
+  const single = await agent.get(`/api/chat/${chatId}`);
 
   expect(list.status).toBe(200);
   expect(single.status).toBe(200);
@@ -45,9 +45,9 @@ describe('lastMessage in the room summaries', () => {
     const bob = await createUser('Bob');
     const room = await createRoom(alice.id, bob.id);
     const agent = await loginAs(alice);
-    await agent.post(`/chat/${room.id}/message`).send({ content: 'Earlier' });
-    const latest = await agent.post(`/chat/${room.id}/message`).send({ content: 'Oops' });
-    await agent.delete(`/chat/${room.id}/message/${latest.body.message.id}`);
+    await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Earlier' });
+    const latest = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Oops' });
+    await agent.delete(`/api/chat/${room.id}/message/${latest.body.message.id}`);
 
     const { inList, single } = await summariesOf(await loginAs(bob), room.id);
 
@@ -81,8 +81,8 @@ describe('lastMessage in the room summaries', () => {
       data: { createdAt: new Date('2026-09-13T12:00:00.000Z') },
     });
 
-    const list = await agent.get('/chat');
-    const single = await agent.get(`/chat/${emptiedRoom.id}`);
+    const list = await agent.get('/api/chat');
+    const single = await agent.get(`/api/chat/${emptiedRoom.id}`);
 
     expect(list.body.chatRooms.map((room: { id: number }) => room.id)).toEqual([quietRoom.id, emptiedRoom.id]);
     expect(list.body.chatRooms[1].lastMessage).toBeNull();
@@ -145,7 +145,7 @@ describe('unreadCount in the room summaries', () => {
     await setMarker(group.id, bob.id, groupSecond.id);
     await setMarker(group.id, alice.id, null);
 
-    const res = await (await loginAs(alice)).get('/chat');
+    const res = await (await loginAs(alice)).get('/api/chat');
 
     const unreadByRoom = Object.fromEntries(
       res.body.chatRooms.map((room: { id: number; unreadCount: number }) => [room.id, room.unreadCount])
@@ -178,10 +178,10 @@ describe('unreadCount in the room summaries', () => {
 
     expect((await summariesOf(bobAgent, room.id)).single.unreadCount).toBe(2);
 
-    await bobAgent.put(`/chat/${room.id}/read`).send({ message_id: second.id });
+    await bobAgent.put(`/api/chat/${room.id}/read`).send({ message_id: second.id });
     expect((await summariesOf(bobAgent, room.id)).single.unreadCount).toBe(0);
 
-    await aliceAgent.post(`/chat/${room.id}/message`).send({ content: 'Three' });
+    await aliceAgent.post(`/api/chat/${room.id}/message`).send({ content: 'Three' });
     expect((await summariesOf(bobAgent, room.id)).single.unreadCount).toBe(1);
     // Alice only ever sent messages, so nothing is unread for her whatever Bob has read.
     expect((await summariesOf(aliceAgent, room.id)).single.unreadCount).toBe(0);
@@ -194,12 +194,12 @@ describe('unreadCount in the room summaries', () => {
     const otherRoom = await createGroupRoom(alice.id, [bob.id], 'Another one');
     const bobAgent = await loginAs(bob);
     const sent = await (await loginAs(alice))
-      .post(`/chat/${room.id}/message`)
+      .post(`/api/chat/${room.id}/message`)
       .send({ content: 'Soon gone' });
     await addMessage(otherRoom.id, alice.id, 'Somewhere else');
     expect((await summariesOf(bobAgent, room.id)).single.unreadCount).toBe(1);
 
-    await (await loginAs(alice)).delete(`/chat/${room.id}/message/${sent.body.message.id}`);
+    await (await loginAs(alice)).delete(`/api/chat/${room.id}/message/${sent.body.message.id}`);
 
     expect((await summariesOf(bobAgent, room.id)).single.unreadCount).toBe(0);
   });

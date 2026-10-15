@@ -12,20 +12,20 @@ import { createDirectRoom, createGroupRoom } from '../helpers/chatRooms';
 
 // Add new routes here (e.g. the message endpoints) so they are covered too.
 const allRoutes = [
-  ['post', '/chat'],
-  ['get', '/chat'],
-  ['get', '/chat/1'],
-  ['patch', '/chat/1'],
-  ['delete', '/chat/1'],
-  ['get', '/chat/1/member'],
-  ['post', '/chat/1/member'],
-  ['delete', '/chat/1/member/2'],
-  ['patch', '/chat/1/member/2'],
-  ['post', '/chat/1/message'],
-  ['get', '/chat/1/message'],
-  ['patch', '/chat/1/message/2'],
-  ['delete', '/chat/1/message/2'],
-  ['put', '/chat/1/read'],
+  ['post', '/api/chat'],
+  ['get', '/api/chat'],
+  ['get', '/api/chat/1'],
+  ['patch', '/api/chat/1'],
+  ['delete', '/api/chat/1'],
+  ['get', '/api/chat/1/member'],
+  ['post', '/api/chat/1/member'],
+  ['delete', '/api/chat/1/member/2'],
+  ['patch', '/api/chat/1/member/2'],
+  ['post', '/api/chat/1/message'],
+  ['get', '/api/chat/1/message'],
+  ['patch', '/api/chat/1/message/2'],
+  ['delete', '/api/chat/1/message/2'],
+  ['put', '/api/chat/1/read'],
 ] as const;
 
 describe('every chat-room route', () => {
@@ -45,7 +45,7 @@ describe('every chat-room route', () => {
     const agent = await loginAs(stranger);
 
     for (const chatId of [room.id, room.id + 1000]) {
-      const res = await agent.get(`/chat/${chatId}`);
+      const res = await agent.get(`/api/chat/${chatId}`);
 
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: 'Chat room not found' });
@@ -58,7 +58,7 @@ describe('every chat-room route', () => {
 
     // The second one is a real integer but too big for the database column.
     for (const chatId of ['abc', '2147483648']) {
-      const res = await agent.get(`/chat/${chatId}`);
+      const res = await agent.get(`/api/chat/${chatId}`);
 
       expect(res.status, chatId).toBe(400);
       expect(res.body).toEqual({ error: 'Invalid chat room id' });
@@ -72,21 +72,21 @@ const adminOnlyRoutes = [
   {
     name: 'PATCH /chat/:chatid',
     call: (agent: TestAgent, chatId: number) =>
-      agent.patch(`/chat/${chatId}`).send({ name: 'Not allowed' }),
+      agent.patch(`/api/chat/${chatId}`).send({ name: 'Not allowed' }),
   },
   {
     name: 'DELETE /chat/:chatid',
-    call: (agent: TestAgent, chatId: number) => agent.delete(`/chat/${chatId}`),
+    call: (agent: TestAgent, chatId: number) => agent.delete(`/api/chat/${chatId}`),
   },
   {
     name: 'POST /chat/:chatid/member',
     call: (agent: TestAgent, chatId: number) =>
-      agent.post(`/chat/${chatId}/member`).send({ member_ids: [999_999] }),
+      agent.post(`/api/chat/${chatId}/member`).send({ member_ids: [999_999] }),
   },
   {
     name: 'PATCH /chat/:chatid/member/:userid',
     call: (agent: TestAgent, chatId: number) =>
-      agent.patch(`/chat/${chatId}/member/999999`).send({ role: 'admin' }),
+      agent.patch(`/api/chat/${chatId}/member/999999`).send({ role: 'admin' }),
   },
 ];
 

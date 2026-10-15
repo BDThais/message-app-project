@@ -8,7 +8,7 @@ import { createVerificationLink, tokenFromMail } from '../helpers/emailVerificat
 import { outbox } from '../helpers/mailer';
 import { createUser, loginAs } from '../helpers/users';
 
-const route = '/account/email/verification';
+const route = '/api/account/email/verification';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -39,7 +39,7 @@ describe(`POST ${route}`, () => {
     expect(stored).toMatchObject({ email: alice.email, tokenHash: hashToken(token) });
 
     expect(await verifyEmailToken(token)).toEqual({ status: 'verified' });
-    expect((await agent.get('/account/me')).body.user.emailVerified).toBe(true);
+    expect((await agent.get('/api/account/me')).body.user.emailVerified).toBe(true);
   });
 
   it('replaces the old link once the cooldown is over: only the newest works', async () => {
@@ -84,7 +84,7 @@ describe(`POST ${route}`, () => {
 
   it('counts the cooldown from the link that signup mailed', async () => {
     await request(app)
-      .post('/account/signup')
+      .post('/api/account/signup')
       .send({ name: 'alice', email: 'alice@example.com', tel: '+14155552671', password: 'Str0ng!Pass' });
     const alice = await prisma.user.findUniqueOrThrow({ where: { email: 'alice@example.com' } });
     const agent = await loginAs(alice);

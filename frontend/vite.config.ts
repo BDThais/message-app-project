@@ -24,12 +24,12 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       proxy: {
         // The browser only talks to this dev server, so the session cookie is first-party and no
-        // CORS setup is needed. The /api prefix keeps the API's paths (/account, /chat, /friend) from
-        // colliding with the app's own pages (/chat/:chatId, ...) and is removed before forwarding.
+        // CORS setup is needed. The API's paths all start with /api (/api/account, /api/chat,
+        // /api/friend), which keeps them from colliding with the app's own pages (/chat/:chatId, ...),
+        // and they are forwarded to the server unchanged.
         '/api': {
           target: apiTarget,
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, ''),
         },
         // Added with the Socket.io milestone:
         // '/socket.io': { target: apiTarget, ws: true },

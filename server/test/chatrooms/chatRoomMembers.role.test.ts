@@ -12,7 +12,7 @@ describe('PATCH /chat/:chatid/member/:userid', () => {
     const room = await createGroupRoom(admin.id, [bob.id]);
     const agent = await loginAs(admin);
 
-    const res = await agent.patch(`/chat/${room.id}/member/${bob.id}`).send({ role: 'admin' });
+    const res = await agent.patch(`/api/chat/${room.id}/member/${bob.id}`).send({ role: 'admin' });
 
     expect(res.status).toBe(200);
     // The user is only under `member`, with no separate `memberId`.

@@ -7,7 +7,7 @@ import { createFriendRequest, makeFriends } from '../helpers/friends';
 // friend.permissions.test.ts; the full list of bad `receiver_id` values is in
 // friend.validator.unit.test.ts.
 
-const url = '/friend/requests';
+const url = '/api/friend/requests';
 
 describe('POST /friend/requests', () => {
   it('stores the request and answers 201 with the receiver, never their email or tel', async () => {

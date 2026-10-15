@@ -18,7 +18,7 @@ describe('GET /chat/:chatid/member', () => {
     await createGroupRoom(outsider.id, [zoe.id], 'Other chat');
     const agent = await loginAs(carl);
 
-    const res = await agent.get(`/chat/${room.id}/member`);
+    const res = await agent.get(`/api/chat/${room.id}/member`);
 
     expect(res.status).toBe(200);
     // Same shape as PATCH /chat/:chatid/member/:userid: the user only under
@@ -39,7 +39,7 @@ describe('GET /chat/:chatid/member', () => {
     const room = await createDirectRoom(alice.id, bob.id);
     const agent = await loginAs(bob);
 
-    const res = await agent.get(`/chat/${room.id}/member`);
+    const res = await agent.get(`/api/chat/${room.id}/member`);
 
     expect(res.status).toBe(200);
     expect(
@@ -56,7 +56,7 @@ describe('GET /chat/:chatid/member', () => {
     const room = await createGroupRoom(alice.id);
     const agent = await loginAs(stranger);
 
-    const res = await agent.get(`/chat/${room.id}/member`);
+    const res = await agent.get(`/api/chat/${room.id}/member`);
 
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Chat room not found' });

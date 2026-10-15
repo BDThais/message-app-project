@@ -7,7 +7,7 @@ import { createFriendRequest } from '../helpers/friends';
 // friend.permissions.test.ts; the full list of bad `:id` values is in
 // friend.validator.unit.test.ts.
 
-const deleteUrl = (requestId: number) => `/friend/requests/${requestId}`;
+const deleteUrl = (requestId: number) => `/api/friend/requests/${requestId}`;
 
 // Every pending request as [senderId, receiverId], in a fixed order.
 async function requestPairs() {
@@ -76,7 +76,7 @@ describe('DELETE /friend/requests/:id', () => {
     const bobAgent = await loginAs(bob);
 
     const rejected = await aliceAgent.delete(deleteUrl(pending.id));
-    const again = await bobAgent.post('/friend/requests').send({ receiver_id: alice.id });
+    const again = await bobAgent.post('/api/friend/requests').send({ receiver_id: alice.id });
 
     expect(rejected.status).toBe(204);
     expect(again.status).toBe(201);
@@ -89,7 +89,7 @@ describe('DELETE /friend/requests/:id', () => {
     await createFriendRequest(bob.id, alice.id);
     const agent = await loginAs(alice);
 
-    const res = await agent.delete('/friend/requests/abc');
+    const res = await agent.delete('/api/friend/requests/abc');
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'Invalid friend request id' });

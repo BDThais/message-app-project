@@ -6,7 +6,7 @@ import { createVerifiedUser } from '../helpers/passwordReset';
 // The per-email limiter keeps its count for as long as the module is loaded, and so does the per-IP
 // one that runs before it (10 requests): this file sends 9 requests to the route. The rule for how
 // the key is made (case, a body without an address, the IP) is tested in accountRateLimit.unit.test.ts.
-const route = '/account/password/reset-request';
+const route = '/api/account/password/reset-request';
 const limited = { error: 'Too many password reset requests, try again later' };
 
 describe('POST /account/password/reset-request (rate limit per email)', () => {
