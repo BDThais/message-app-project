@@ -1,6 +1,6 @@
 ﻿# Message App
 
-A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a React frontend (scaffolded, screens in progress). The REST API is in place (accounts with email verification and password reset, chat rooms, messages and the friend flows), while real-time messaging and the frontend screens remain next on the roadmap.
+A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a React frontend (account screens done, chat screens next). The REST API is in place (accounts with email verification and password reset, chat rooms, messages and the friend flows), while real-time messaging and the frontend screens remain next on the roadmap.
 
 ## Project Status
 
@@ -21,12 +21,12 @@ The server's REST API is in place and the frontend is the current milestone. Imp
 - Profile update, password change and account deletion
 - Prisma models for users, sessions, chat rooms, messages, and friendship flows
 - Vitest integration tests for the account, chat-room, message and friend endpoints
-- React frontend scaffold in `frontend/`: Vite dev server that proxies `/api` to the server, route guards for signed-in and signed-out pages, and a sign-in page (the plan and the next steps are in `frontend.doc.md`)
+- React frontend scaffold in `frontend/`: Vite dev server that proxies `/api` to the server, route guards for signed-in and signed-out pages, and the account screens: sign up, sign in and out, forgot and reset password, email verification (the plan and the next steps are in `frontend.doc.md`)
 
 Next priorities:
 
 - Real-time communication with Socket.io, built together with the frontend
-- Frontend screens and auth-aware user flows (the steps are in `frontend.doc.md`)
+- Frontend screens for chat, friends and settings (the steps are in `frontend.doc.md`)
 - Production deployment and environment hardening
 
 ## Tech Stack
@@ -155,7 +155,7 @@ Open `http://localhost:5173`. The dev server forwards requests that start with `
 ## Roadmap
 
 - Add Socket.io for realtime messaging (server and client together)
-- Build the React frontend step by step (scaffold and route guards done; account screens, chat, friends and room management next)
+- Build the React frontend step by step (scaffold, route guards and account screens done; chat, friends and room management next)
 - Add deployment and environment configuration for production
 
 ## License

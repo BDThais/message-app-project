@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createFileRoute, Outlet, useRouter } from '@tanstack/react-router';
 import { requireUser } from '../features/account/guards';
+import { VerifyEmailBanner } from '../features/account/components/VerifyEmailBanner';
 import { useLogout, useMe } from '../features/account/queries';
 
 // Everything behind this layout needs a signed-in user.
@@ -53,6 +54,7 @@ function AppLayout() {
           </button>
         </span>
       </header>
+      {!user.emailVerified && <VerifyEmailBanner email={user.email} />}
       <Outlet />
     </div>
   );

@@ -13,7 +13,6 @@ function ChatHome() {
     <main className="page">
       <h1>Chats</h1>
       <p>Signed in as {user?.email}.</p>
-      {user && !user.emailVerified && <p>Your email address is not verified yet.</p>}
       <p>The room list is not built yet.</p>
     </main>
   );
