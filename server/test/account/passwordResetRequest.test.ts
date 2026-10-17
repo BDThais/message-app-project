@@ -52,16 +52,16 @@ describe(`POST ${route}`, () => {
     expect(await resetPasswordWithToken(token, 'new-hash')).toEqual({ status: 'reset', email: alice.email });
   });
 
-  it('matches the address exactly, like login: another spelling of the case gets nothing, and the same 202', async () => {
+  it('does not care about the case of the address, like login: another spelling finds the account, and the mail goes to the stored address', async () => {
     const alice = await createVerifiedUser('Alice');
-    await prisma.user.update({ where: { id: alice.id }, data: { email: 'Alice.Smith@example.com' } });
 
-    const res = await request(app).post(route).send({ email: 'alice.smith@example.com' });
+    const res = await request(app).post(route).send({ email: alice.email.toUpperCase() });
 
     expect(res.status).toBe(202);
     expect(res.body).toEqual(accepted);
-    expect(outbox.sent).toEqual([]);
-    expect(await prisma.passwordResetToken.count()).toBe(0);
+    expect(outbox.sent).toHaveLength(1);
+    expect(outbox.sent[0]).toMatchObject({ to: alice.email, subject: 'Reset your password' });
+    expect(await prisma.passwordResetToken.count()).toBe(1);
   });
 
   it('sends an account that never verified its address the verification mail instead, with the same 202', async () => {

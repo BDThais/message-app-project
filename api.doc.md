@@ -95,13 +95,13 @@ Creates an account. Public. It does not sign the user in.
 
 - All four fields are required (`400 All fields are required`). The rules are checked in this order and the first one that fails is the answer:
   - `name`: letters and digits only (`Name must contain only letters and numbers`).
-  - `email`: a valid address (`Invalid email format`). It is matched exactly, case included, by login and by password reset.
+  - `email`: a valid address (`Invalid email format`). Addresses are not case-sensitive: the server stores the address lower-cased, so `John@Example.com` and `john@example.com` are one account at signup, at login and at password reset, and `email` comes back lower-cased in every `User` body, whatever case it was typed in. Nothing else about the address is changed (no trimming, and dots and `+tags` stay).
   - `tel`: a valid international number with the leading `+` (`Invalid phone number format`). Spaces, dashes and parentheses are accepted and the number is stored in its canonical form, `+` and digits only (an extension is dropped), so `tel` always comes back canonical.
   - `password`: at least 8 characters with an upper-case letter, a lower-case letter, a digit and a special character (`Password must be at least 8 characters long`, `Password must contain at least one uppercase letter`, `...lowercase letter`, `...number`, `...special character`).
 - There is no `avatar_url` at signup: a new account always has `avatarUrl: null`, and the user sets an avatar later with `PATCH /api/account/me`.
 - The account starts unverified (`emailVerified: false`) and a verification link is mailed to the address (see "Mailed links").
 - Response `201`: `{ "message": "Account created successfully" }`.
-- `409` when the email or the phone number is taken: `Email already exists` or `Phone number already exists` (another spelling of a registered number counts). When two signups collide at the same instant and the server cannot tell which field it was, the text is `Email or phone number already exists`.
+- `409` when the email or the phone number is taken: `Email already exists` or `Phone number already exists` (another spelling of a registered number counts, and so does another case of a registered address). When two signups collide at the same instant and the server cannot tell which field it was, the text is `Email or phone number already exists`.
 
 ### POST /api/account/login
 
@@ -111,7 +111,7 @@ Signs in. Public.
 { "email": "john@example.com", "password": "Str0ng!Pass" }
 ```
 
-- Response `200`: `{ "user": User }`, and the session cookie is set.
+- Response `200`: `{ "user": User }`, and the session cookie is set. The address is matched without regard to case, as at signup: `JOHN@Example.com` signs in to the account created as `john@example.com`.
 - `400 Email and password are required` when either is missing or not a string.
 - `401 Invalid email or password`: the same answer for an unknown email and a wrong password.
 - `429`.
@@ -208,7 +208,7 @@ Asks for a password reset link by email. Public: whoever asks has forgotten the 
 ```
 
 - Response `202`: `{ "message": "If an account exists for that email, a reset link is on its way" }` for every well-formed address, whether or not an account has it, so the answer cannot be used to find out who is registered. Word the screen's confirmation the same way and never promise that a mail was sent.
-- What happens behind that answer: a verified account gets a reset link, which replaces the old one; an unverified account gets the verification mail instead (a reset link goes only to an address someone has proven); an unknown address, or an account whose stored link is under 60 seconds old, gets nothing. The address is matched exactly, case included.
+- What happens behind that answer: a verified account gets a reset link, which replaces the old one; an unverified account gets the verification mail instead (a reset link goes only to an address someone has proven); an unknown address, or an account whose stored link is under 60 seconds old, gets nothing. The address is matched without regard to case, like login.
 - `400 Email is required` when it is missing or not a non-empty string; `400 Invalid email format` when it is not an address.
 - `429`: `Too many attempts, try again later` (per IP) or `Too many password reset requests, try again later` (per email). Every request counts, so a `429` reveals nothing either.
 

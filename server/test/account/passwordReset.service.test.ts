@@ -110,14 +110,6 @@ describe('issuePasswordReset', () => {
     expect(await prisma.emailVerificationToken.count()).toBe(0);
   });
 
-  it('matches the address exactly, like login: another spelling of the case is another address', async () => {
-    const alice = await createVerifiedUser('Alice');
-    await prisma.user.update({ where: { id: alice.id }, data: { email: 'Alice.Smith@example.com' } });
-
-    expect(await issuePasswordReset('alice.smith@example.com')).toEqual({ status: 'unknown_email' });
-    expect((await issuePasswordReset('Alice.Smith@example.com')).status).toBe('reset_link');
-  });
-
   it('sends an unverified account the verification link instead, and stores no reset link', async () => {
     const alice = await createUser('Alice');
     const now = new Date();

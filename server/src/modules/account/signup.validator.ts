@@ -1,6 +1,6 @@
-import validator from 'validator';
 import { isValidPhoneNumber, parsePhoneNumberFromString } from 'libphonenumber-js';
 import { Prisma } from '../../generated/prisma/client';
+import { validateEmail } from '../../lib/emailAddress';
 import { isRecord } from '../../lib/validation';
 import { findExistingUser } from './account.service';
 
@@ -35,13 +35,6 @@ export function validatePassword(password: string): string | null {
     }
     if (!/[^A-Za-z0-9\s]/.test(password)) {
         return 'Password must contain at least one special character';
-    }
-    return null;
-}
-
-function validateEmail(email: string): string | null {
-    if (!validator.isEmail(email)) {
-        return 'Invalid email format';
     }
     return null;
 }
@@ -91,6 +84,7 @@ export function validateAccountBody(body: AccountBody): string | null {
 const EMAIL_EXISTS = 'Email already exists';
 const TEL_EXISTS = 'Phone number already exists';
 
+// `email` and `tel` are the canonical forms (normalizeEmail, normalizeTel), never the raw input.
 export async function checkDuplication(email: string, tel: string): Promise<string | null> {
     // Check for duplication in email or phone number
     const existingUser = await findExistingUser(email, tel);

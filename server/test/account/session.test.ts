@@ -6,6 +6,11 @@ import { hashPassword } from '../../src/lib/passwordHash';
 import { prisma } from '../../src/lib/prisma';
 import { createSessionRow } from '../helpers/users';
 
+// loginLimiter allows 10 requests per IP in 15 minutes and the whole file shares that budget (the
+// limiter lives as long as the file does). This file sends exactly 10 requests to the login route (a
+// row of a table counts as one request): it is at the limit, and the 11th answers 429, which shows
+// up as a failure of whichever test comes last. A new test that logs in belongs in another file
+// (signup.test.ts, for example, has its own budget).
 const loginRoute = '/api/account/login';
 const meRoute = '/api/account/me';
 const logoutRoute = '/api/account/logout';

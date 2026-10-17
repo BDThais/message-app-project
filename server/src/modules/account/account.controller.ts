@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { normalizeEmail } from '../../lib/emailAddress';
 import { hashPassword, verifyPassword } from '../../lib/passwordHash';
 import { validateAccountBody, checkDuplication, normalizeTel, uniqueViolationMessage } from './signup.validator';
 import type { AccountBody } from './signup.validator';
@@ -26,11 +27,13 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
           return res.status(400).json({ error: validationError });
         }
     
-        // validateAccountBody accepted tel, so it normalizes. Both the duplicate
-        // check and the insert use the canonical form, never the raw input.
+        // validateAccountBody accepted tel, so it normalizes. The duplicate check,
+        // the insert and the mail use the canonical forms, never the raw input: the
+        // address lower-cased, so "John@x.com" is taken when "john@x.com" is.
         const normalizedTel = normalizeTel(tel)!;
+        const normalizedEmail = normalizeEmail(email);
 
-        const duplicationError = await checkDuplication(email, normalizedTel);
+        const duplicationError = await checkDuplication(normalizedEmail, normalizedTel);
         if (duplicationError) {
           return res.status(409).json({ error: duplicationError });
         }
@@ -41,7 +44,7 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
         const verification = newVerificationToken();
         await createUser({
           name,
-          email,
+          email: normalizedEmail,
           tel: normalizedTel,
           passwordHash,
           emailVerification: verification
@@ -51,7 +54,7 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
 
         // After responding, so the request never waits for the mail (see sendVerificationEmail,
         // which does not throw). Signup does not log in; the link is only mailed here.
-        await sendVerificationEmail(email, verification.token);
+        await sendVerificationEmail(normalizedEmail, verification.token);
     } catch (error: unknown) {
         // A concurrent signup took the email or phone number between the
         // duplicate check and the insert: the database refuses this one.

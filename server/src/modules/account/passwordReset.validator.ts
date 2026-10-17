@@ -1,4 +1,4 @@
-import validator from 'validator';
+import { normalizeEmail, validateEmail } from '../../lib/emailAddress';
 import { isRecord } from '../../lib/validation';
 import { validatePassword } from './signup.validator';
 
@@ -8,10 +8,10 @@ type ResetRequestValidation =
 
 /**
  * Validates the body of POST /account/password/reset-request: { email }, a
- * string accepted by validator.isEmail. It is the same check for every
- * address, registered or not, so a 400 says nothing about who has an account.
- * The address is used as it was sent (no trimming, no lower-casing): matching
- * is exact, like login.
+ * valid address (validateEmail, the check signup uses). It is the same check
+ * for every address, registered or not, so a 400 says nothing about who has an
+ * account. The address that comes out is lower-cased (normalizeEmail), as
+ * stored and as login looks it up; it is not trimmed.
  */
 export function validatePasswordResetRequestBody(body: unknown): ResetRequestValidation {
   // Express leaves req.body undefined when the request has no JSON body.
@@ -20,11 +20,12 @@ export function validatePasswordResetRequestBody(body: unknown): ResetRequestVal
   if (typeof email !== 'string' || email === '') {
     return { valid: false, message: 'Email is required' };
   }
-  if (!validator.isEmail(email)) {
-    return { valid: false, message: 'Invalid email format' };
+  const emailError = validateEmail(email);
+  if (emailError) {
+    return { valid: false, message: emailError };
   }
 
-  return { valid: true, data: { email } };
+  return { valid: true, data: { email: normalizeEmail(email) } };
 }
 
 type ResetPasswordValidation =

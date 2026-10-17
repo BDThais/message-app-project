@@ -1,4 +1,5 @@
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { normalizeEmail } from '../../lib/emailAddress';
 import { isRecord } from '../../lib/validation';
 
 // Limiters for the account routes. Login is keyed by IP (the default) because
@@ -63,12 +64,13 @@ export const passwordResetRequestIpLimiter = rateLimit({
 const MAX_EMAIL_LENGTH = 254;
 
 // Per email: keeps anyone from filling one inbox with reset links, from any number of IPs. The key
-// is the lower-cased address from the body ("John@x.com" and "john@x.com" share one budget, though
-// the account lookup itself is exact), and the client's IP when the body has no usable address. The
-// two kinds of key have prefixes, so an address that looks like an IP cannot use up that IP's budget.
+// is the address from the body in its canonical form (normalizeEmail, the one the account lookup
+// uses: "John@x.com" and "john@x.com" are one account and share one budget), and the client's IP
+// when the body has no usable address. The two kinds of key have prefixes, so an address that looks
+// like an IP cannot use up that IP's budget.
 export function passwordResetEmailKey(req: { body?: unknown; ip?: string | undefined }): string {
   const email = isRecord(req.body) ? req.body.email : undefined;
-  if (typeof email === 'string' && email.length <= MAX_EMAIL_LENGTH) return `email:${email.toLowerCase()}`;
+  if (typeof email === 'string' && email.length <= MAX_EMAIL_LENGTH) return `email:${normalizeEmail(email)}`;
 
   return `ip:${ipKeyGenerator(req.ip ?? '')}`;
 }

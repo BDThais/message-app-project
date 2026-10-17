@@ -35,6 +35,22 @@ describe(`POST ${signUpRoute}`, () => {
     expect(await verifyPassword(user!.passwordHash, validBody.password)).toBe(true);
   });
 
+  it('stores the address lower-cased, and a person who typed capitals signs in with any spelling', async () => {
+    const res = await request(app).post(signUpRoute).send({ ...validBody, email: 'John.Doe@Example.COM' });
+
+    expect(res.status).toBe(201);
+    const user = await prisma.user.findUniqueOrThrow({ where: { tel: validBody.tel } });
+    expect(user.email).toBe('john.doe@example.com');
+
+    // Two logins: this file sends no other request to the login route (the limit is 10 per 15 minutes).
+    for (const email of ['john.doe@example.com', 'JOHN.DOE@EXAMPLE.COM']) {
+      const login = await request(app).post('/api/account/login').send({ email, password: validBody.password });
+
+      expect(login.status, email).toBe(200);
+      expect(login.body.user.email).toBe('john.doe@example.com');
+    }
+  });
+
   // isValidPhoneNumber accepts all of these; the stored (and searchable) form is
   // the canonical E.164 number, so they all end up as validBody.tel.
   it.each([
@@ -136,6 +152,20 @@ describe(`POST ${signUpRoute}`, () => {
     expect(await prisma.user.count()).toBe(1);
   });
 
+  it('returns 409 when the email is registered in another case', async () => {
+    await prisma.user.create({
+      data: { name: 'existing-user', email: validBody.email, tel: '+14155552672', passwordHash: 'existing-hash' },
+    });
+
+    const res = await request(app)
+      .post(signUpRoute)
+      .send({ ...validBody, email: validBody.email.toUpperCase() });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: 'Email already exists' });
+    expect(await prisma.user.count()).toBe(1);
+  });
+
   // The duplicate check and the insert are two statements, so two signups for
   // the same address can both pass the check and the database refuses the
   // second insert. Pretending the check found nothing is that situation, and
@@ -149,6 +179,7 @@ describe(`POST ${signUpRoute}`, () => {
     // changes one of them, so only the other one collides.
     it.each([
       ['email', { tel: '+14155552672' }, 'Email already exists'],
+      ['email, typed in another case', { tel: '+14155552672', email: 'John@Example.com' }, 'Email already exists'],
       ['phone number', { email: 'other@example.com' }, 'Phone number already exists'],
     ])('names the %s as the cause', async (_label, changedField, expectedError) => {
       await prisma.user.create({
@@ -185,6 +216,19 @@ describe(`POST ${signUpRoute} (verification email)`, () => {
       include: { emailVerificationToken: true },
     });
     expect(user.emailVerifiedAt).toBeNull();
+    expect(user.emailVerificationToken).toMatchObject({ email: validBody.email });
+  });
+
+  it('mails the link to the lower-cased address, and keeps that address with the link', async () => {
+    const res = await request(app).post(signUpRoute).send({ ...validBody, email: 'John@Example.COM' });
+
+    expect(res.status).toBe(201);
+    expect(outbox.sent).toHaveLength(1);
+    expect(outbox.sent[0]!.to).toBe(validBody.email);
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { email: validBody.email },
+      include: { emailVerificationToken: true },
+    });
     expect(user.emailVerificationToken).toMatchObject({ email: validBody.email });
   });
 

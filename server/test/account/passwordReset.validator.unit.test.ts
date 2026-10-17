@@ -8,10 +8,10 @@ import {
 // to prove the validator is wired in.
 
 describe('validatePasswordResetRequestBody', () => {
-  it('accepts an email as it was sent, without trimming or changing its case', () => {
+  it('accepts an email and hands it on lower-cased, the spelling that is stored and looked up', () => {
     expect(validatePasswordResetRequestBody({ email: 'John.Doe@Example.com' })).toEqual({
       valid: true,
-      data: { email: 'John.Doe@Example.com' },
+      data: { email: 'john.doe@example.com' },
     });
   });
 

@@ -31,6 +31,10 @@ interface Account {
   password: string;
 }
 
+// Like the server (see the signup section of api.doc.md): an address is stored lower-cased and
+// matched without regard to case, at signup and at login.
+const canonicalEmail = (email: string) => email.toLowerCase();
+
 /** One request the fake saw: `"POST /api/account/login"` and its parsed JSON body (`undefined` when it had none). */
 export interface Call {
   request: string;
@@ -86,7 +90,7 @@ export function stubApi({ signedIn = false }: { signedIn?: boolean } = {}) {
           return json({ user: state.session });
 
         case 'POST /api/account/login': {
-          const account = accounts.find(({ user }) => user.email === body?.email);
+          const account = accounts.find(({ user }) => user.email === canonicalEmail(String(body?.email)));
           if (!account || account.password !== body?.password) return json({ error: 'Invalid email or password' }, 401);
           state.session = account.user;
           return json({ user: account.user });
@@ -100,10 +104,11 @@ export function stubApi({ signedIn = false }: { signedIn?: boolean } = {}) {
           if (!body?.name || !body.email || !body.tel || !body.password) return json({ error: 'All fields are required' }, 400);
           const problem = passwordProblem(body.password);
           if (problem) return json({ error: problem }, 400);
-          if (accounts.some(({ user }) => user.email === body.email)) return json({ error: 'Email already exists' }, 409);
+          const email = canonicalEmail(body.email);
+          if (accounts.some(({ user }) => user.email === email)) return json({ error: 'Email already exists' }, 409);
           const id = Math.max(...accounts.map(({ user }) => user.id)) + 1;
           accounts.push({
-            user: { id, name: body.name, email: body.email, tel: body.tel, avatarUrl: null, emailVerified: false },
+            user: { id, name: body.name, email, tel: body.tel, avatarUrl: null, emailVerified: false },
             password: body.password,
           });
           return json({ message: 'Account created successfully' }, 201);

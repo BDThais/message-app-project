@@ -47,6 +47,8 @@ export type IssuePasswordResetResult =
  * Stores a new reset link for the account with this address, replacing the
  * old one (POST /account/password/reset-request). The caller answers the same
  * way whatever this returns, so the answer does not reveal who is registered.
+ * `email` is the canonical address (normalizeEmail): the validator has already
+ * lower-cased it, and the lookup is an exact match on the stored form.
  *
  * The user row is locked first (SELECT ... FOR UPDATE), as in
  * issueEmailVerification: without it two simultaneous requests could both

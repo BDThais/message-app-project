@@ -1,7 +1,6 @@
 import { useState, type SyntheticEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import { TextField } from '../../../components/ui/TextField';
-import { EMAIL_CASE_HINT } from '../hints';
 import { useRequestPasswordReset } from '../queries';
 
 export function ForgotPasswordForm() {
@@ -29,7 +28,7 @@ export function ForgotPasswordForm() {
           required
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          hint={`The address you signed up with. ${EMAIL_CASE_HINT}`}
+          hint="The address you signed up with."
         />
         {request.error && (
           <p role="alert" className="form-error">

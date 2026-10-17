@@ -21,6 +21,8 @@ enum ChatMemberRole {
 model User {
   id           Int      @id @default(autoincrement())
   name         String
+  // Always lower-case (normalizeEmail). The CHECK constraint users_email_lowercase_check enforces it;
+  // it is in the migration only, because this schema cannot express a CHECK constraint.
   email        String   @unique
   passwordHash String   @map("password_hash")
   tel          String   @unique

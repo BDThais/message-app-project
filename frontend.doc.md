@@ -130,7 +130,7 @@ frontend/
     │       ├── guards.test.ts
     │       ├── fragmentToken.ts  // parseFragmentToken, useFragmentToken
     │       ├── fragmentToken.test.ts
-    │       ├── hints.ts          // texts that hint the server's rules (password, email case)
+    │       ├── hints.ts          // texts that hint the server's rules (password)
     │       └── components/       // LoginForm, SignupForm, ForgotPasswordForm, ResetPasswordForm, VerifyEmailPage, VerifyEmailBanner
     ├── testing/
     │   ├── fakeApi.ts            // the fake server (a stubbed fetch) with the account endpoints
@@ -226,7 +226,7 @@ See "Current Implementation Status".
 - A "verify your email" banner in the `_app` header when `emailVerified` is `false`, with a resend button (`POST /api/account/email/verification`; show the `409` and `429` messages).
 - Replace the thin login page: links to the other forms, and the verification notice.
 
-Built as described. Where the plan was open: the "verification notice" is the sign-up screen's "check your email" notice (it says that signing in does not wait for verification and that the banner resends the mail) plus a note on the forgot-password confirmation (an unverified address gets a verification mail instead of a reset mail). The forgot-password confirmation says "if an account exists", like the server, and never "a mail was sent". The email hints say that capital letters count, because the server matches an address exactly.
+Built as described. Where the plan was open: the "verification notice" is the sign-up screen's "check your email" notice (it says that signing in does not wait for verification and that the banner resends the mail) plus a note on the forgot-password confirmation (an unverified address gets a verification mail instead of a reset mail). The forgot-password confirmation says "if an account exists", like the server, and never "a mail was sent". The server stores and matches an email address without regard to case (it lower-cases it), so the forms say nothing about case and the client never changes the address.
 
 ### Step 3 — chat core
 

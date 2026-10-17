@@ -1,7 +1,7 @@
 import { useState, type SyntheticEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import { TextField } from '../../../components/ui/TextField';
-import { EMAIL_CASE_HINT, PASSWORD_HINT } from '../hints';
+import { PASSWORD_HINT } from '../hints';
 import { useSignup } from '../queries';
 
 export function SignupForm() {
@@ -41,7 +41,7 @@ export function SignupForm() {
           required
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          hint={`You will sign in with it. ${EMAIL_CASE_HINT}`}
+          hint="You will sign in with it."
         />
         <TextField
           label="Phone number"

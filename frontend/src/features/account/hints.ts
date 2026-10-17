@@ -3,6 +3,3 @@
 
 export const PASSWORD_HINT =
   'At least 8 characters, with an upper-case letter, a lower-case letter, a digit and a special character.';
-
-/** The server matches an email address exactly, case included, at login and at password reset. */
-export const EMAIL_CASE_HINT = 'Capital letters count: type it the way you signed up.';

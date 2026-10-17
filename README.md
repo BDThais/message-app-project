@@ -12,6 +12,7 @@ The server's REST API is in place and the frontend is the current milestone. Imp
 - Authenticated user lookup via session middleware
 - Email verification: a link is mailed at signup and on request, and the user carries `emailVerified`
 - Password reset by email: a signed-out user asks for a link and sets a new password with it; only verified addresses get a link
+- Email addresses are not case-sensitive: they are stored lower-cased, so `John@x.com` and `john@x.com` are one account at signup, login and password reset
 - Protected route middleware for chat access
 - Direct and group chat room creation, listing, update, and deletion
 - Chat membership and role checks with admin-only protections
