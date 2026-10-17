@@ -121,7 +121,7 @@ describe('the app', () => {
     // The server forgets the session (it expired). The next request answers 401, the app looks at
     // GET /account/me again (see createApp), and that now says nobody is signed in.
     server.session = null;
-    await expect(queryClient.fetchQuery({ queryKey: ['chats'], queryFn: () => api.get('/chat') })).rejects.toThrow();
+    await expect(queryClient.query({ queryKey: ['chats'], queryFn: () => api.get('/chat') })).rejects.toThrow();
 
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeTruthy();
     expect(router.state.location.pathname).toBe('/login');

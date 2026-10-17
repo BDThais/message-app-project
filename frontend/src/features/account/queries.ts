@@ -51,7 +51,7 @@ export function useLogout() {
  * Forgets the cached `me`, so the next guard asks the server who is signed in. For things that
  * happen outside the cache's sight: an address verified from a mailed link, or a reset password
  * that signed every session of the account out. (A reset, unlike an invalidation, also drops the
- * old answer, which `ensureQueryData` in the route guards would otherwise keep handing out.)
+ * old answer, which the route guards (see `cachedMe`) would otherwise keep handing out.)
  */
 export function recheckSession(queryClient: QueryClient): void {
   queryClient.resetQueries({ queryKey: accountKeys.me(), exact: true });

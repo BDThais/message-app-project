@@ -19,17 +19,28 @@ export function safeRedirectPath(target: unknown, fallback: string = DEFAULT_SIG
 }
 
 /**
+ * Who is signed in, from the cache whenever it holds an answer, however old; the server is asked
+ * only when nothing is cached yet. `staleTime: 'static'` is what keeps it that way: an answer that
+ * went stale, or was invalidated, is not fetched again by a navigation (the `_app` layout's own
+ * `useMe` does that), so moving between pages never waits for the network. It replaces
+ * `ensureQueryData`, which behaved like this and is deprecated.
+ */
+function cachedMe(queryClient: QueryClient) {
+  return queryClient.query({ ...meQueryOptions(), staleTime: 'static' });
+}
+
+/**
  * `beforeLoad` of the `_app` layout: only signed-in users get past. Anyone else is sent to /login,
  * remembering where they were going.
  */
 export async function requireUser(queryClient: QueryClient, currentHref: string): Promise<User> {
-  const user = await queryClient.ensureQueryData(meQueryOptions());
+  const user = await cachedMe(queryClient);
   if (!user) throw redirect({ to: '/login', search: { redirect: currentHref } });
   return user;
 }
 
-/** `beforeLoad` of the `_guest` layout (login, and later signup): signed-in users have no use for these pages. */
+/** `beforeLoad` of the `_guest` layout (login, signup, forgot password): signed-in users have no use for these pages. */
 export async function redirectIfSignedIn(queryClient: QueryClient): Promise<void> {
-  const user = await queryClient.ensureQueryData(meQueryOptions());
+  const user = await cachedMe(queryClient);
   if (user) throw redirect({ to: DEFAULT_SIGNED_IN_PATH });
 }

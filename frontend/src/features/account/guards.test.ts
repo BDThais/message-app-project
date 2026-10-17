@@ -3,6 +3,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { User } from './types';
 import { redirectIfSignedIn, requireUser, safeRedirectPath } from './guards';
+import { accountKeys } from './queries';
 
 const user: User = {
   id: 1,
@@ -80,6 +81,28 @@ describe('requireUser', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps answering from the cache after it was invalidated: the layout refetches it, a navigation never waits for the server', async () => {
+    const fetchMock = stubMe(user);
+    const queryClient = new QueryClient();
+    await requireUser(queryClient, '/chat');
+
+    await queryClient.invalidateQueries({ queryKey: accountKeys.me() }); // as a 401 does (see main.tsx)
+    await requireUser(queryClient, '/chat/2');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks the server again once the cached answer was dropped (recheckSession)', async () => {
+    const fetchMock = stubMe(user);
+    const queryClient = new QueryClient();
+    await requireUser(queryClient, '/chat');
+
+    await queryClient.resetQueries({ queryKey: accountKeys.me(), exact: true });
+    await requireUser(queryClient, '/chat/2');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('redirectIfSignedIn', () => {
@@ -96,5 +119,16 @@ describe('redirectIfSignedIn', () => {
     stubMe(null);
 
     await expect(redirectIfSignedIn(new QueryClient())).resolves.toBeUndefined();
+  });
+
+  it('also answers from the cache after it was invalidated', async () => {
+    const fetchMock = stubMe(null);
+    const queryClient = new QueryClient();
+    await redirectIfSignedIn(queryClient);
+
+    await queryClient.invalidateQueries({ queryKey: accountKeys.me() });
+    await redirectIfSignedIn(queryClient);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

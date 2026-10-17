@@ -36,7 +36,7 @@ describe('createQueryClient onUnauthorized', () => {
   it('is called when a query fails with a 401', async () => {
     const { onUnauthorized, queryClient } = setup();
 
-    await expect(queryClient.fetchQuery(failingQuery(new ApiError(401, 'Unauthorized')))).rejects.toThrow();
+    await expect(queryClient.query(failingQuery(new ApiError(401, 'Unauthorized')))).rejects.toThrow();
 
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
   });
@@ -55,8 +55,8 @@ describe('createQueryClient onUnauthorized', () => {
   it('is not called for other failures', async () => {
     const { onUnauthorized, queryClient } = setup();
 
-    await expect(queryClient.fetchQuery(failingQuery(new ApiError(403, 'Forbidden')))).rejects.toThrow();
-    await expect(queryClient.fetchQuery({ ...failingQuery(new Error('boom')), queryKey: ['y'] })).rejects.toThrow();
+    await expect(queryClient.query(failingQuery(new ApiError(403, 'Forbidden')))).rejects.toThrow();
+    await expect(queryClient.query({ ...failingQuery(new Error('boom')), queryKey: ['y'] })).rejects.toThrow();
 
     expect(onUnauthorized).not.toHaveBeenCalled();
   });
