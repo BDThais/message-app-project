@@ -2,8 +2,8 @@
 import { cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { john, NEW_PASSWORD, PASSWORD, stubApi } from './testing/fakeApi';
-import { renderApp } from './testing/renderApp';
+import { john, NEW_PASSWORD, PASSWORD, stubApi } from './helpers/fakeApi';
+import { renderApp } from './helpers/renderApp';
 
 // The account screens other than the thin sign-in loop (that one is in app.test.tsx): signup, the
 // forgot/reset password flow, the pages behind the mailed links, and the verify-your-email banner.

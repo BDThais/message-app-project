@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseFragmentToken } from './fragmentToken';
+import { parseFragmentToken } from '../../../src/features/account/fragmentToken';
 
 describe('parseFragmentToken', () => {
   // What the server really mails is `#token=<base64url>` (randomBytes(32).toString('base64url')).

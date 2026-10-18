@@ -4,13 +4,13 @@ import { createMemoryHistory } from '@tanstack/react-router';
 import { cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp } from './createApp';
-import { api } from './lib/http';
-import { john, PASSWORD, stubApi } from './testing/fakeApi';
-import { renderApp } from './testing/renderApp';
+import { createApp } from '../src/createApp';
+import { api } from '../src/lib/http';
+import { john, PASSWORD, stubApi } from './helpers/fakeApi';
+import { renderApp } from './helpers/renderApp';
 
 // The whole sign-in loop through the real router, guards, query client and screens, against a fake
-// API (a stubbed fetch, see testing/fakeApi.ts). It covers what the unit tests cannot: that the
+// API (a stubbed fetch, see helpers/fakeApi.ts). It covers what the unit tests cannot: that the
 // pieces work together. The other account screens (signup, mailed links, the banner) are in
 // accountScreens.test.tsx.
 

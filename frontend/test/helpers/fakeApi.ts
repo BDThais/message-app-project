@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import type { User } from '../features/account/types';
+import type { User } from '../../src/features/account/types';
 
 // A fake of the server's account endpoints, as a stubbed `fetch`, for the app-level tests. It
 // follows api.doc.md (status codes, error texts, the snake_case request bodies) but not the

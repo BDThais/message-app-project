@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError } from './http';
+import { api, ApiError } from '../../src/lib/http';
 
 // The real `api` runs against a stubbed fetch, so the tests see the request it really builds.
 
