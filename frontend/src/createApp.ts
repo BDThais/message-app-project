@@ -5,7 +5,7 @@ import { createAppRouter } from './router';
 
 /**
  * Builds the query client and the router and connects them. Used by main.tsx, and by the tests
- * (with an in-memory `history`) so they run the same wiring as the real app.
+ * (with an in-memory `history`) so they run the same wiring as the real app. `App` renders the result.
  */
 export function createApp({ history }: { history?: RouterHistory } = {}) {
   const queryClient = createQueryClient({
