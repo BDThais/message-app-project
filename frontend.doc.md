@@ -40,6 +40,8 @@ Completed (step 2, "account screens"):
 - `src/features/account/fragmentToken.ts`: reads the token from the URL fragment once and takes the fragment out of the address bar (see "Routing and authentication")
 - `test/helpers/`: the fake API and the render helper that the app-level tests share; the screens' tests are in `test/accountScreens.test.tsx`
 
+Completed (the structure review after step 2, 2026-10-18): the tests moved to `test/`, and the layout and test setup changed as listed in "Structure review".
+
 Still planned:
 
 - Room list, conversation, sending/editing/deleting messages (step 3)
@@ -158,15 +160,14 @@ frontend/
         └── queryClient.ts        // createQueryClient, shouldRetry
 ```
 
-Planned additions: `features/chats/`, `features/messages/`, `features/friends/` (each with `types.ts`, `api.ts`, `queries.ts`, `components/`), more of `components/ui/` (buttons, avatar, dialog), and `lib/socket.ts` (step 6).
-
-Changes to this layout that are worth making before step 3 are in "Structure review" below (items 1 to 3).
+Planned additions: `features/chats/` and `features/friends/` (each with `types.ts`, `api.ts`, `queries.ts`, `components/`), more of `components/ui/` (buttons, avatar, dialog), and `lib/socket.ts` (step 6). `features/chats/` holds rooms, members, messages and read markers together, like the server's `chatrooms` module: they share one query-key factory, and the cache functions of a room and of its messages need each other (a new message changes the room's `lastMessage` and `unreadCount`; a removed room drops its messages), which two folders could only do by importing each other. `lib/socket.ts` only creates the connection. The code that applies an event to the cache belongs to the features (`features/chats/`, `features/friends/`), because `lib/` may not import from `features/`.
 
 ## Conventions
 
 - **Feature folders**, mirroring the server's `modules/`: everything for one feature lives under `src/features/<feature>/`. Route files stay thin.
 - **Imports outside the current feature or folder start with `@/`,** which is `src/` (`paths` in `tsconfig.json`, and `resolve.tsconfigPaths` in `vite.config.ts` and in `vitest.config.ts`: the two config files are separate, so each needs the line). Inside a feature, and between the files of one folder, imports stay relative (`../queries`, `./VerifyEmailBanner`), so a feature can be moved or renamed as a whole. A test imports what it tests with `@/` and `test/helpers/` with a relative path.
 - **Imports go one way:** `routes/` use `features/`, and `features/` use `components/` and `lib/`. `lib/` and `components/` never import from `features/` or `routes/` (`test/structure.test.ts` checks it).
+- **A component starts in the `components/` of the feature that needs it** and moves to `components/ui/` when a second feature needs it. `components/ui/` never imports from `features/` or `routes/`.
 - **`api.ts` has the only mention of a URL path.** Components never call `fetch` or `api` directly: they use hooks from `queries.ts`.
 - **One query-key factory per feature** (`accountKeys.me()`, later `chatKeys.list()`, `chatKeys.messages(chatId)`), so no key is typed by hand in two places.
 - **Cache updates go through functions** (`setSignedInUser`, later `addMessageToCache`, `removeChatFromCache`). Mutations and socket handlers call the same function, and such a function must be idempotent by id, so a message that arrives twice (the sender's own REST response and the socket event) is stored once.
@@ -273,7 +274,7 @@ Server and client are written in the same step, so each event can be tried as so
 
 Client side:
 
-- One socket for the signed-in session, created in the `_app` layout and closed on sign-out. It connects through the same origin (add `'/socket.io': { target, ws: true }` to the dev proxy), so the handshake carries the session cookie.
+- One socket for the signed-in session, created in the `_app` layout and closed on sign-out. It connects through the same origin (add `'/socket.io': { target, ws: true }` to the dev proxy), so the handshake carries the session cookie. `lib/socket.ts` makes the connection; each feature exports the function that applies its events to the cache (the same functions the mutations call), and the `_app` layout attaches them.
 - Every event updates the cache through the same functions the mutations use:
 
 | Event | Cache update |
@@ -308,26 +309,26 @@ Client side:
 
 ## Structure review
 
-A review of how `frontend/` is organised, done at the end of step 2 (2026-10-18). Only the move of the tests into `test/` has been made (see "Decisions"). The rest is a list of suggestions: each says where the problem is, why it matters in this project, what the fix would be and roughly how big it is. Most important first.
+A review of how `frontend/` is organised, done at the end of step 2 (2026-10-18). It found eight things and two smaller ones; all of them are done. The rules that came out of it are in "Conventions", the new layout is in "Project structure", and this section keeps what was found and why, so the reasons are not lost.
 
-Sound, and worth keeping as it is: the direction of the imports (`routes/` use `features/`, `features/` use `lib/` and `components/`, and `lib/` imports nothing from the features), `api.ts` as the only file that knows a URL path, one hook layer (`queries.ts`) between the components and the network, and `createApp` as the one place where the app is wired. Left alone on purpose: the three wiring files (`main.tsx`, `createApp.ts`, `router.tsx`) next to `routeTree.gen.ts` at the root of `src/` (a folder for them pays off only when there are more of them), and the single `styles.css` (that is the styling question under "Open questions").
+Sound from the start, and kept: the direction of the imports (`routes/` use `features/`, `features/` use `lib/` and `components/`, and `lib/` imports nothing from the features), `api.ts` as the only file that knows a URL path, one hook layer (`queries.ts`) between the components and the network, and `createApp` as the one place where the app is wired. Left alone on purpose: the wiring files (`main.tsx`, `App.tsx`, `createApp.ts`, `router.tsx`) next to `routeTree.gen.ts` at the root of `src/` (a folder for them pays off only when there are more of them), and the single `styles.css` (that is the styling question under "Open questions").
 
-### Before step 3
+### Found and done
 
-- **`features/chats/` and `features/messages/` should be one feature.** The "Planned additions" above list them as two folders, but the plan already treats them as one: the query-key factory in "Conventions" covers both (`chatKeys.list()`, `chatKeys.messages(chatId)`), `message:new` and a sent message update the room's `lastMessage` and `unreadCount` (the room list's cache), and `chat:removed` drops a room's messages. With two folders each one's cache functions have to import the other's, which is a circular import the first time it is written. It also goes against the convention that feature folders mirror the server's `modules/`: the server has one `chatrooms` module for rooms, members, messages and read markers. Fix: one `features/chats/` with the rooms, members and messages in it (split by file, for example `messages.api.ts`, if it gets long). Size: a change to this document, no code yet.
-- **`/chat` and `/chat/$chatId` have no shared layout in the route table.** There is `_app/chat.index.tsx` and `_app/chat.$chatId.tsx` but no `_app/chat.tsx`. Without that file the room-list sidebar of step 3 is rendered by each page, so it is unmounted and mounted again on every switch from one room to another (scroll position, a running refetch and focus are lost). With a `chat.tsx` the router makes it the parent of both pages: the sidebar and an `<Outlet />` go there once, the pages render only the conversation. Fix: add `_app/chat.tsx` to the route table now, so step 3 starts with it. Size: one file.
-- **`routes/_app.tsx` is not thin, and steps 3 and 6 will make it the biggest file in the app.** The convention says a route file holds the URL, the guard and which components to show. `_app.tsx` (61 lines) also holds the header markup, the sign-out button with its `signingOut` ref, and the effect that sends the person to `/login` when the session ends. Step 3 adds the frame of the sidebar and step 6 creates the socket in this layout. Fix: move the component to `features/account/components/AppLayout.tsx` (or `components/layout/`, once something other than account code is in the header) and the effect to a hook in `features/account/` (`useRedirectWhenSignedOut`); the route file keeps `beforeLoad` and renders the component. Size: about 60 lines move; the app-level tests go through the router and stay as they are.
+- **Tests next to the code.** They made a folder listing of `src/` half test files. They are now in `test/`, mirroring `src/`, with `test/helpers/` for what they share, like the server (see "Decisions").
+- **`features/chats/` and `features/messages/` were planned as two folders, but are one feature.** The plan already treated them as one (one `chatKeys` factory; `message:new` updates the room list's cache; `chat:removed` drops the messages) and the server has one `chatrooms` module; two folders would import each other. "Planned additions" now has one `features/chats/`.
+- **`/chat` and `/chat/$chatId` had no shared layout.** The room-list sidebar of step 3 would have been rendered by each page and remounted on every room switch. `_app/chat.tsx` exists now (an empty layout until step 3), with a test that `/chat` is matched inside it.
+- **`routes/_app.tsx` was not thin.** The header, the sign-out button and the session-ended redirect were in the route file. `AppLayout` and `useRedirectWhenSignedOut` are now in `features/account/`, and the route file keeps the guard.
+- **The page frame was written four times.** There is one `Page` component (`components/ui/`) now, a `_public` layout for `/verify-email` and `/reset-password` (same URLs), and `ResetPasswordForm`, which rendered a whole page, is `ResetPasswordPage`. `test/pageFrame.test.tsx` checks that every page has exactly one `<main>`.
+- **The provider tree was written twice, in `main.tsx` and in `renderApp`.** A provider added to `main.tsx` would have been missing from every app-level test. Both render `App` now.
+- **Long relative imports.** An `@/` alias for `src/` is used for every import that leaves a feature or a folder (see "Decisions").
+- **`fakeApi.ts` was one `switch` over every endpoint.** It is `test/helpers/fakeApi/` now, one file per feature over one shared state, so faking the chat endpoints is a new file and not a longer switch.
+- **Nothing said when a component leaves its feature.** The rule is in "Conventions": it starts in its feature and moves to `components/ui/` when a second feature needs it.
 
-### Soon
+### Smaller things
 
-- **The page frame is written four times.** `<main className="page page-narrow">` is in `_guest.tsx`, in the not-found page of `__root.tsx`, in `VerifyEmailPage.tsx` and in `ResetPasswordForm.tsx`; the last two write it themselves because `/verify-email` and `/reset-password` are in no layout. `ResetPasswordForm` also renders a whole page (the `<main>` and the "link is incomplete" case) although its name says form, while `LoginForm` and `SignupForm` are bare forms that rely on the layout's `<main>`. A change to the frame (a skip link, another width) is four edits. Fix: a pathless layout for the pages that work signed in or out (`routes/_public.tsx`, with `verify-email.tsx` and `reset-password.tsx` moved into `routes/_public/`; the URLs do not change) that renders the frame, with the frame itself a small component in `components/ui/` that `_guest` and the not-found page use too; rename `ResetPasswordForm` to `ResetPasswordPage` or split the page from the form. Size: four components, two route files moved, `routeTree.gen.ts` regenerated.
-- **The provider tree is written twice, in `main.tsx` and in `test/helpers/renderApp.tsx`.** `createApp` exists so that the tests run the same wiring as the app, but it stops at the router: the `QueryClientProvider` around the `RouterProvider` is typed out in both places. A provider added to `main.tsx` later (a theme, or one for the socket if step 6 uses a provider) would be missing in every app-level test, which would then pass against a different tree than the real one. Fix: one `src/App.tsx` that takes `{ queryClient, router }` and renders the providers; `main.tsx` (adding StrictMode and the devtools) and `renderApp` both use it. Size: a file of about ten lines and two small edits.
-- **Long relative imports.** The route files already import `../../features/account/components/LoginForm`, and since the move a test imports `../../../src/features/account/...`. A moved or renamed folder breaks all its importers. Fix: an alias such as `@/` for `src/`: `paths` in `tsconfig.json` and `resolve.tsconfigPaths: true` in the Vite config (an option of Vite 8, not tried here); `vitest.config.ts` is separate from `vite.config.ts` on purpose, so it needs the same line. Size: three lines of config and a mechanical rewrite of the imports. A judgement call: relative paths are fine in an app this small, so decide it before the number of features grows.
-
-### When the first endpoint beyond the account ones is added
-
-- **`test/helpers/fakeApi.ts` is one `switch` over every endpoint.** It is 166 lines for the account endpoints, and the API has more than twenty others (rooms, members, messages, friends, profile and account deletion). The convention that the fake changes in the same patch as an endpoint's shape gets harder to keep in a file that size. Fix: one fake per feature (`test/helpers/fakeApi/account.ts`, `chats.ts`, `friends.ts`) that `stubApi` combines, with the data they share (users, rooms) in one object. Size: split one file, at the moment the first chat endpoint is faked.
-- **Write down when a component leaves its feature.** `components/ui/` has `TextField`, and buttons, an avatar and a dialog are planned, but nothing says where a component starts. Rule to add to "Conventions": a component starts in the `components/` of the feature that needs it and moves to `components/ui/` when a second feature needs it, and `components/ui/` never imports from `features/`. Size: two lines in this document.
+- Two comments said the 401 recheck is in `main.tsx`; it is in `createApp.ts`. Fixed.
+- A test file left in `src/` was silently not run, because `vitest.config.ts` only looks in `test/`. `test/structure.test.ts` fails on it now, and it also checks the import rules of "Conventions" for `lib/`, `components/` and `test/`.
 
 ## Decisions
 
@@ -340,6 +341,7 @@ Sound, and worth keeping as it is: the direction of the imports (`routes/` use `
 - **Redirect after login** through `safeRedirectPath`; plain `/login` after a deliberate sign-out.
 - **TanStack Router file-based routing, `routeTree.gen.ts` committed.**
 - **Tests in `frontend/test/`, mirroring `src/`,** the way the server keeps its tests in `server/test/` (with `helpers/` for what they share), so `src/` holds only what ships to the browser and a folder listing of the app is not half test files. The price is that a test file left in `src/` would not be run, which `test/structure.test.ts` turns into a failure.
+- **One `features/chats/` for rooms, members and messages,** not a folder each. See "Planned additions" for why.
 - **An `@/` alias for `src/`,** so an import from another folder does not count `../` (`../../../src/features/account/types` became `@/features/account/types`) and moving a file does not break the imports that leave its folder. It is one `paths` entry in `tsconfig.json` plus `resolve.tsconfigPaths: true` in the Vite and Vitest configs (a Vite 8 option, so no plugin). Imports inside a feature stay relative on purpose.
 - **Vitest 5** in the frontend (the server uses Vitest 4): Vitest 5 installed cleanly next to Vite 8, while installing Vitest 4 there failed with an npm error in the sandbox this was built in. Align the two later if it matters.
 - **Hand-written API types** per feature for now.
