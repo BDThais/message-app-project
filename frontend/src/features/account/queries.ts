@@ -1,5 +1,5 @@
 import { queryOptions, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { isApiError } from '../../lib/http';
+import { isApiError } from '@/lib/http';
 import { getMe, login, logout, requestPasswordReset, resendVerificationEmail, resetPassword, signup, verifyEmail } from './api';
 import type { User } from './types';
 

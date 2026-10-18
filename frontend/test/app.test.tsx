@@ -4,8 +4,8 @@ import { createMemoryHistory } from '@tanstack/react-router';
 import { cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp } from '../src/createApp';
-import { api } from '../src/lib/http';
+import { createApp } from '@/createApp';
+import { api } from '@/lib/http';
 import { john, PASSWORD, stubApi } from './helpers/fakeApi';
 import { renderApp } from './helpers/renderApp';
 

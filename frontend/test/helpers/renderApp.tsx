@@ -1,8 +1,8 @@
 import { StrictMode } from 'react';
 import { createMemoryHistory } from '@tanstack/react-router';
 import { render } from '@testing-library/react';
-import { App } from '../../src/App';
-import { createApp } from '../../src/createApp';
+import { App } from '@/App';
+import { createApp } from '@/createApp';
 
 /**
  * Renders the real app (router, guards, query client, screens) at `path`, in memory. It renders the

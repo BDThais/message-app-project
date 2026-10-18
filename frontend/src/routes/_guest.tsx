@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router';
-import { Page } from '../components/ui/Page';
-import { redirectIfSignedIn } from '../features/account/guards';
+import { Page } from '@/components/ui/Page';
+import { redirectIfSignedIn } from '@/features/account/guards';
 
 // Pages for people who are not signed in (login, signup, "forgot password").
 // The pages the emailed links open (/verify-email, /reset-password) are NOT in here: they have to

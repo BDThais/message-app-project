@@ -1,9 +1,9 @@
 import { isRedirect } from '@tanstack/react-router';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { User } from '../../../src/features/account/types';
-import { redirectIfSignedIn, requireUser, safeRedirectPath } from '../../../src/features/account/guards';
-import { accountKeys } from '../../../src/features/account/queries';
+import type { User } from '@/features/account/types';
+import { redirectIfSignedIn, requireUser, safeRedirectPath } from '@/features/account/guards';
+import { accountKeys } from '@/features/account/queries';
 
 const user: User = {
   id: 1,

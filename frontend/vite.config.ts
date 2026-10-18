@@ -10,6 +10,8 @@ export default defineConfig(({ mode }) => {
   const apiTarget = env.API_PROXY_TARGET || 'http://localhost:3000';
 
   return {
+    // Lets `@/x` mean `src/x`, as the "paths" in tsconfig.json say (vitest.config.ts needs the same line).
+    resolve: { tsconfigPaths: true },
     plugins: [
       // The router plugin has to come before the React plugin. It generates src/routeTree.gen.ts
       // from the files in src/routes (commit that file).

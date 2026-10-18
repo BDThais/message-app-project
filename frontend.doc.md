@@ -96,10 +96,10 @@ frontend/
 ├── .gitignore
 ├── index.html
 ├── package.json
-├── tsconfig.json                 // the app: src/ and test/, browser types
+├── tsconfig.json                 // the app: src/ and test/, browser types, the @/ alias
 ├── tsconfig.node.json            // vite.config.ts and vitest.config.ts, Node types
-├── vite.config.ts                // router plugin, React plugin, port 5173, /api proxy
-├── vitest.config.ts              // test settings: runs test/**/*.test.ts(x); kept apart so tests skip the router plugin and the proxy
+├── vite.config.ts                // router plugin, React plugin, the @/ alias, port 5173, /api proxy
+├── vitest.config.ts              // test settings: runs test/**/*.test.ts(x), the @/ alias; kept apart so tests skip the router plugin and the proxy
 ├── test/                         // every test and its helpers, mirroring src/ (like the server's test/)
 │   ├── app.test.tsx              // the sign-in loop through the real app against a fake API
 │   ├── accountScreens.test.tsx   // signup, forgot/reset password, the mailed-link pages, the banner (same approach)
@@ -165,6 +165,7 @@ Changes to this layout that are worth making before step 3 are in "Structure rev
 ## Conventions
 
 - **Feature folders**, mirroring the server's `modules/`: everything for one feature lives under `src/features/<feature>/`. Route files stay thin.
+- **Imports outside the current feature or folder start with `@/`,** which is `src/` (`paths` in `tsconfig.json`, and `resolve.tsconfigPaths` in `vite.config.ts` and in `vitest.config.ts`: the two config files are separate, so each needs the line). Inside a feature, and between the files of one folder, imports stay relative (`../queries`, `./VerifyEmailBanner`), so a feature can be moved or renamed as a whole. A test imports what it tests with `@/` and `test/helpers/` with a relative path.
 - **Imports go one way:** `routes/` use `features/`, and `features/` use `components/` and `lib/`. `lib/` and `components/` never import from `features/` or `routes/` (`test/structure.test.ts` checks it).
 - **`api.ts` has the only mention of a URL path.** Components never call `fetch` or `api` directly: they use hooks from `queries.ts`.
 - **One query-key factory per feature** (`accountKeys.me()`, later `chatKeys.list()`, `chatKeys.messages(chatId)`), so no key is typed by hand in two places.
@@ -173,7 +174,7 @@ Changes to this layout that are worth making before step 3 are in "Structure rev
 - **TypeScript:** `strict` and `noUncheckedIndexedAccess`, like the server. `exactOptionalPropertyTypes` is off here because React's and TanStack's own types do not follow it.
 - **Types of API responses are written by hand** in each feature's `types.ts`, from the shapes in `./api.doc.md`. A shared package or generated types can come later if keeping them in step becomes a chore.
 - **Files:** components `PascalCase.tsx`, everything else `camelCase.ts`.
-- **Tests live in `test/`, not next to the code**, in the same folders as the file they test (`src/lib/http.ts` is tested by `test/lib/http.test.ts`) and named `<file>.test.ts(x)`. What the app-level tests share (the fake API, the render helper) is in `test/helpers/`. Tests import the code under test as `../src/...` (one `../` per folder). Nothing in `src/` imports from `test/`, and no test file is left in `src/`: `test/structure.test.ts` fails if either happens.
+- **Tests live in `test/`, not next to the code**, in the same folders as the file they test (`src/lib/http.ts` is tested by `test/lib/http.test.ts`) and named `<file>.test.ts(x)`. What the app-level tests share (the fake API, the render helper) is in `test/helpers/`. Nothing in `src/` imports from `test/`, and no test file is left in `src/`: `test/structure.test.ts` fails if either happens.
 
 ## Routing and authentication
 
@@ -338,7 +339,8 @@ Sound, and worth keeping as it is: the direction of the imports (`routes/` use `
 - **`_guest` layout, but `/verify-email` and `/reset-password` in a layout of their own (`_public`) without a guard,** because the email links must work in both states. The layout also draws the page frame, so no page writes its own `<main>`.
 - **Redirect after login** through `safeRedirectPath`; plain `/login` after a deliberate sign-out.
 - **TanStack Router file-based routing, `routeTree.gen.ts` committed.**
-- **Tests in `frontend/test/`, mirroring `src/`,** the way the server keeps its tests in `server/test/` (with `helpers/` for what they share), so `src/` holds only what ships to the browser and a folder listing of the app is not half test files. The price is a `../src/` prefix on every import in a test, and that a test file left in `src/` would not be run, which `test/structure.test.ts` turns into a failure.
+- **Tests in `frontend/test/`, mirroring `src/`,** the way the server keeps its tests in `server/test/` (with `helpers/` for what they share), so `src/` holds only what ships to the browser and a folder listing of the app is not half test files. The price is that a test file left in `src/` would not be run, which `test/structure.test.ts` turns into a failure.
+- **An `@/` alias for `src/`,** so an import from another folder does not count `../` (`../../../src/features/account/types` became `@/features/account/types`) and moving a file does not break the imports that leave its folder. It is one `paths` entry in `tsconfig.json` plus `resolve.tsconfigPaths: true` in the Vite and Vitest configs (a Vite 8 option, so no plugin). Imports inside a feature stay relative on purpose.
 - **Vitest 5** in the frontend (the server uses Vitest 4): Vitest 5 installed cleanly next to Vite 8, while installing Vitest 4 there failed with an npm error in the sandbox this was built in. Align the two later if it matters.
 - **Hand-written API types** per feature for now.
 - **The API specification has its own document**, `./api.doc.md`, that this document and `./backend.doc.md` both point to, so an endpoint change is made in one place. The backend doc keeps how the endpoints are built.

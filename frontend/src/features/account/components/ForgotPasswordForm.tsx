@@ -1,6 +1,6 @@
 import { useState, type SyntheticEvent } from 'react';
 import { Link } from '@tanstack/react-router';
-import { TextField } from '../../../components/ui/TextField';
+import { TextField } from '@/components/ui/TextField';
 import { useRequestPasswordReset } from '../queries';
 
 export function ForgotPasswordForm() {

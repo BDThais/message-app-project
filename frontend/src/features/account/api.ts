@@ -1,4 +1,4 @@
-import { api } from '../../lib/http';
+import { api } from '@/lib/http';
 import type { LoginInput, ResetPasswordInput, SignupInput, User } from './types';
 
 // One function per endpoint; no React and no caching in here (see queries.ts for that).

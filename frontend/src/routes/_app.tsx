@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { AppLayout } from '../features/account/components/AppLayout';
-import { requireUser } from '../features/account/guards';
+import { AppLayout } from '@/features/account/components/AppLayout';
+import { requireUser } from '@/features/account/guards';
 
 // Everything behind this layout needs a signed-in user. The layout itself is in the account feature.
 export const Route = createFileRoute('/_app')({

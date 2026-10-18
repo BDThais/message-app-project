@@ -8,6 +8,8 @@
     "jsx": "react-jsx",
     "types": ["vite/client"],
     "noEmit": true,
+    // `@/x` is `src/x`: the import for anything outside the current feature or folder (see Conventions)
+    "paths": { "@/*": ["./src/*"] },
 
     // Stricter type checking (same as the server, except exactOptionalPropertyTypes, which fights
     // with React's and TanStack's own optional props)

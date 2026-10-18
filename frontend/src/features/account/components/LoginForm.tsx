@@ -1,6 +1,6 @@
 import { useState, type SyntheticEvent } from 'react';
 import { Link, useRouter } from '@tanstack/react-router';
-import { TextField } from '../../../components/ui/TextField';
+import { TextField } from '@/components/ui/TextField';
 import { safeRedirectPath } from '../guards';
 import { useLogin } from '../queries';
 

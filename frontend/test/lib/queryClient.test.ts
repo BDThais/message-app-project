@@ -1,7 +1,7 @@
 import { MutationObserver } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
-import { ApiError } from '../../src/lib/http';
-import { createQueryClient, shouldRetry } from '../../src/lib/queryClient';
+import { ApiError } from '@/lib/http';
+import { createQueryClient, shouldRetry } from '@/lib/queryClient';
 
 describe('shouldRetry', () => {
   it.each([400, 401, 403, 404, 409, 429])('never retries a %i, the server has given its answer', (status) => {

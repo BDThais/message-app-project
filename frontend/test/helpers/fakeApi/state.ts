@@ -1,4 +1,4 @@
-import type { User } from '../../../src/features/account/types';
+import type { User } from '@/features/account/types';
 
 export const PASSWORD = 'Str0ng!Pass';
 export const NEW_PASSWORD = 'An0ther!Pass';

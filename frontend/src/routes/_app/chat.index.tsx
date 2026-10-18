@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Page } from '../../components/ui/Page';
-import { useMe } from '../../features/account/queries';
+import { Page } from '@/components/ui/Page';
+import { useMe } from '@/features/account/queries';
 
 export const Route = createFileRoute('/_app/chat/')({
   component: ChatHome,

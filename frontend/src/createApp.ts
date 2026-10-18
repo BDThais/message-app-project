@@ -1,6 +1,6 @@
 import type { RouterHistory } from '@tanstack/react-router';
-import { accountKeys } from './features/account/queries';
-import { createQueryClient } from './lib/queryClient';
+import { accountKeys } from '@/features/account/queries';
+import { createQueryClient } from '@/lib/queryClient';
 import { createAppRouter } from './router';
 
 /**

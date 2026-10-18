@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { createRootRouteWithContext, Link, Outlet } from '@tanstack/react-router';
-import { Page } from '../components/ui/Page';
+import { Page } from '@/components/ui/Page';
 
 // What every route's `beforeLoad` can read from `context` (supplied in router.tsx).
 interface RouterContext {

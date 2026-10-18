@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router';
-import { Page } from '../components/ui/Page';
+import { Page } from '@/components/ui/Page';
 
 // Pages that work whether or not the person is signed in: the ones the emailed links open
 // (/verify-email, /reset-password). There is no guard here on purpose. They have a layout of their
