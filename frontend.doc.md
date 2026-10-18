@@ -127,7 +127,7 @@ frontend/
     │   ├── _guest/forgot-password.tsx
     │   ├── verify-email.tsx      // outside both layouts: the mailed link works signed in or out
     │   ├── reset-password.tsx    // same
-    │   ├── _app.tsx              // layout: signed-out users are sent to /login; header with sign-out; verify-email banner
+    │   ├── _app.tsx              // layout route: the requireUser guard, renders AppLayout
     │   └── _app/chat.index.tsx   // placeholder
     ├── components/
     │   └── ui/TextField.tsx      // label + input + hint, wired together
@@ -137,9 +137,10 @@ frontend/
     │       ├── api.ts            // one function per endpoint, no React
     │       ├── queries.ts        // query keys, queryOptions, hooks, recheckSession
     │       ├── guards.ts         // beforeLoad helpers, safeRedirectPath
+    │       ├── useRedirectWhenSignedOut.ts  // sends the person to /login when the session ends while a page is open
     │       ├── fragmentToken.ts  // parseFragmentToken, useFragmentToken
     │       ├── hints.ts          // texts that hint the server's rules (password)
-    │       └── components/       // LoginForm, SignupForm, ForgotPasswordForm, ResetPasswordForm, VerifyEmailPage, VerifyEmailBanner
+    │       └── components/       // AppLayout (header, banner, outlet), LoginForm, SignupForm, ForgotPasswordForm, ResetPasswordForm, VerifyEmailPage, VerifyEmailBanner
     └── lib/
         ├── http.ts               // api, ApiError
         └── queryClient.ts        // createQueryClient, shouldRetry
@@ -184,7 +185,7 @@ How the guards work:
 - Both pages read the token from `location.hash` with `useFragmentToken`: it reads the token once into component state and then replaces the history entry with the same URL without the fragment, so the token is not left in the address bar or the browser history. The token lives on in state, which is what lets the reset form resend after a refused password (the server checks the password before it uses up the link). A reload therefore loses the token: the person opens the mailed link again.
 - `/verify-email` posts the token as soon as it opens (a `POST`, never a `GET`), once: a ref guards the effect because StrictMode runs effects twice in development and a link works only once (the app-level test runs it in StrictMode). A successful verification or reset calls `recheckSession`, which resets the cached `me`: the link can belong to another account than the one signed in, and a reset deletes every session of the account, so the cache cannot patch itself.
 - After signing in, the login page goes to the `redirect` parameter, but only through `safeRedirectPath`: it must start with a single `/`. Anything else (`https://...`, `//host`, `/\host`) falls back to `/chat`, so a crafted login link cannot send people to another site.
-- A guard only runs on navigation. When the session ends while a page is open (a request answers 401 and `me` then comes back empty), the `_app` layout notices that the cached user became `null` and navigates to `/login?redirect=...`. Signing out on purpose goes to plain `/login`. The layout reads the current location once, inside the effect: a hook that follows the location would run the effect again for the `/login` URL it has just navigated to and nest the `redirect` parameter without end (the app-level test caught exactly this).
+- A guard only runs on navigation. When the session ends while a page is open (a request answers 401 and `me` then comes back empty), the `_app` layout (`useRedirectWhenSignedOut`) notices that the cached user became `null` and navigates to `/login?redirect=...`. Signing out on purpose goes to plain `/login`. The layout reads the current location once, inside the effect: a hook that follows the location would run the effect again for the `/login` URL it has just navigated to and nest the `redirect` parameter without end (the app-level test caught exactly this).
 - Signing in or out replaces the whole cache except `me` (`setSignedInUser`), so the next person at this tab never sees the previous user's rooms or messages.
 
 ## Using the API from the screens
