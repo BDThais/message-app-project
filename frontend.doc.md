@@ -105,7 +105,12 @@ frontend/
 │   ├── accountScreens.test.tsx   // signup, forgot/reset password, the mailed-link pages, the banner (same approach)
 │   ├── pageFrame.test.tsx        // every page has exactly one <main>
 │   ├── helpers/
-│   │   ├── fakeApi.ts            // the fake server (a stubbed fetch) with the account endpoints
+│   │   ├── fakeApi/              // the fake server (a stubbed fetch), one file per feature
+│   │   │   ├── index.ts          // stubApi: the stubbed fetch, tries each feature's endpoints in turn
+│   │   │   ├── state.ts          // the fake server's state, shared by the features; John, the passwords
+│   │   │   ├── account.ts        // the account endpoints
+│   │   │   ├── chats.ts          // a stand-in for GET /api/chat for now
+│   │   │   └── responses.ts      // json(), noContent()
 │   │   └── renderApp.tsx         // the real <App> in memory, optionally in StrictMode
 │   ├── features/account/
 │   │   ├── guards.test.ts
@@ -291,7 +296,7 @@ Client side:
 
 - `npm test` runs Vitest on `test/**/*.test.ts(x)`. No database and no server are needed. A test file put anywhere else, `src/` included, is not run: `vitest.config.ts` only looks in `test/`. `tsconfig.json` includes `test/`, so `npm run typecheck` checks the tests too.
 - Unit tests cover the logic that can be wrong without anything looking wrong: the fetch wrapper (the request it really builds, `204`, error bodies, a lost connection, cancellation), the query client's retry and 401 rules, the guards and `safeRedirectPath`. They run the real code against a stubbed `fetch`.
-- `test/app.test.tsx` runs the real router, guards, query client and screens in jsdom against a fake API, for the loops no unit test sees: signed-out visitor to login and back to the page they wanted, wrong credentials, off-site `redirect` ignored, sign-out clearing the cache, a session ending while a page is open, and a 401 that must not sign anyone out. Each new screen with a flow of that kind gets a test in a file like this one: `test/accountScreens.test.tsx` has signup, forgot and reset password, the mailed-link pages (token posted once in StrictMode, token removed from the URL) and the banner. The fake API (`test/helpers/fakeApi.ts`) follows `./api.doc.md`; when an endpoint's shape changes there, change the fake in the same patch.
+- `test/app.test.tsx` runs the real router, guards, query client and screens in jsdom against a fake API, for the loops no unit test sees: signed-out visitor to login and back to the page they wanted, wrong credentials, off-site `redirect` ignored, sign-out clearing the cache, a session ending while a page is open, and a 401 that must not sign anyone out. Each new screen with a flow of that kind gets a test in a file like this one: `test/accountScreens.test.tsx` has signup, forgot and reset password, the mailed-link pages (token posted once in StrictMode, token removed from the URL) and the banner. The fake API (`test/helpers/fakeApi/`) follows `./api.doc.md`; when an endpoint's shape changes there, change the fake in the same patch. It has one file per feature (`account.ts`, `chats.ts`), each a function that answers its own endpoints and returns `undefined` for any other request, and one shared state (`state.ts`). Faking a new feature's endpoints means a new file, one more entry in the list in `index.ts`, and its data in the state.
 - The aim is not full coverage: tests are for behaviour that matters and is easy to break. When a test is written for a new rule, break the code on purpose once and check that the test fails.
 - `test/app.test.tsx` also checks that `/chat` is matched inside the `_app/chat.tsx` layout.
 - `test/pageFrame.test.tsx` visits every page and checks that it has exactly one `<main>`, the one `Page` draws: a page that writes its own again, or a layout that forgets the frame, fails it.
