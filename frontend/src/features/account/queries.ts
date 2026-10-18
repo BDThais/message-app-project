@@ -12,7 +12,7 @@ export function meQueryOptions() {
   return queryOptions({
     queryKey: accountKeys.me(),
     queryFn: ({ signal }) => getMe(signal),
-    // The session is checked again whenever a request answers 401 (see main.tsx), so it is safe to
+    // The session is checked again whenever a request answers 401 (see createApp.ts), so it is safe to
     // trust the cached answer for a while.
     staleTime: 5 * 60_000,
   });

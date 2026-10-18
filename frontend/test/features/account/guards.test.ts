@@ -87,7 +87,7 @@ describe('requireUser', () => {
     const queryClient = new QueryClient();
     await requireUser(queryClient, '/chat');
 
-    await queryClient.invalidateQueries({ queryKey: accountKeys.me() }); // as a 401 does (see main.tsx)
+    await queryClient.invalidateQueries({ queryKey: accountKeys.me() }); // as a 401 does (see createApp.ts)
     await requireUser(queryClient, '/chat/2');
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
