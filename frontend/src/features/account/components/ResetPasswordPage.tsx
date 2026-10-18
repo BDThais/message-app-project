@@ -6,12 +6,10 @@ import { PASSWORD_HINT } from '../hints';
 import { useResetPassword } from '../queries';
 
 /** The page the reset mail links to (`/reset-password#token=...`). It works signed in or out. */
-export function ResetPasswordForm() {
+export function ResetPasswordPage() {
   const token = useFragmentToken();
 
-  return (
-    <main className="page page-narrow">{token === null ? <IncompleteLink /> : <NewPasswordForm token={token} />}</main>
-  );
+  return token === null ? <IncompleteLink /> : <NewPasswordForm token={token} />;
 }
 
 function IncompleteLink() {

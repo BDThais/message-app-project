@@ -12,11 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as GuestRouteImport } from './routes/_guest'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as VerifyEmailRouteImport } from './routes/verify-email'
+import { Route as PublicRouteImport } from './routes/_public'
 import { Route as GuestForgotPasswordRouteImport } from './routes/_guest/forgot-password'
 import { Route as GuestLoginRouteImport } from './routes/_guest/login'
 import { Route as GuestSignupRouteImport } from './routes/_guest/signup'
+import { Route as PublicResetPasswordRouteImport } from './routes/_public/reset-password'
+import { Route as PublicVerifyEmailRouteImport } from './routes/_public/verify-email'
 import { Route as AppChatIndexRouteImport } from './routes/_app/chat.index'
 
 const IndexRoute = IndexRouteImport.update({
@@ -32,14 +33,8 @@ const GuestRoute = GuestRouteImport.update({
   id: '/_guest',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const VerifyEmailRoute = VerifyEmailRouteImport.update({
-  id: '/verify-email',
-  path: '/verify-email',
+const PublicRoute = PublicRouteImport.update({
+  id: '/_public',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GuestForgotPasswordRoute = GuestForgotPasswordRouteImport.update({
@@ -57,6 +52,16 @@ const GuestSignupRoute = GuestSignupRouteImport.update({
   path: '/signup',
   getParentRoute: () => GuestRoute,
 } as any)
+const PublicResetPasswordRoute = PublicResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => PublicRoute,
+} as any)
+const PublicVerifyEmailRoute = PublicVerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
+  getParentRoute: () => PublicRoute,
+} as any)
 const AppChatIndexRoute = AppChatIndexRouteImport.update({
   id: '/chat/',
   path: '/chat/',
@@ -65,20 +70,20 @@ const AppChatIndexRoute = AppChatIndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/reset-password': typeof ResetPasswordRoute
-  '/verify-email': typeof VerifyEmailRoute
   '/forgot-password': typeof GuestForgotPasswordRoute
   '/login': typeof GuestLoginRoute
   '/signup': typeof GuestSignupRoute
+  '/reset-password': typeof PublicResetPasswordRoute
+  '/verify-email': typeof PublicVerifyEmailRoute
   '/chat/': typeof AppChatIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/reset-password': typeof ResetPasswordRoute
-  '/verify-email': typeof VerifyEmailRoute
   '/forgot-password': typeof GuestForgotPasswordRoute
   '/login': typeof GuestLoginRoute
   '/signup': typeof GuestSignupRoute
+  '/reset-password': typeof PublicResetPasswordRoute
+  '/verify-email': typeof PublicVerifyEmailRoute
   '/chat': typeof AppChatIndexRoute
 }
 export interface FileRoutesById {
@@ -86,42 +91,44 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/_guest': typeof GuestRouteWithChildren
-  '/reset-password': typeof ResetPasswordRoute
-  '/verify-email': typeof VerifyEmailRoute
+  '/_public': typeof PublicRouteWithChildren
   '/_guest/forgot-password': typeof GuestForgotPasswordRoute
   '/_guest/login': typeof GuestLoginRoute
   '/_guest/signup': typeof GuestSignupRoute
+  '/_public/reset-password': typeof PublicResetPasswordRoute
+  '/_public/verify-email': typeof PublicVerifyEmailRoute
   '/_app/chat/': typeof AppChatIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/reset-password'
-    | '/verify-email'
     | '/forgot-password'
     | '/login'
     | '/signup'
+    | '/reset-password'
+    | '/verify-email'
     | '/chat/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/reset-password'
-    | '/verify-email'
     | '/forgot-password'
     | '/login'
     | '/signup'
+    | '/reset-password'
+    | '/verify-email'
     | '/chat'
   id:
     | '__root__'
     | '/'
     | '/_app'
     | '/_guest'
-    | '/reset-password'
-    | '/verify-email'
+    | '/_public'
     | '/_guest/forgot-password'
     | '/_guest/login'
     | '/_guest/signup'
+    | '/_public/reset-password'
+    | '/_public/verify-email'
     | '/_app/chat/'
   fileRoutesById: FileRoutesById
 }
@@ -129,8 +136,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   GuestRoute: typeof GuestRouteWithChildren
-  ResetPasswordRoute: typeof ResetPasswordRoute
-  VerifyEmailRoute: typeof VerifyEmailRoute
+  PublicRoute: typeof PublicRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -156,18 +162,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GuestRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/verify-email': {
-      id: '/verify-email'
-      path: '/verify-email'
-      fullPath: '/verify-email'
-      preLoaderRoute: typeof VerifyEmailRouteImport
+    '/_public': {
+      id: '/_public'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof PublicRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_guest/forgot-password': {
@@ -190,6 +189,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/signup'
       preLoaderRoute: typeof GuestSignupRouteImport
       parentRoute: typeof GuestRoute
+    }
+    '/_public/reset-password': {
+      id: '/_public/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof PublicResetPasswordRouteImport
+      parentRoute: typeof PublicRoute
+    }
+    '/_public/verify-email': {
+      id: '/_public/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof PublicVerifyEmailRouteImport
+      parentRoute: typeof PublicRoute
     }
     '/_app/chat/': {
       id: '/_app/chat/'
@@ -225,12 +238,24 @@ const GuestRouteChildren: GuestRouteChildren = {
 
 const GuestRouteWithChildren = GuestRoute._addFileChildren(GuestRouteChildren)
 
+interface PublicRouteChildren {
+  PublicResetPasswordRoute: typeof PublicResetPasswordRoute
+  PublicVerifyEmailRoute: typeof PublicVerifyEmailRoute
+}
+
+const PublicRouteChildren: PublicRouteChildren = {
+  PublicResetPasswordRoute: PublicResetPasswordRoute,
+  PublicVerifyEmailRoute: PublicVerifyEmailRoute,
+}
+
+const PublicRouteWithChildren =
+  PublicRoute._addFileChildren(PublicRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   GuestRoute: GuestRouteWithChildren,
-  ResetPasswordRoute: ResetPasswordRoute,
-  VerifyEmailRoute: VerifyEmailRoute,
+  PublicRoute: PublicRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

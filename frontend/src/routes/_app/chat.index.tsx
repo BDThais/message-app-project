@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { Page } from '../../components/ui/Page';
 import { useMe } from '../../features/account/queries';
 
 export const Route = createFileRoute('/_app/chat/')({
@@ -10,10 +11,10 @@ function ChatHome() {
   const { data: user } = useMe();
 
   return (
-    <main className="page">
+    <Page>
       <h1>Chats</h1>
       <p>Signed in as {user?.email}.</p>
       <p>The room list is not built yet.</p>
-    </main>
+    </Page>
   );
 }

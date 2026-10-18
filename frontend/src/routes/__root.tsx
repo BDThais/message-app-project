@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { createRootRouteWithContext, Link, Outlet } from '@tanstack/react-router';
+import { Page } from '../components/ui/Page';
 
 // What every route's `beforeLoad` can read from `context` (supplied in router.tsx).
 interface RouterContext {
@@ -13,11 +14,11 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 
 function NotFound() {
   return (
-    <main className="page page-narrow">
+    <Page narrow>
       <h1>Page not found</h1>
       <p>
         <Link to="/chat">Go to your chats</Link>
       </p>
-    </main>
+    </Page>
   );
 }

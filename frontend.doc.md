@@ -103,6 +103,7 @@ frontend/
 ├── test/                         // every test and its helpers, mirroring src/ (like the server's test/)
 │   ├── app.test.tsx              // the sign-in loop through the real app against a fake API
 │   ├── accountScreens.test.tsx   // signup, forgot/reset password, the mailed-link pages, the banner (same approach)
+│   ├── pageFrame.test.tsx        // every page has exactly one <main>
 │   ├── helpers/
 │   │   ├── fakeApi.ts            // the fake server (a stubbed fetch) with the account endpoints
 │   │   └── renderApp.tsx         // the real app in memory, optionally in StrictMode
@@ -125,12 +126,15 @@ frontend/
     │   ├── _guest/login.tsx
     │   ├── _guest/signup.tsx
     │   ├── _guest/forgot-password.tsx
-    │   ├── verify-email.tsx      // outside both layouts: the mailed link works signed in or out
-    │   ├── reset-password.tsx    // same
+    │   ├── _public.tsx           // layout without a guard, draws the page frame: the mailed links work signed in or out
+    │   ├── _public/verify-email.tsx
+    │   ├── _public/reset-password.tsx
     │   ├── _app.tsx              // layout route: the requireUser guard, renders AppLayout
     │   └── _app/chat.index.tsx   // placeholder
     ├── components/
-    │   └── ui/TextField.tsx      // label + input + hint, wired together
+    │   └── ui/
+    │       ├── Page.tsx          // the page frame: the <main>, narrow or wide
+    │       └── TextField.tsx     // label + input + hint, wired together
     ├── features/
     │   └── account/
     │       ├── types.ts          // User, LoginInput, SignupInput, ResetPasswordInput
@@ -140,7 +144,7 @@ frontend/
     │       ├── useRedirectWhenSignedOut.ts  // sends the person to /login when the session ends while a page is open
     │       ├── fragmentToken.ts  // parseFragmentToken, useFragmentToken
     │       ├── hints.ts          // texts that hint the server's rules (password)
-    │       └── components/       // AppLayout (header, banner, outlet), LoginForm, SignupForm, ForgotPasswordForm, ResetPasswordForm, VerifyEmailPage, VerifyEmailBanner
+    │       └── components/       // AppLayout (header, banner, outlet), LoginForm, SignupForm, ForgotPasswordForm, ResetPasswordPage, VerifyEmailPage, VerifyEmailBanner
     └── lib/
         ├── http.ts               // api, ApiError
         └── queryClient.ts        // createQueryClient, shouldRetry
@@ -170,8 +174,8 @@ Changes to this layout that are worth making before step 3 are in "Structure rev
 | `/login` | `_guest/login.tsx` | `_guest`: a signed-in user is sent to `/chat` | done |
 | `/signup` | `_guest/signup.tsx` | `_guest` | done |
 | `/forgot-password` | `_guest/forgot-password.tsx` | `_guest` | done |
-| `/verify-email` | `verify-email.tsx` | none: works signed in or out | done |
-| `/reset-password` | `reset-password.tsx` | none: works signed in or out | done |
+| `/verify-email` | `_public/verify-email.tsx` | `_public`: no guard, works signed in or out | done |
+| `/reset-password` | `_public/reset-password.tsx` | `_public`: no guard, works signed in or out | done |
 | `/chat` | `_app/chat.index.tsx` | `_app`: a signed-out visitor is sent to `/login` | placeholder |
 | `/chat/$chatId` | `_app/chat.$chatId.tsx` | `_app` | step 3 |
 | `/friends` | `_app/friends.tsx` | `_app` | step 4 |
@@ -181,7 +185,7 @@ How the guards work:
 
 - `_app` runs `requireUser` in `beforeLoad`: it asks the cache for `me` (one `GET /api/account/me` the first time, then whatever the cache holds: the guards use `queryClient.query` with `staleTime: 'static'`, the replacement for the deprecated `ensureQueryData`, so a navigation never waits for the server; the `_app` layout's own `useMe` refreshes the answer after 5 minutes or when it is invalidated, and `recheckSession` drops it) and redirects to `/login?redirect=<where they were going>` when nobody is signed in. Because it runs before the route renders, no page behind it ever starts a request without a session.
 - `_guest` runs `redirectIfSignedIn`, so a signed-in user who opens `/login` lands on `/chat`.
-- `/verify-email` and `/reset-password` are plain top-level routes: the links in the emails must work whether or not the person happens to be signed in.
+- `/verify-email` and `/reset-password` are in the `_public` layout, which has no guard: the links in the emails must work whether or not the person happens to be signed in. The layout exists so that the page frame (`Page`, the `<main>`) is written once; the two pages render only their content.
 - Both pages read the token from `location.hash` with `useFragmentToken`: it reads the token once into component state and then replaces the history entry with the same URL without the fragment, so the token is not left in the address bar or the browser history. The token lives on in state, which is what lets the reset form resend after a refused password (the server checks the password before it uses up the link). A reload therefore loses the token: the person opens the mailed link again.
 - `/verify-email` posts the token as soon as it opens (a `POST`, never a `GET`), once: a ref guards the effect because StrictMode runs effects twice in development and a link works only once (the app-level test runs it in StrictMode). A successful verification or reset calls `recheckSession`, which resets the cached `me`: the link can belong to another account than the one signed in, and a reset deletes every session of the account, so the cache cannot patch itself.
 - After signing in, the login page goes to the `redirect` parameter, but only through `safeRedirectPath`: it must start with a single `/`. Anything else (`https://...`, `//host`, `/\host`) falls back to `/chat`, so a crafted login link cannot send people to another site.
@@ -287,6 +291,7 @@ Client side:
 - Unit tests cover the logic that can be wrong without anything looking wrong: the fetch wrapper (the request it really builds, `204`, error bodies, a lost connection, cancellation), the query client's retry and 401 rules, the guards and `safeRedirectPath`. They run the real code against a stubbed `fetch`.
 - `test/app.test.tsx` runs the real router, guards, query client and screens in jsdom against a fake API, for the loops no unit test sees: signed-out visitor to login and back to the page they wanted, wrong credentials, off-site `redirect` ignored, sign-out clearing the cache, a session ending while a page is open, and a 401 that must not sign anyone out. Each new screen with a flow of that kind gets a test in a file like this one: `test/accountScreens.test.tsx` has signup, forgot and reset password, the mailed-link pages (token posted once in StrictMode, token removed from the URL) and the banner. The fake API (`test/helpers/fakeApi.ts`) follows `./api.doc.md`; when an endpoint's shape changes there, change the fake in the same patch.
 - The aim is not full coverage: tests are for behaviour that matters and is easy to break. When a test is written for a new rule, break the code on purpose once and check that the test fails.
+- `test/pageFrame.test.tsx` visits every page and checks that it has exactly one `<main>`, the one `Page` draws: a page that writes its own again, or a layout that forgets the frame, fails it.
 - Not tested: how it looks.
 - A runaway navigation loop shows up in the app test as a worker that dies after about half a minute ("JavaScript heap out of memory"), with `Not implemented: Window's scrollTo()` repeated before it.
 
@@ -320,7 +325,7 @@ Sound, and worth keeping as it is: the direction of the imports (`routes/` use `
 - **`strictPort` on 5173**, because the mails link there.
 - **`me` returns `user: null`** and is the single source of "who is signed in", cached for 5 minutes and rechecked on any 401.
 - **No blanket sign-out on 401** (see "How the frontend talks to the server").
-- **`_guest` layout, but `/verify-email` and `/reset-password` outside it,** because the email links must work in both states.
+- **`_guest` layout, but `/verify-email` and `/reset-password` in a layout of their own (`_public`) without a guard,** because the email links must work in both states. The layout also draws the page frame, so no page writes its own `<main>`.
 - **Redirect after login** through `safeRedirectPath`; plain `/login` after a deliberate sign-out.
 - **TanStack Router file-based routing, `routeTree.gen.ts` committed.**
 - **Tests in `frontend/test/`, mirroring `src/`,** the way the server keeps its tests in `server/test/` (with `helpers/` for what they share), so `src/` holds only what ships to the browser and a folder listing of the app is not half test files. The price is a `../src/` prefix on every import in a test, and that a test file left in `src/` is silently not run (see "Testing").

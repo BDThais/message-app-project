@@ -1,4 +1,5 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router';
+import { Page } from '../components/ui/Page';
 import { redirectIfSignedIn } from '../features/account/guards';
 
 // Pages for people who are not signed in (login, signup, "forgot password").
@@ -7,8 +8,8 @@ import { redirectIfSignedIn } from '../features/account/guards';
 export const Route = createFileRoute('/_guest')({
   beforeLoad: ({ context }) => redirectIfSignedIn(context.queryClient),
   component: () => (
-    <main className="page page-narrow">
+    <Page narrow>
       <Outlet />
-    </main>
+    </Page>
   ),
 });

@@ -22,7 +22,7 @@ export function VerifyEmailPage() {
   }, [token, mutate]);
 
   return (
-    <main className="page page-narrow">
+    <>
       <h1>Verify your email</h1>
       {token === null ? (
         <p>
@@ -44,6 +44,6 @@ export function VerifyEmailPage() {
       <p>
         <Link to="/chat">Continue</Link>
       </p>
-    </main>
+    </>
   );
 }
