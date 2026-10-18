@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit';
+import { createRateLimiter } from '../../lib/rateLimiter';
 
 // Per-user limiters (keyed by user id, not IP) for the friend routes. They
 // read req.user, which requireUserAuth sets, so mount them after it.
@@ -6,7 +6,7 @@ import rateLimit from 'express-rate-limit';
 // Phone lookup lets a signed-in user test whether a number is registered, so
 // it is capped to keep it from being used to scan numbers. Every request that
 // gets past requireUserAuth counts, including ones answered with a 400.
-export const friendSearchLimiter = rateLimit({
+export const friendSearchLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   limit: 30,
   keyGenerator: (req) => String(req.user!.id),
@@ -16,7 +16,7 @@ export const friendSearchLimiter = rateLimit({
 // Sending a request notifies another person, so it is capped to keep it from
 // being used to spam. Like the search limiter, every request that gets past
 // requireUserAuth counts, including ones answered with a 400 or 409.
-export const friendRequestLimiter = rateLimit({
+export const friendRequestLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000,
   limit: 20,
   keyGenerator: (req) => String(req.user!.id),

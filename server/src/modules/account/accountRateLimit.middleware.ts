@@ -1,10 +1,11 @@
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { ipKeyGenerator } from 'express-rate-limit';
 import { normalizeEmail } from '../../lib/emailAddress';
+import { createRateLimiter } from '../../lib/rateLimiter';
 import { isRecord } from '../../lib/validation';
 
 // Limiters for the account routes. Login is keyed by IP (the default) because
 // nobody is signed in yet at that point.
-export const loginLimiter = rateLimit({
+export const loginLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   limit: 10,
   message: { error: 'Too many attempts, try again later' },
@@ -17,7 +18,7 @@ export const loginLimiter = rateLimit({
 // One limiter instance serves both routes on purpose, so they share a single
 // budget of guesses instead of one each. Every request that gets past
 // requireUserAuth counts, including ones answered with a 400.
-export const passwordCheckLimiter = rateLimit({
+export const passwordCheckLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   limit: 10,
   keyGenerator: (req) => String(req.user!.id),
@@ -28,7 +29,7 @@ export const passwordCheckLimiter = rateLimit({
 // like login it is keyed by IP. The token is 256 random bits and cannot be
 // guessed, so this is not what protects it: it only keeps one client from
 // hammering the endpoint. Every request counts, including ones answered with a 400.
-export const emailVerifyLimiter = rateLimit({
+export const emailVerifyLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   limit: 10,
   message: { error: 'Too many attempts, try again later' },
@@ -38,7 +39,7 @@ export const emailVerifyLimiter = rateLimit({
 // 60-second cooldown in the service spaces the mails out; this caps how many
 // there are). Mount it after requireUserAuth. Every request that gets past
 // requireUserAuth counts, including ones answered with a 409 or the cooldown's 429.
-export const emailVerificationRequestLimiter = rateLimit({
+export const emailVerificationRequestLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000,
   limit: 5,
   keyGenerator: (req) => String(req.user!.id),
@@ -53,7 +54,7 @@ export const emailVerificationRequestLimiter = rateLimit({
 // is registered.
 //
 // Per IP: keeps one client from trying many addresses.
-export const passwordResetRequestIpLimiter = rateLimit({
+export const passwordResetRequestIpLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   limit: 10,
   message: { error: 'Too many attempts, try again later' },
@@ -75,7 +76,7 @@ export function passwordResetEmailKey(req: { body?: unknown; ip?: string | undef
   return `ip:${ipKeyGenerator(req.ip ?? '')}`;
 }
 
-export const passwordResetRequestEmailLimiter = rateLimit({
+export const passwordResetRequestEmailLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000,
   limit: 3,
   keyGenerator: passwordResetEmailKey,
@@ -85,7 +86,7 @@ export const passwordResetRequestEmailLimiter = rateLimit({
 // Using a reset link: like email verification, the token is the credential and it cannot be
 // guessed, so this only keeps one client from hammering the endpoint. Every request counts,
 // including ones answered with a 400.
-export const passwordResetLimiter = rateLimit({
+export const passwordResetLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   limit: 10,
   message: { error: 'Too many attempts, try again later' },

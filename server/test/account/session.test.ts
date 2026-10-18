@@ -6,11 +6,6 @@ import { hashPassword } from '../../src/lib/passwordHash';
 import { prisma } from '../../src/lib/prisma';
 import { createSessionRow } from '../helpers/users';
 
-// loginLimiter allows 10 requests per IP in 15 minutes and the whole file shares that budget (the
-// limiter lives as long as the file does). This file sends exactly 10 requests to the login route (a
-// row of a table counts as one request): it is at the limit, and the 11th answers 429, which shows
-// up as a failure of whichever test comes last. A new test that logs in belongs in another file
-// (signup.test.ts, for example, has its own budget).
 const loginRoute = '/api/account/login';
 const meRoute = '/api/account/me';
 const logoutRoute = '/api/account/logout';
@@ -55,6 +50,17 @@ describe(`POST ${loginRoute}`, () => {
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ error: 'Invalid email or password' });
     expect(await prisma.session.count()).toBe(0);
+  });
+
+  it('finds the account whatever the case the address is typed in', async () => {
+    await createUser();
+
+    const res = await request(app)
+      .post(loginRoute)
+      .send({ email: 'ALICE@Example.COM', password: userData.password });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.email).toBe(userData.email);
   });
 
   it('returns 200 and persists a session for valid credentials', async () => {

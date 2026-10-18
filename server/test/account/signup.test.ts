@@ -42,7 +42,6 @@ describe(`POST ${signUpRoute}`, () => {
     const user = await prisma.user.findUniqueOrThrow({ where: { tel: validBody.tel } });
     expect(user.email).toBe('john.doe@example.com');
 
-    // Two logins: this file sends no other request to the login route (the limit is 10 per 15 minutes).
     for (const email of ['john.doe@example.com', 'JOHN.DOE@EXAMPLE.COM']) {
       const login = await request(app).post('/api/account/login').send({ email, password: validBody.password });
 
@@ -63,6 +62,35 @@ describe(`POST ${signUpRoute}`, () => {
     expect(res.status).toBe(201);
     const user = await prisma.user.findUniqueOrThrow({ where: { email: validBody.email } });
     expect(user.tel).toBe(validBody.tel);
+  });
+
+  // Every one of these answered 500 before: the fields were used as strings without being checked.
+  it.each([
+    ['name is a number', { name: 123 }],
+    ['name is an array', { name: ['johndoe'] }],
+    ['email is a number', { email: 123 }],
+    ['email is an array', { email: ['john@example.com'] }],
+    ['tel is a number', { tel: 14155552671 }],
+    ['tel is an object', { tel: { number: '+14155552671' } }],
+    ['password is a number', { password: 12345678 }],
+    ['password is an array', { password: ['Str0ng!Pass'] }],
+  ])('returns 400, not 500, when %s', async (_label, override) => {
+    const res = await request(app).post(signUpRoute).send({ ...validBody, ...override });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'All fields are required' });
+    expect(await prisma.user.count()).toBe(0);
+  });
+
+  it.each([
+    ['no body at all', (req: request.Test) => req],
+    ['a text body', (req: request.Test) => req.set('Content-Type', 'text/plain').send('hello')],
+    ['a JSON array', (req: request.Test) => req.send([validBody])],
+  ])('returns 400, not 500, for %s', async (_label, shape) => {
+    const res = await shape(request(app).post(signUpRoute));
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'All fields are required' });
   });
 
   it('returns 400 when a field is missing', async () => {

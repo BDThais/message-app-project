@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { resolve } from 'node:path';
 import { afterAll, beforeEach } from 'vitest';
 import { setMailer } from '../src/lib/mailer';
+import { resetRateLimiters } from '../src/lib/rateLimiter';
 import { outbox } from './helpers/mailer';
 
 dotenv.config({ path: resolve(import.meta.dirname, '../.env.test') });
@@ -27,8 +28,10 @@ const { prisma } = await import('../src/lib/prisma');
 // No test sends or logs a real mail: whatever the app sends lands in `outbox`.
 setMailer(outbox);
 
+// Every test starts with full rate-limit budgets (see src/lib/rateLimiter.ts).
 beforeEach(async () => {
   outbox.clear();
+  await resetRateLimiters();
   await prisma.$transaction([
     prisma.friendListMember.deleteMany(),
     prisma.pendingFriendRequest.deleteMany(),

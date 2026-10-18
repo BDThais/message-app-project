@@ -8,11 +8,9 @@ import { outbox } from '../helpers/mailer';
 import { createResetLink, createVerifiedUser } from '../helpers/passwordReset';
 import { loginAs } from '../helpers/users';
 
-// passwordResetLimiter allows 10 requests per IP in 15 minutes, and loginLimiter another 10 for
-// /account/login; every test in this file shares both budgets (the limiters live as long as the
-// file does). This file sends 9 requests to the reset route and 2 to login: keep it under 10. The
-// rules that need many requests are tested on the service (passwordReset.service.test.ts), the bad
-// bodies in the validator's unit test, and the limiter itself in passwordResetLimiter.test.ts.
+// The rules that need many requests are tested on the service (passwordReset.service.test.ts), the
+// bad bodies in the validator's unit test, and the limiter itself in passwordResetLimiter.test.ts.
+// Every test starts with full rate-limit budgets (test/setup.ts), so none of them counts requests.
 const route = '/api/account/password/reset';
 const invalidLink = { error: 'This reset link is invalid or has expired' };
 const oldPassword = 'Str0ng!Pass';

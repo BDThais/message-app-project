@@ -11,11 +11,9 @@ import { outbox } from '../helpers/mailer';
 import { createVerifiedUser } from '../helpers/passwordReset';
 import { createUser } from '../helpers/users';
 
-// passwordResetRequestIpLimiter allows 10 requests per IP in 15 minutes, and every test in this file
-// shares that one budget (the limiter lives as long as the file does), so this file sends 9 requests
-// to the route in all: keep it under 10. The rules that need many requests are tested on the service
-// (passwordReset.service.test.ts), the bad bodies in the validator's unit test, and the limiters in
-// the files named *Limiter.test.ts.
+// The rules that need many requests are tested on the service (passwordReset.service.test.ts), the
+// bad bodies in the validator's unit test, and the limiters in the files named *Limiter.test.ts.
+// Every test starts with full rate-limit budgets (test/setup.ts), so none of them counts requests.
 const route = '/api/account/password/reset-request';
 const accepted = { message: 'If an account exists for that email, a reset link is on its way' };
 

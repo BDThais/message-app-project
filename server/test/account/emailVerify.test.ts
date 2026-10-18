@@ -6,10 +6,9 @@ import { createVerificationLink, tokenFromMail } from '../helpers/emailVerificat
 import { outbox } from '../helpers/mailer';
 import { createUser, loginAs } from '../helpers/users';
 
-// emailVerifyLimiter allows 10 requests per IP in 15 minutes, and every test in this file shares
-// that one budget (the limiter lives as long as the file does), so keep the requests to the route
-// few: the rules that need many are tested on the service (emailVerification.service.test.ts) and
-// the bad bodies in the validator's unit test. The limiter itself is in emailVerifyLimiter.test.ts.
+// The rules that need many requests are tested on the service (emailVerification.service.test.ts),
+// the bad bodies in the validator's unit test, and the limiter itself in emailVerifyLimiter.test.ts.
+// Every test starts with full rate-limit budgets (test/setup.ts), so none of them counts requests.
 const route = '/api/account/email/verify';
 const invalidLink = { error: 'This verification link is invalid or has expired' };
 

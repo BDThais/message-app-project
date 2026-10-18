@@ -2,7 +2,6 @@ import type { Request, Response, NextFunction } from 'express';
 import { normalizeEmail } from '../../lib/emailAddress';
 import { hashPassword, verifyPassword } from '../../lib/passwordHash';
 import { validateAccountBody, checkDuplication, normalizeTel, uniqueViolationMessage } from './signup.validator';
-import type { AccountBody } from './signup.validator';
 import { validateLogin } from './login.validator';
 import { validateUpdateProfileBody } from './profile.validator';
 import { validateChangePasswordBody } from './password.validator';
@@ -20,12 +19,11 @@ import config from '../../config/config';
 
 export async function signup(req: Request, res: Response, next: NextFunction) {
     try {
-        const { name, email, tel, password } = req.body as AccountBody;
-            
-        const validationError = validateAccountBody({ name, email, tel, password });
-        if (validationError) {
-          return res.status(400).json({ error: validationError });
+        const validation = validateAccountBody(req.body);
+        if (!validation.valid) {
+          return res.status(400).json({ error: validation.message });
         }
+        const { name, email, tel, password } = validation.data;
     
         // validateAccountBody accepted tel, so it normalizes. The duplicate check,
         // the insert and the mail use the canonical forms, never the raw input: the

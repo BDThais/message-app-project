@@ -66,19 +66,38 @@ function validateTel(tel: string): string | null {
     return null;
 }
 
-export function validateAccountBody(body: AccountBody): string | null {
-    const { name, email, tel, password } = body;
+type AccountValidation =
+    | { valid: true; data: AccountBody }
+    | { valid: false; message: string };
 
-    if (!name || !email || !tel || !password) {
-        return 'All fields are required';
+/**
+ * Validates the body of POST /account/signup: { name, email, tel, password }. A field that is not a
+ * non-empty string counts as missing, like at login and at the password reset (a number, an array,
+ * an object, a body that is not an object, or no JSON body at all: Express leaves req.body undefined
+ * then). The rules are checked in this order, and the first one that fails is the answer.
+ */
+export function validateAccountBody(body: unknown): AccountValidation {
+    const { name, email, tel, password } = isRecord(body) ? body : {};
+
+    if (
+        typeof name !== 'string' || name === '' ||
+        typeof email !== 'string' || email === '' ||
+        typeof tel !== 'string' || tel === '' ||
+        typeof password !== 'string' || password === ''
+    ) {
+        return { valid: false, message: 'All fields are required' };
     }
 
-    return (
+    const message =
         validateName(name) ??
         validateEmail(email) ??
         validateTel(tel) ??
-        validatePassword(password)
-    );
+        validatePassword(password);
+    if (message) {
+        return { valid: false, message };
+    }
+
+    return { valid: true, data: { name, email, tel, password } };
 }
 
 const EMAIL_EXISTS = 'Email already exists';

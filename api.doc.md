@@ -93,7 +93,7 @@ Creates an account. Public. It does not sign the user in.
 { "name": "JohnDoe", "email": "john@example.com", "tel": "+1234567890", "password": "Str0ng!Pass" }
 ```
 
-- All four fields are required (`400 All fields are required`). The rules are checked in this order and the first one that fails is the answer:
+- All four fields are required (`400 All fields are required`): a field that is empty or is not a string counts as missing, and so does a request without a JSON body. The rules are checked in this order and the first one that fails is the answer:
   - `name`: letters and digits only (`Name must contain only letters and numbers`).
   - `email`: a valid address (`Invalid email format`). Addresses are not case-sensitive: the server stores the address lower-cased, so `John@Example.com` and `john@example.com` are one account at signup, at login and at password reset, and `email` comes back lower-cased in every `User` body, whatever case it was typed in. Nothing else about the address is changed (no trimming, and dots and `+tags` stay).
   - `tel`: a valid international number with the leading `+` (`Invalid phone number format`). Spaces, dashes and parentheses are accepted and the number is stored in its canonical form, `+` and digits only (an extension is dropped), so `tel` always comes back canonical.
