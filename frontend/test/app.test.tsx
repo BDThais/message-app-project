@@ -146,3 +146,18 @@ describe('the app', () => {
     expect(router.state.location.pathname).toBe('/chat');
   });
 });
+
+describe('the route tree', () => {
+  it('shows /chat inside the chat layout, where the room-list sidebar goes in step 3', async () => {
+    stubApi({ signedIn: true });
+    const { router } = renderApp('/chat');
+
+    await screen.findByRole('heading', { name: 'Chats' });
+    expect(router.state.matches.map((match) => match.routeId)).toEqual([
+      '__root__',
+      '/_app',
+      '/_app/chat',
+      '/_app/chat/',
+    ]);
+  });
+});

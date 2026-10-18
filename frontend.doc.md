@@ -130,6 +130,7 @@ frontend/
     │   ├── _public/verify-email.tsx
     │   ├── _public/reset-password.tsx
     │   ├── _app.tsx              // layout route: the requireUser guard, renders AppLayout
+    │   ├── _app/chat.tsx         // layout of the chat pages: the room-list sidebar goes here in step 3
     │   └── _app/chat.index.tsx   // placeholder
     ├── components/
     │   └── ui/
@@ -176,8 +177,8 @@ Changes to this layout that are worth making before step 3 are in "Structure rev
 | `/forgot-password` | `_guest/forgot-password.tsx` | `_guest` | done |
 | `/verify-email` | `_public/verify-email.tsx` | `_public`: no guard, works signed in or out | done |
 | `/reset-password` | `_public/reset-password.tsx` | `_public`: no guard, works signed in or out | done |
-| `/chat` | `_app/chat.index.tsx` | `_app`: a signed-out visitor is sent to `/login` | placeholder |
-| `/chat/$chatId` | `_app/chat.$chatId.tsx` | `_app` | step 3 |
+| `/chat` | `_app/chat.index.tsx` | `_app`: a signed-out visitor is sent to `/login`; then `_app/chat.tsx` | placeholder |
+| `/chat/$chatId` | `_app/chat.$chatId.tsx` | `_app`, then `_app/chat.tsx` | step 3 |
 | `/friends` | `_app/friends.tsx` | `_app` | step 4 |
 | `/settings` | `_app/settings.tsx` | `_app` | step 5 |
 
@@ -241,7 +242,7 @@ Built as described. Where the plan was open: the "verification notice" is the si
 
 ### Step 3 — chat core
 
-- Room list in a sidebar from `GET /api/chat` (`lastMessage`, `unreadCount`), the open conversation at `/chat/$chatId`.
+- Room list in a sidebar from `GET /api/chat` (`lastMessage`, `unreadCount`), the open conversation at `/chat/$chatId`. The sidebar belongs in `_app/chat.tsx` (already there as an empty layout), the parent of both chat pages, so it stays mounted while the person goes from one room to another; the two pages render only the conversation.
 - Messages with `useInfiniteQuery`: pages arrive newest first, `getNextPageParam` is the oldest id when `hasMore`, and the list is reversed for display. Keep the scroll position when older messages are prepended (the fiddly part: budget time for it).
 - Send, edit and delete (sender only). On success, put the message the API returned into the cache; no refetch.
 - Mark as read: `PUT /api/chat/:chatid/read` while a room is open and its latest message is in view; update `unreadCount` in the room list's cache.
@@ -291,6 +292,7 @@ Client side:
 - Unit tests cover the logic that can be wrong without anything looking wrong: the fetch wrapper (the request it really builds, `204`, error bodies, a lost connection, cancellation), the query client's retry and 401 rules, the guards and `safeRedirectPath`. They run the real code against a stubbed `fetch`.
 - `test/app.test.tsx` runs the real router, guards, query client and screens in jsdom against a fake API, for the loops no unit test sees: signed-out visitor to login and back to the page they wanted, wrong credentials, off-site `redirect` ignored, sign-out clearing the cache, a session ending while a page is open, and a 401 that must not sign anyone out. Each new screen with a flow of that kind gets a test in a file like this one: `test/accountScreens.test.tsx` has signup, forgot and reset password, the mailed-link pages (token posted once in StrictMode, token removed from the URL) and the banner. The fake API (`test/helpers/fakeApi.ts`) follows `./api.doc.md`; when an endpoint's shape changes there, change the fake in the same patch.
 - The aim is not full coverage: tests are for behaviour that matters and is easy to break. When a test is written for a new rule, break the code on purpose once and check that the test fails.
+- `test/app.test.tsx` also checks that `/chat` is matched inside the `_app/chat.tsx` layout.
 - `test/pageFrame.test.tsx` visits every page and checks that it has exactly one `<main>`, the one `Page` draws: a page that writes its own again, or a layout that forgets the frame, fails it.
 - Not tested: how it looks.
 - A runaway navigation loop shows up in the app test as a worker that dies after about half a minute ("JavaScript heap out of memory"), with `Not implemented: Window's scrollTo()` repeated before it.
