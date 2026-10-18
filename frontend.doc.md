@@ -104,6 +104,7 @@ frontend/
 │   ├── app.test.tsx              // the sign-in loop through the real app against a fake API
 │   ├── accountScreens.test.tsx   // signup, forgot/reset password, the mailed-link pages, the banner (same approach)
 │   ├── pageFrame.test.tsx        // every page has exactly one <main>
+│   ├── structure.test.ts         // the folder rules: no test in src/, who may import whom
 │   ├── helpers/
 │   │   ├── fakeApi/              // the fake server (a stubbed fetch), one file per feature
 │   │   │   ├── index.ts          // stubApi: the stubbed fetch, tries each feature's endpoints in turn
@@ -164,6 +165,7 @@ Changes to this layout that are worth making before step 3 are in "Structure rev
 ## Conventions
 
 - **Feature folders**, mirroring the server's `modules/`: everything for one feature lives under `src/features/<feature>/`. Route files stay thin.
+- **Imports go one way:** `routes/` use `features/`, and `features/` use `components/` and `lib/`. `lib/` and `components/` never import from `features/` or `routes/` (`test/structure.test.ts` checks it).
 - **`api.ts` has the only mention of a URL path.** Components never call `fetch` or `api` directly: they use hooks from `queries.ts`.
 - **One query-key factory per feature** (`accountKeys.me()`, later `chatKeys.list()`, `chatKeys.messages(chatId)`), so no key is typed by hand in two places.
 - **Cache updates go through functions** (`setSignedInUser`, later `addMessageToCache`, `removeChatFromCache`). Mutations and socket handlers call the same function, and such a function must be idempotent by id, so a message that arrives twice (the sender's own REST response and the socket event) is stored once.
@@ -171,7 +173,7 @@ Changes to this layout that are worth making before step 3 are in "Structure rev
 - **TypeScript:** `strict` and `noUncheckedIndexedAccess`, like the server. `exactOptionalPropertyTypes` is off here because React's and TanStack's own types do not follow it.
 - **Types of API responses are written by hand** in each feature's `types.ts`, from the shapes in `./api.doc.md`. A shared package or generated types can come later if keeping them in step becomes a chore.
 - **Files:** components `PascalCase.tsx`, everything else `camelCase.ts`.
-- **Tests live in `test/`, not next to the code**, in the same folders as the file they test (`src/lib/http.ts` is tested by `test/lib/http.test.ts`) and named `<file>.test.ts(x)`. What the app-level tests share (the fake API, the render helper) is in `test/helpers/`. Tests import the code under test as `../src/...` (one `../` per folder). Nothing in `src/` imports from `test/`.
+- **Tests live in `test/`, not next to the code**, in the same folders as the file they test (`src/lib/http.ts` is tested by `test/lib/http.test.ts`) and named `<file>.test.ts(x)`. What the app-level tests share (the fake API, the render helper) is in `test/helpers/`. Tests import the code under test as `../src/...` (one `../` per folder). Nothing in `src/` imports from `test/`, and no test file is left in `src/`: `test/structure.test.ts` fails if either happens.
 
 ## Routing and authentication
 
@@ -294,7 +296,7 @@ Client side:
 
 ## Testing
 
-- `npm test` runs Vitest on `test/**/*.test.ts(x)`. No database and no server are needed. A test file put anywhere else, `src/` included, is not run: `vitest.config.ts` only looks in `test/`. `tsconfig.json` includes `test/`, so `npm run typecheck` checks the tests too.
+- `npm test` runs Vitest on `test/**/*.test.ts(x)`. No database and no server are needed. A test file put anywhere else is not run, because `vitest.config.ts` only looks in `test/`; `test/structure.test.ts` fails when one is left in `src/`, and also when `lib/` or `components/` import from `features/` or `routes/`, or anything in `src/` imports from `test/`. `tsconfig.json` includes `test/`, so `npm run typecheck` checks the tests too.
 - Unit tests cover the logic that can be wrong without anything looking wrong: the fetch wrapper (the request it really builds, `204`, error bodies, a lost connection, cancellation), the query client's retry and 401 rules, the guards and `safeRedirectPath`. They run the real code against a stubbed `fetch`.
 - `test/app.test.tsx` runs the real router, guards, query client and screens in jsdom against a fake API, for the loops no unit test sees: signed-out visitor to login and back to the page they wanted, wrong credentials, off-site `redirect` ignored, sign-out clearing the cache, a session ending while a page is open, and a 401 that must not sign anyone out. Each new screen with a flow of that kind gets a test in a file like this one: `test/accountScreens.test.tsx` has signup, forgot and reset password, the mailed-link pages (token posted once in StrictMode, token removed from the URL) and the banner. The fake API (`test/helpers/fakeApi/`) follows `./api.doc.md`; when an endpoint's shape changes there, change the fake in the same patch. It has one file per feature (`account.ts`, `chats.ts`), each a function that answers its own endpoints and returns `undefined` for any other request, and one shared state (`state.ts`). Faking a new feature's endpoints means a new file, one more entry in the list in `index.ts`, and its data in the state.
 - The aim is not full coverage: tests are for behaviour that matters and is easy to break. When a test is written for a new rule, break the code on purpose once and check that the test fails.
@@ -336,7 +338,7 @@ Sound, and worth keeping as it is: the direction of the imports (`routes/` use `
 - **`_guest` layout, but `/verify-email` and `/reset-password` in a layout of their own (`_public`) without a guard,** because the email links must work in both states. The layout also draws the page frame, so no page writes its own `<main>`.
 - **Redirect after login** through `safeRedirectPath`; plain `/login` after a deliberate sign-out.
 - **TanStack Router file-based routing, `routeTree.gen.ts` committed.**
-- **Tests in `frontend/test/`, mirroring `src/`,** the way the server keeps its tests in `server/test/` (with `helpers/` for what they share), so `src/` holds only what ships to the browser and a folder listing of the app is not half test files. The price is a `../src/` prefix on every import in a test, and that a test file left in `src/` is silently not run (see "Testing").
+- **Tests in `frontend/test/`, mirroring `src/`,** the way the server keeps its tests in `server/test/` (with `helpers/` for what they share), so `src/` holds only what ships to the browser and a folder listing of the app is not half test files. The price is a `../src/` prefix on every import in a test, and that a test file left in `src/` would not be run, which `test/structure.test.ts` turns into a failure.
 - **Vitest 5** in the frontend (the server uses Vitest 4): Vitest 5 installed cleanly next to Vite 8, while installing Vitest 4 there failed with an npm error in the sandbox this was built in. Align the two later if it matters.
 - **Hand-written API types** per feature for now.
 - **The API specification has its own document**, `./api.doc.md`, that this document and `./backend.doc.md` both point to, so an endpoint change is made in one place. The backend doc keeps how the endpoints are built.
