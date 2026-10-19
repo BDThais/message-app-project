@@ -128,6 +128,26 @@ describe('the app', () => {
     expect(router.state.location.search).toEqual({ redirect: '/chat' });
   });
 
+  it('does not take a session that ends after a failed sign-out for a sign-out', async () => {
+    const server = stubApi({ signedIn: true });
+    server.logoutFails = true;
+    const user = userEvent.setup();
+    const { router, queryClient } = renderApp('/chat');
+
+    const button = await screen.findByRole('button', { name: 'Sign out' });
+    await user.click(button);
+    await waitFor(() => expect(server.count('POST /api/account/logout')).toBe(1));
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false)); // failed: still signed in
+    expect(router.state.location.pathname).toBe('/chat');
+
+    // Later the session ends by itself. That is not "I signed out", so /login is told where to come back to.
+    server.session = null;
+    await expect(queryClient.query({ queryKey: ['chats'], queryFn: () => api.get('/chat') })).rejects.toThrow();
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeTruthy();
+    expect(router.state.location.search).toEqual({ redirect: '/chat' });
+  });
+
   it('stays signed in when a 401 does not mean the session ended (a wrong current password)', async () => {
     const server = stubApi({ signedIn: true });
     const { router, queryClient } = renderApp('/chat');

@@ -42,6 +42,8 @@ export function createState({ signedIn }: { signedIn: boolean }) {
     sessionUserId: signedIn ? john.id : (null as number | null),
     /** Make POST /account/email/verification answer 429, as it does within a minute of the last mail. */
     resendLimited: false,
+    /** Make POST /account/logout answer 500, so the sign-out fails and the session stays. */
+    logoutFails: false,
     /** While set, every request waits for it before it is answered (to look at a request that is still running). */
     gate: null as Promise<void> | null,
     requests: [] as string[],

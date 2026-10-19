@@ -1,17 +1,14 @@
-import { useRef } from 'react';
 import { Outlet } from '@tanstack/react-router';
-import { useLogout, useMe } from '../queries';
+import { useMe, useSignOut } from '../queries';
 import { useRedirectWhenSignedOut } from '../useRedirectWhenSignedOut';
 import { VerifyEmailBanner } from './VerifyEmailBanner';
 
 /** The frame around every page for a signed-in user (the `_app` route): header, banner, the page itself. */
 export function AppLayout() {
   const { data: user } = useMe();
-  const logout = useLogout();
-  // True from the moment the person clicks "Sign out", so that case does not get a `redirect`.
-  const signingOut = useRef(false);
+  const { signOut, isSigningOut } = useSignOut();
 
-  useRedirectWhenSignedOut(user, signingOut);
+  useRedirectWhenSignedOut(user, { isSigningOut });
 
   if (!user) return null;
 
@@ -21,18 +18,7 @@ export function AppLayout() {
         <strong>Message App</strong>
         <span className="app-header-user">
           {user.name}
-          <button
-            type="button"
-            disabled={logout.isPending}
-            onClick={() => {
-              signingOut.current = true;
-              logout.mutate(undefined, {
-                onError: () => {
-                  signingOut.current = false;
-                },
-              });
-            }}
-          >
+          <button type="button" disabled={isSigningOut} onClick={signOut}>
             Sign out
           </button>
         </span>

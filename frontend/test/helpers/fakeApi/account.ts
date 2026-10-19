@@ -25,6 +25,7 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
     }
 
     case 'POST /api/account/logout':
+      if (state.logoutFails) return json({ error: 'Something went wrong' }, 500);
       state.session = null;
       return json({ user: null });
 

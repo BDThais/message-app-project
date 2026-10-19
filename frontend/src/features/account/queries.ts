@@ -39,12 +39,21 @@ export function useLogin() {
   });
 }
 
-export function useLogout() {
+/**
+ * Signs the person out. `isSigningOut` is true from the click until the request fails, and stays
+ * true once it has succeeded: by then the cached user is `null` and the layout is about to leave
+ * for /login, which `useRedirectWhenSignedOut` must not take for a session that ended by itself.
+ */
+export function useSignOut() {
   const queryClient = useQueryClient();
-  return useMutation({
+  const signOut = useMutation({
     mutationFn: logout,
     onSuccess: () => setSignedInUser(queryClient, null),
   });
+  return {
+    signOut: () => signOut.mutate(),
+    isSigningOut: signOut.isPending || signOut.isSuccess,
+  };
 }
 
 /**
