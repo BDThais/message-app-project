@@ -98,15 +98,15 @@ frontend/
 ├── .gitignore
 ├── index.html
 ├── package.json
-├── tsconfig.json                 // the app: src/ and test/, browser types, the @/ alias
+├── tsconfig.json                 // the app: src/ and test/, browser types, the @/ and @contract/ aliases
 ├── tsconfig.node.json            // vite.config.ts and vitest.config.ts, Node types
-├── vite.config.ts                // router plugin, React plugin, the @/ alias, port 5173, /api proxy
-├── vitest.config.ts              // test settings: runs test/**/*.test.ts(x), the @/ alias; kept apart so tests skip the router plugin and the proxy
+├── vite.config.ts                // router plugin, React plugin, the @/ and @contract/ aliases, port 5173, /api proxy
+├── vitest.config.ts              // test settings: runs test/**/*.test.ts(x), the two aliases; kept apart so tests skip the router plugin and the proxy
 ├── test/                         // every test and its helpers, mirroring src/ (like the server's test/)
 │   ├── app.test.tsx              // the sign-in loop through the real app against a fake API
 │   ├── accountScreens.test.tsx   // signup, forgot/reset password, the mailed-link pages, the banner (same approach)
 │   ├── pageFrame.test.tsx        // every page has exactly one <main>
-│   ├── structure.test.ts         // the folder rules: no test in src/, who may import whom
+│   ├── structure.test.ts         // the folder rules: no test in src/, who may import whom, the only way into server/ (@contract/, import type)
 │   ├── helpers/
 │   │   ├── fakeApi/              // the fake server (a stubbed fetch), one file per feature
 │   │   │   ├── index.ts          // stubApi: the stubbed fetch, tries each feature's endpoints in turn
@@ -147,7 +147,7 @@ frontend/
     │       └── TextField.tsx     // label + input + hint, wired together
     ├── features/
     │   └── account/
-    │       ├── types.ts          // User, LoginInput, SignupInput, ResetPasswordInput
+    │       ├── types.ts          // User (from the contract), LoginInput and SignupInput (the contract's bodies), ResetPasswordInput
     │       ├── api.ts            // one function per endpoint, no React
     │       ├── queries.ts        // query keys, queryOptions, hooks, recheckSession
     │       ├── guards.ts         // beforeLoad helpers, safeRedirectPath
@@ -173,7 +173,7 @@ Planned additions: `features/chats/` and `features/friends/` (each with `types.t
 - **Cache updates go through functions** (`setSignedInUser`, later `addMessageToCache`, `removeChatFromCache`). Mutations and socket handlers call the same function, and such a function must be idempotent by id, so a message that arrives twice (the sender's own REST response and the socket event) is stored once.
 - **Whatever the server decides, the server decides.** Client-side checks (a password hint, a required field) exist to save a round trip, never to replace the server's validation. Show the server's `{ error }` text.
 - **TypeScript:** `strict` and `noUncheckedIndexedAccess`, like the server. `exactOptionalPropertyTypes` is off here because React's and TanStack's own types do not follow it.
-- **Types of API responses are written by hand** in each feature's `types.ts`, from the shapes in `./api.doc.md`. A shared package or generated types can come later if keeping them in step becomes a chore.
+- **The shapes of the API come from the server's contract,** `server/src/contract/` (see "API contract" in `./backend.doc.md`), imported as `@contract/...`: a second `paths` entry in `tsconfig.json`, with the same `resolve.tsconfigPaths` line in the two config files. A feature's `types.ts` re-exports what it needs from there (`User`) and keeps only what is the frontend's own (`ResetPasswordInput` has a camelCase `newPassword`). `api.ts` types each response with the contract (`api.get<MeResponse>(...)`) and each request body with `satisfies` (`{ token, new_password: newPassword } satisfies ResetPasswordBody`), so a key spelled differently on the server stops compiling. The only way into `server/` is `@contract/`, and only with `import type`: `import { type X }` still loads the file, and a value from the contract would need the dev server to serve a file outside `frontend/` (`test/structure.test.ts` checks both). The account feature is on the contract, and so are the success bodies of the fake API in `test/helpers/`; the chats and friends features take their shapes from it when they are written.
 - **Files:** components `PascalCase.tsx`, everything else `camelCase.ts`.
 - **Tests live in `test/`, not next to the code**, in the same folders as the file they test (`src/lib/http.ts` is tested by `test/lib/http.test.ts`) and named `<file>.test.ts(x)`. What the app-level tests share (the fake API, the render helper) is in `test/helpers/`. Nothing in `src/` imports from `test/`, and no test file is left in `src/`: `test/structure.test.ts` fails if either happens.
 
@@ -205,7 +205,7 @@ How the guards work:
 
 ## Using the API from the screens
 
-The API itself (every endpoint's request, response, status codes, error texts, rate limits, and the rules that come with them) is specified in `./api.doc.md`; the types in each feature's `types.ts` are written from its "Shapes" section. What follows is only how the screens are meant to use it.
+The API itself (every endpoint's request, response, status codes, error texts, rate limits, and the rules that come with them) is specified in `./api.doc.md`; the shapes of its bodies are in `server/src/contract/` (see "Shapes" in that document). What follows is only how the screens are meant to use it.
 
 ### Account
 
@@ -345,7 +345,7 @@ Sound from the start, and kept: the direction of the imports (`routes/` use `fea
 - **One `features/chats/` for rooms, members and messages,** not a folder each. See "Planned additions" for why.
 - **An `@/` alias for `src/`,** so an import from another folder does not count `../` (`../../../src/features/account/types` became `@/features/account/types`) and moving a file does not break the imports that leave its folder. It is one `paths` entry in `tsconfig.json` plus `resolve.tsconfigPaths: true` in the Vite and Vitest configs (a Vite 8 option, so no plugin). Imports inside a feature stay relative on purpose.
 - **Vitest 5** in the frontend (the server uses Vitest 4): Vitest 5 installed cleanly next to Vite 8, while installing Vitest 4 there failed with an npm error in the sandbox this was built in. Align the two later if it matters.
-- **Hand-written API types** per feature for now.
+- **The API's shapes are code in one folder, `server/src/contract/`,** that the server and the frontend both compile against, rather than a copy in each feature's `types.ts` (with the one in `api.doc.md` and the fake API's, a third and fourth copy that no compiler compares). The folder is inside the server's `src/` because the server's `tsc` runs with `rootDir: ./src`: a `shared/` folder at the repository root would need the server's build changed, and an npm workspace would merge two lockfiles. Zod schemas and an OpenAPI generator were left out: the validators' rule order and error texts are part of the API, and both would mean rewriting them. The price is that the frontend's type check reads files under `server/`, which `test/structure.test.ts` limits to this folder and to `import type`.
 - **The API specification has its own document**, `./api.doc.md`, that this document and `./backend.doc.md` both point to, so an endpoint change is made in one place. The backend doc keeps how the endpoints are built.
 - **Plain CSS** in step 1; no styling library until the first real screens. Step 2 still used plain CSS (a few classes in `styles.css`); see "Open questions".
 - **The mailed-link pages read the token once into state and strip the fragment** (see "Routing and authentication"), and `recheckSession` resets `me` after a verification or a reset instead of patching the cached user.
@@ -359,4 +359,3 @@ Sound from the start, and kept: the direction of the imports (`routes/` use `fea
 - Long conversations: virtualized message list if scrolling gets slow.
 - Pagination for `GET /api/chat` and `GET /api/friend` once the lists can grow (the server notes this already).
 - Browser notifications and an unread count in the tab title.
-- Shared types between server and frontend.

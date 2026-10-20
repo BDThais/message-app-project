@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma';
 import { Prisma } from '../../generated/prisma/client';
+import type { PublicUser } from '../../contract/types';
 
 /**
  * How the requester relates to the user a search found; the client picks the
@@ -80,9 +81,6 @@ export async function findUserByTel(
 
   return { ...profile, relationship: 'none' };
 }
-
-/** A user as other users see them: never email or tel. */
-export type PublicUser = { id: number; name: string; avatarUrl: string | null };
 
 /**
  * A pending friend request as the API shows it. `user` is always the *other*

@@ -15,3 +15,13 @@ export function isValidHttpUrl(value: string): boolean {
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
+
+/**
+ * The fields of a request body, each one `unknown` until the validator has checked it. `B` is the
+ * body's type from contract/requests.ts, so a key the contract does not have (a typo, or a rename
+ * made in the contract only) does not compile when destructured. Without a JSON body (Express
+ * leaves req.body undefined) or with one that is not an object, every field is undefined.
+ */
+export function bodyFields<B>(body: unknown): { [K in keyof B]?: unknown } {
+  return isRecord(body) ? (body as { [K in keyof B]?: unknown }) : {};
+}

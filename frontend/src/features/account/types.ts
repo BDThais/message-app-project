@@ -1,27 +1,17 @@
-/** The signed-in user, as returned by POST /account/login, GET /account/me and PATCH /account/me. */
-export interface User {
-  id: number;
-  name: string;
-  email: string;
-  tel: string;
-  avatarUrl: string | null;
-  emailVerified: boolean;
-}
+import type { LoginBody, SignupBody } from '@contract/requests';
 
-export interface LoginInput {
-  email: string;
-  password: string;
-}
+/** The signed-in user, as returned by POST /api/account/login, GET /api/account/me and PATCH /api/account/me. */
+export type { User } from '@contract/types';
 
-/** The body of POST /account/signup. There is no avatar here: a new account starts without one. */
-export interface SignupInput {
-  name: string;
-  email: string;
-  tel: string;
-  password: string;
-}
+export type LoginInput = LoginBody;
 
-/** What POST /account/password/reset needs: the token from the mailed link and the new password. */
+/** The body of POST /api/account/signup. There is no avatar here: a new account starts without one. */
+export type SignupInput = SignupBody;
+
+/**
+ * What POST /api/account/password/reset needs: the token from the mailed link and the new password.
+ * Not the wire body: `api.ts` renames `newPassword` to the `new_password` the server reads.
+ */
 export interface ResetPasswordInput {
   token: string;
   newPassword: string;

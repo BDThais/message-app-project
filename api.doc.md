@@ -1,6 +1,6 @@
 # Message App API
 
-The specification of the HTTP API the server exposes: what a client sends and what comes back (request bodies, response bodies, status codes, error texts, rate limits) and the rules a client has to know. It is the source of truth for the API: change it in the same patch as any change to an endpoint's request, response, status code or error body.
+The specification of the HTTP API the server exposes: what a client sends and what comes back (request bodies, response bodies, status codes, error texts, rate limits) and the rules a client has to know. It is the source of truth for the API: change it in the same patch as any change to an endpoint's request, response, status code or error body. The TypeScript shapes of the bodies are the one exception: they are code, in `server/src/contract/` (see "Shapes").
 
 - How the endpoints are built and why (transactions, locks, limiters, files, tests, design decisions): `./backend.doc.md`, "API implementation notes".
 - How the screens use the API: `./frontend.doc.md`.
@@ -21,56 +21,14 @@ The specification of the HTTP API the server exposes: what a client sends and wh
 
 ## Shapes
 
-```ts
-type Role = 'admin' | 'member';
+The shapes of the JSON this API sends and receives are defined once, as TypeScript, in `server/src/contract/`. The server and the frontend both compile against that folder (the frontend imports it as `@contract/...`), so those files are the specification of the shapes, and the comment on a field says what it means:
 
-/** Your own account: login, GET /api/account/me, PATCH /api/account/me. */
-interface User { id: number; name: string; email: string; tel: string; avatarUrl: string | null; emailVerified: boolean }
+- `types.ts`: `Role`, `User` (your own account), `PublicUser` (any other user, never with an email or a tel), `ChatRoomSummary`, `ChatRoomDetail`, `ChatRoomCore`, `CreatedChatRoom`, `Member`, `Message`, `FriendRequest`, `Relationship` and `SearchResult`.
+- `requests.ts`: the request bodies, with their snake_case keys. `responses.ts`: the bodies of successful responses. `errors.ts`: `ApiErrorBody` and the error bodies that carry an extra key.
 
-/** Any other user. Never has an email or a tel. */
-interface PublicUser { id: number; name: string; avatarUrl: string | null }
+A change to a shape is made in those files, in the same patch as the code that sends it. This document keeps what a compiler cannot say: status codes, error texts, rules and who may call what. The endpoint sections below use the contract's names (`User`, `PublicUser`, ...).
 
-/** GET /api/chat, one entry per room. */
-interface ChatRoomSummary {
-  id: number;
-  type: 'direct' | 'group';
-  name: string | null;       // direct room: the other member's name (null once they are gone); group room: its own name, may be null
-  avatarUrl: string | null;  // direct room: the other member's avatar
-  createdAt: string;
-  lastMessage: { content: string; createdAt: string } | null; // newest message that is not deleted; no id, no sender
-  unreadCount: number;
-}
-
-/** GET /api/chat/:chatid. */
-interface ChatRoomDetail extends ChatRoomSummary { role: Role } // the requester's own role
-
-/** The room's own columns: what PATCH /api/chat/:chatid returns. */
-interface ChatRoomCore { id: number; type: 'direct' | 'group'; name: string | null; avatarUrl: string | null; createdAt: string }
-
-/** What POST /api/chat returns: the room as stored, with its members. A direct room's name and avatarUrl are null here. */
-interface CreatedChatRoom extends ChatRoomCore { members: Member[] }
-
-/** Members of a room: GET/POST/PATCH under /api/chat/:chatid/member, and `members` of POST /api/chat. */
-interface Member { chatId: number; role: Role; lastReadMessageId: number | null; member: PublicUser }
-
-interface Message {
-  id: number;
-  chatId: number;
-  senderId: number | null;   // null when the sender has deleted their account
-  content: string;           // '' once the message is deleted
-  createdAt: string;
-  editedAt: string | null;
-  deletedAt: string | null;
-  sender: PublicUser | null; // null together with senderId
-}
-
-/** GET /api/friend/requests, POST /api/friend/requests. `user` is always the other party. */
-interface FriendRequest { id: number; createdAt: string; user: PublicUser }
-
-/** GET /api/friend/search/:tel. `requestId` only for the two request states. */
-type Relationship = 'self' | 'friend' | 'request_sent' | 'request_received' | 'none';
-interface SearchResult extends PublicUser { relationship: Relationship; requestId?: number }
-```
+The account endpoints are checked by the compiler on both sides: their controllers' responses and their validators' bodies on the server, `features/account/api.ts` on the frontend. The chat and friend shapes are already in `types.ts`, but their controllers and the frontend do not use them yet; their request, response and error types are added when those modules are typed (see "API contract" in `./backend.doc.md`).
 
 ## Permission model
 
@@ -112,7 +70,7 @@ Signs in. Public.
 ```
 
 - Response `200`: `{ "user": User }`, and the session cookie is set. The address is matched without regard to case, as at signup: `JOHN@Example.com` signs in to the account created as `john@example.com`.
-- `400 Email and password are required` when either is missing or not a string.
+- `400 Email and password are required` when either is missing or not a string, or when the request has no JSON body.
 - `401 Invalid email or password`: the same answer for an unknown email and a wrong password.
 - `429`.
 

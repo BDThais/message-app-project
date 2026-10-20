@@ -1,4 +1,5 @@
-import { isRecord, isValidHttpUrl } from '../../lib/validation';
+import { bodyFields, isValidHttpUrl } from '../../lib/validation';
+import type { UpdateProfileBody } from '../../contract/requests';
 import { validateName } from './signup.validator';
 
 type UpdateProfileValidation =
@@ -6,14 +7,14 @@ type UpdateProfileValidation =
   | { valid: false; message: string };
 
 /**
- * Validates the body of PATCH /account/me: { name?, avatar_url? } with at
+ * Validates the body of PATCH /api/account/me: { name?, avatar_url? } with at
  * least one of them. `name` follows signup's rule; `avatar_url` follows the
- * one on PATCH /chat/:chatid (an http(s) URL, or null to clear it). Returns
+ * one on PATCH /api/chat/:chatid (an http(s) URL, or null to clear it). Returns
  * only the fields that were sent, camelCased to match the Prisma field names.
  */
 export function validateUpdateProfileBody(body: unknown): UpdateProfileValidation {
   // Express leaves req.body undefined when the request has no JSON body.
-  const { name, avatar_url } = isRecord(body) ? body : {};
+  const { name, avatar_url } = bodyFields<UpdateProfileBody>(body);
 
   if (name === undefined && avatar_url === undefined) {
     return { valid: false, message: "At least either 'name' or 'avatar_url' must be provided" };

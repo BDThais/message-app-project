@@ -1,4 +1,5 @@
-import { isRecord } from '../../lib/validation';
+import { bodyFields } from '../../lib/validation';
+import type { ChangePasswordBody } from '../../contract/requests';
 import { validatePassword } from './signup.validator';
 
 type ChangePasswordValidation =
@@ -6,7 +7,7 @@ type ChangePasswordValidation =
   | { valid: false; message: string };
 
 /**
- * Validates the body of POST /account/password: { current_password,
+ * Validates the body of POST /api/account/password: { current_password,
  * new_password }. `new_password` follows the signup password rules;
  * `current_password` is only checked to be a non-empty string here, because
  * whether it is right is for the controller to find out (a wrong one is a 401,
@@ -14,7 +15,7 @@ type ChangePasswordValidation =
  */
 export function validateChangePasswordBody(body: unknown): ChangePasswordValidation {
   // Express leaves req.body undefined when the request has no JSON body.
-  const { current_password, new_password } = isRecord(body) ? body : {};
+  const { current_password, new_password } = bodyFields<ChangePasswordBody>(body);
 
   if (
     typeof current_password !== 'string' || current_password === '' ||

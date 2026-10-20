@@ -1,7 +1,8 @@
 import { isValidPhoneNumber, parsePhoneNumberFromString } from 'libphonenumber-js';
 import { Prisma } from '../../generated/prisma/client';
 import { validateEmail } from '../../lib/emailAddress';
-import { isRecord } from '../../lib/validation';
+import { bodyFields, isRecord } from '../../lib/validation';
+import type { SignupBody } from '../../contract/requests';
 import { findExistingUser } from './account.service';
 
 export type AccountBody = {
@@ -71,13 +72,13 @@ type AccountValidation =
     | { valid: false; message: string };
 
 /**
- * Validates the body of POST /account/signup: { name, email, tel, password }. A field that is not a
+ * Validates the body of POST /api/account/signup: { name, email, tel, password }. A field that is not a
  * non-empty string counts as missing, like at login and at the password reset (a number, an array,
  * an object, a body that is not an object, or no JSON body at all: Express leaves req.body undefined
  * then). The rules are checked in this order, and the first one that fails is the answer.
  */
 export function validateAccountBody(body: unknown): AccountValidation {
-    const { name, email, tel, password } = isRecord(body) ? body : {};
+    const { name, email, tel, password } = bodyFields<SignupBody>(body);
 
     if (
         typeof name !== 'string' || name === '' ||

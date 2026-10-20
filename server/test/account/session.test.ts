@@ -30,6 +30,7 @@ async function createUser() {
 
 describe(`POST ${loginRoute}`, () => {
   it.each([
+    { desc: 'no JSON body at all', body: undefined },
     { desc: 'empty body', body: {} },
     { desc: 'missing password', body: { email: userData.email } },
     { desc: 'non-string email', body: { email: 123, password: userData.password } },

@@ -1,4 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
+import type { ApiErrorBody, DeleteAccountConflictBody } from '../../contract/errors';
+import type { LoginBody } from '../../contract/requests';
+import type { LogoutResponse, MeResponse, MessageResponse, UserResponse } from '../../contract/responses';
+import { bodyFields } from '../../lib/validation';
 import { normalizeEmail } from '../../lib/emailAddress';
 import { hashPassword, verifyPassword } from '../../lib/passwordHash';
 import { validateAccountBody, checkDuplication, normalizeTel, uniqueViolationMessage } from './signup.validator';
@@ -8,7 +12,7 @@ import { validateChangePasswordBody } from './password.validator';
 import { validateDeleteAccountBody } from './deleteAccount.validator';
 import { validateVerifyEmailBody } from './emailVerification.validator';
 import { validatePasswordResetRequestBody, validateResetPasswordBody } from './passwordReset.validator';
-import { createUser, updateUserProfile, findPasswordHash, changePassword, deleteAccount, toPublicUser } from './account.service';
+import { createUser, updateUserProfile, findPasswordHash, changePassword, deleteAccount, toUser } from './account.service';
 import { newVerificationToken, issueEmailVerification, verifyEmailToken } from './emailVerification.service';
 import { sendVerificationEmail } from './emailVerification.mail';
 import { issuePasswordReset, resetPasswordWithToken } from './passwordReset.service';
@@ -17,7 +21,7 @@ import { createSession, deleteSession } from './session.service';
 import { getSessionUser, setSessionCookie, clearSessionCookie } from '../../middlewares/SessionCookie';
 import config from '../../config/config';
 
-export async function signup(req: Request, res: Response, next: NextFunction) {
+export async function signup(req: Request, res: Response<MessageResponse | ApiErrorBody>, next: NextFunction) {
     try {
         const validation = validateAccountBody(req.body);
         if (!validation.valid) {
@@ -66,9 +70,9 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
     }
 }
 
-export async function login(req: Request, res: Response, next: NextFunction) {
+export async function login(req: Request, res: Response<UserResponse | ApiErrorBody>, next: NextFunction) {
   try {
-    const { email, password } = req.body;
+    const { email, password } = bodyFields<LoginBody>(req.body);
   
     if (typeof email !== 'string' || typeof password !== 'string') {
       return res.status(400).json({ error: 'Email and password are required' });
@@ -82,14 +86,14 @@ export async function login(req: Request, res: Response, next: NextFunction) {
     const session = await createSession(user.id);
     setSessionCookie(res, session);
   
-    res.status(200).json({ user: toPublicUser(user) });
+    res.status(200).json({ user: toUser(user) });
   } catch (error) {
     console.error('Error during login:', error);
     next(error);
   }
 }
 
-export async function me(req: Request, res: Response, next: NextFunction) {
+export async function me(req: Request, res: Response<MeResponse>, next: NextFunction) {
   try {
     const user = await getSessionUser(req, res);
     res.status(200).json({ user });
@@ -99,7 +103,7 @@ export async function me(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-export async function logout(req: Request, res: Response, next: NextFunction) {
+export async function logout(req: Request, res: Response<LogoutResponse>, next: NextFunction) {
   try {
     const sessionId = req.cookies?.[config.SESSION_COOKIE];
   
@@ -115,7 +119,7 @@ export async function logout(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-export async function updateMe(req: Request, res: Response, next: NextFunction) {
+export async function updateMe(req: Request, res: Response<UserResponse | ApiErrorBody>, next: NextFunction) {
   try {
     const validation = validateUpdateProfileBody(req.body);
     if (!validation.valid) {
@@ -130,7 +134,7 @@ export async function updateMe(req: Request, res: Response, next: NextFunction) 
   }
 }
 
-export async function updatePassword(req: Request, res: Response, next: NextFunction) {
+export async function updatePassword(req: Request, res: Response<ApiErrorBody>, next: NextFunction) {
   try {
     const validation = validateChangePasswordBody(req.body);
     if (!validation.valid) {
@@ -162,7 +166,7 @@ export async function updatePassword(req: Request, res: Response, next: NextFunc
   }
 }
 
-export async function deleteMe(req: Request, res: Response, next: NextFunction) {
+export async function deleteMe(req: Request, res: Response<DeleteAccountConflictBody | ApiErrorBody>, next: NextFunction) {
   try {
     const validation = validateDeleteAccountBody(req.body);
     if (!validation.valid) {
@@ -196,7 +200,7 @@ export async function deleteMe(req: Request, res: Response, next: NextFunction) 
   }
 }
 
-export async function verifyEmail(req: Request, res: Response, next: NextFunction) {
+export async function verifyEmail(req: Request, res: Response<ApiErrorBody>, next: NextFunction) {
   try {
     const validation = validateVerifyEmailBody(req.body);
     if (!validation.valid) {
@@ -216,7 +220,7 @@ export async function verifyEmail(req: Request, res: Response, next: NextFunctio
   }
 }
 
-export async function resendEmailVerification(req: Request, res: Response, next: NextFunction) {
+export async function resendEmailVerification(req: Request, res: Response<ApiErrorBody>, next: NextFunction) {
   try {
     const result = await issueEmailVerification(req.user!.id);
     if (result.status === 'no_user') {
@@ -240,7 +244,7 @@ export async function resendEmailVerification(req: Request, res: Response, next:
   }
 }
 
-export async function requestPasswordReset(req: Request, res: Response, next: NextFunction) {
+export async function requestPasswordReset(req: Request, res: Response<MessageResponse | ApiErrorBody>, next: NextFunction) {
   try {
     const validation = validatePasswordResetRequestBody(req.body);
     if (!validation.valid) {
@@ -267,7 +271,7 @@ export async function requestPasswordReset(req: Request, res: Response, next: Ne
   }
 }
 
-export async function resetPassword(req: Request, res: Response, next: NextFunction) {
+export async function resetPassword(req: Request, res: Response<ApiErrorBody>, next: NextFunction) {
   try {
     // The password rules are checked here, before the token is looked at, so a weak password does
     // not use up the link.

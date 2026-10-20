@@ -1,5 +1,6 @@
 import { normalizeEmail, validateEmail } from '../../lib/emailAddress';
-import { isRecord } from '../../lib/validation';
+import { bodyFields } from '../../lib/validation';
+import type { PasswordResetRequestBody, ResetPasswordBody } from '../../contract/requests';
 import { validatePassword } from './signup.validator';
 
 type ResetRequestValidation =
@@ -7,7 +8,7 @@ type ResetRequestValidation =
   | { valid: false; message: string };
 
 /**
- * Validates the body of POST /account/password/reset-request: { email }, a
+ * Validates the body of POST /api/account/password/reset-request: { email }, a
  * valid address (validateEmail, the check signup uses). It is the same check
  * for every address, registered or not, so a 400 says nothing about who has an
  * account. The address that comes out is lower-cased (normalizeEmail), as
@@ -15,7 +16,7 @@ type ResetRequestValidation =
  */
 export function validatePasswordResetRequestBody(body: unknown): ResetRequestValidation {
   // Express leaves req.body undefined when the request has no JSON body.
-  const { email } = isRecord(body) ? body : {};
+  const { email } = bodyFields<PasswordResetRequestBody>(body);
 
   if (typeof email !== 'string' || email === '') {
     return { valid: false, message: 'Email is required' };
@@ -33,7 +34,7 @@ type ResetPasswordValidation =
   | { valid: false; message: string };
 
 /**
- * Validates the body of POST /account/password/reset: { token, new_password }.
+ * Validates the body of POST /api/account/password/reset: { token, new_password }.
  * `new_password` follows the signup password rules and is checked here, before
  * the token is looked at, so a weak password is a 400 that does not use up the
  * link. The token is only checked to be a non-empty string; whether it is a
@@ -41,7 +42,7 @@ type ResetPasswordValidation =
  * own message, the same for every way a link can be dead).
  */
 export function validateResetPasswordBody(body: unknown): ResetPasswordValidation {
-  const { token, new_password } = isRecord(body) ? body : {};
+  const { token, new_password } = bodyFields<ResetPasswordBody>(body);
 
   if (
     typeof token !== 'string' || token === '' ||

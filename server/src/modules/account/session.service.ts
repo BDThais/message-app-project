@@ -1,8 +1,8 @@
 import { prisma } from '../../lib/prisma';
 import config from '../../config/config';
 import { generateToken } from '../../lib/randomToken';
-import { userSelect, toPublicUser } from './account.service';
-import type { PublicUser } from './account.service';
+import { userSelect, toUser } from './account.service';
+import type { User } from '../../contract/types';
 
 // Database side of sessions. Nothing in this file knows about Express
 // (no req, res or cookies), so it can be reused by other entry points such as
@@ -57,7 +57,7 @@ export function deleteSession(sessionId: string) {
  * the HTTP layer can tell the browser to drop its cookie.
  */
 export type SessionLookup =
-  | { status: 'valid'; user: PublicUser }
+  | { status: 'valid'; user: User }
   | { status: 'expired' }
   | { status: 'missing' };
 
@@ -78,5 +78,5 @@ export async function findSessionUser(sessionId: string): Promise<SessionLookup>
     return { status: 'expired' };
   }
 
-  return { status: 'valid', user: toPublicUser(session.user) };
+  return { status: 'valid', user: toUser(session.user) };
 }

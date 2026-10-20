@@ -1,17 +1,18 @@
-import { isRecord } from '../../lib/validation';
+import { bodyFields } from '../../lib/validation';
+import type { DeleteAccountBody } from '../../contract/requests';
 
 type DeleteAccountValidation =
   | { valid: true; data: { password: string } }
   | { valid: false; message: string };
 
 /**
- * Validates the body of DELETE /account/me: { password }. The password is only
+ * Validates the body of DELETE /api/account/me: { password }. The password is only
  * checked to be a non-empty string here, because whether it is right is for
  * the controller to find out (a wrong one is a 401, not a 400).
  */
 export function validateDeleteAccountBody(body: unknown): DeleteAccountValidation {
   // Express leaves req.body undefined when the request has no JSON body.
-  const { password } = isRecord(body) ? body : {};
+  const { password } = bodyFields<DeleteAccountBody>(body);
 
   if (typeof password !== 'string' || password === '') {
     return { valid: false, message: 'Password is required' };

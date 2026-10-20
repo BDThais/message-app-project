@@ -8,8 +8,10 @@
     "jsx": "react-jsx",
     "types": ["vite/client"],
     "noEmit": true,
-    // `@/x` is `src/x`: the import for anything outside the current feature or folder (see Conventions)
-    "paths": { "@/*": ["./src/*"] },
+    // `@/x` is `src/x`: the import for anything outside the current feature or folder (see Conventions).
+    // `@contract/x` is the server's src/contract/x: the shapes of the API, shared with the server. It is
+    // the only way into server/, and only with `import type` (see "API contract" in frontend.doc.md).
+    "paths": { "@/*": ["./src/*"], "@contract/*": ["../server/src/contract/*"] },
 
     // Stricter type checking (same as the server, except exactOptionalPropertyTypes, which fights
     // with React's and TanStack's own optional props)

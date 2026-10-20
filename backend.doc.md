@@ -99,6 +99,7 @@ Completed:
 - Frontend scaffold (step 1 of `./frontend.doc.md`): Vite + React + TypeScript in `frontend/`, a dev proxy that forwards `/api` to this server, the fetch wrapper and query client, TanStack Router with the signed-in/signed-out route guards (they use `GET /api/account/me`), a thin login page, and tests for all of it
 - Every route is served under the `/api` prefix: `app.ts` mounts the routers at `/api/account`, `/api/chat` and `/api/friend`, the frontend's dev proxy forwards `/api` unchanged (it used to strip the prefix), and the integration tests call the prefixed paths
 - Routes nothing serves answer `404 { "error": "Route not found" }` through `notFoundHandler` (in `middlewares/ErrorHandler.ts`, registered in `app.ts` after the routers and before `errorHandler`), so Express's own HTML 404 page no longer breaks the rule that every error body is `{ error }`
+- The API contract (`src/contract/`, see "API contract" in Conventions): the entity shapes of `api.doc.md` as TypeScript, the account endpoints' request, response and error bodies, `bodyFields` for reading a request body through them, and the account controllers and validators written against them. The account module's own user type is the contract's `User` (it was `PublicUser` in `account.service.ts`, a second type of that name next to the friends module's, which is now the contract's `PublicUser`), and `toPublicUser` is `toUser`.
 
 Still planned or not yet implemented:
 
@@ -144,6 +145,7 @@ POST /api/account/login
 - Deletes any expired session already stored for the same user
 - Creates a new session and sets the session cookie. The session id is 32 random bytes from `crypto.randomBytes`, base64url-encoded (43 characters), made by `generateToken` (`src/lib/randomToken.ts`) in `createSession`; `sessions.id` has no default in the schema, so a session cannot be created without one. Sessions created before this change keep their old ids and work until they expire; to sign everybody out at once, run `DELETE FROM sessions;`
 - The limiter is `loginLimiter`, in `modules/account/accountRateLimit.middleware.ts`
+- The body is read with `bodyFields<LoginBody>` (the same helper the validators use), so a request with no JSON body at all counts as a missing field and answers `400`, like a body without the two fields. (Until the contract was added the controller destructured `req.body` directly, and that request answered `500`.)
 
 GET /api/account/me
 
@@ -501,6 +503,11 @@ message-app/
     │   ├── server.ts
     │   ├── config/
     │   │   └── config.ts            // every number is read by numberSetting: Number(), blank = not set, never parseInt
+    │   ├── contract/                // the shapes of the API's JSON, shared with the frontend (see "API contract" in Conventions)
+    │   │   ├── types.ts             // Role, User, PublicUser, ChatRoomSummary/Detail/Core, CreatedChatRoom, Member, Message, FriendRequest, Relationship, SearchResult
+    │   │   ├── requests.ts          // request bodies, snake_case as on the wire (account only so far)
+    │   │   ├── responses.ts         // bodies of successful responses (account only so far)
+    │   │   └── errors.ts            // ApiErrorBody and the error bodies with an extra key
     │   ├── lib/
     │   │   ├── constants.ts
     │   │   ├── emailAddress.ts      // validateEmail (validator.isEmail) and normalizeEmail (lower case): the one place that decides what an address is and how it is spelled; used by signup, login and the password reset
@@ -511,7 +518,7 @@ message-app/
     │   │   ├── parseIdParam.ts      // numeric URL param -> ID or null (used by the chat and friend validators)
     │   │   ├── passwordHash.ts
     │   │   ├── prisma.ts
-    │   │   └── validation.ts        // isValidHttpUrl, isRecord (used by the chat and account validators)
+    │   │   └── validation.ts        // isValidHttpUrl, isRecord (used by the chat and account validators) and bodyFields (a request body read through a contract type; used by the account validators and login)
     │   ├── middlewares/             // shared by several features
     │   │   ├── ErrorHandler.ts      // every error body is { error }; keeps the status of 4xx errors Express raises; notFoundHandler answers unmatched routes with a 404
     │   │   ├── SessionCookie.ts     // set/clear/read the session cookie
@@ -591,10 +598,13 @@ message-app/
         │   └── session.settings.unit.test.ts         // checkSessionSettings (no database)
         ├── config/                           // mirrors src/config/
         │   └── config.unit.test.ts           // every numeric setting: the number that was set, blank = default, "7d" and the like = NaN
+        ├── contract/                         // mirrors src/contract/
+        │   └── contract.unit.test.ts         // the folder's rules: its files import only each other, and none has a Date (no database)
         ├── lib/                              // mirrors src/lib/
         │   ├── emailAddress.unit.test.ts     // validateEmail (any case is valid) and normalizeEmail (case only, idempotent; no database)
         │   ├── mailer.unit.test.ts           // settings checks, console mailer, getMailer / setMailer, Resend mailer (real SDK, stubbed fetch)
         │   ├── rateLimiter.unit.test.ts      // createRateLimiter limits and keeps counts of its own, resetRateLimiters gives the budgets back and refuses to run outside a test (no database)
+        │   ├── validation.unit.test.ts       // bodyFields: the fields of a JSON object, none for no body or a body that is not an object (no database)
         │   ├── mailerOutbox.test.ts          // the test setup's outbox is the app's mailer and is emptied between tests
         │   ├── testTimeZone.test.ts          // the test connections run in a time zone that is not UTC (see "Test database setup")
         │   └── randomToken.unit.test.ts          // generateToken and hashToken
@@ -638,6 +648,7 @@ Conventions:
 - Services never import Express (no `req`, `res` or cookies). HTTP concerns live in controllers and middleware, so other entry points, such as the future Socket.io handlers, can call the same services.
 - Middleware used by a single feature lives in that feature's folder (for example `chatRoomAuth.middleware.ts`, `accountRateLimit.middleware.ts`, `friendRateLimit.middleware.ts`); `src/middlewares/` only holds middleware shared across features. Rate limiters follow the same rule: each feature keeps its own limiters, keyed by IP where nobody is signed in yet (`loginLimiter`) and by user id after `requireUserAuth` (`friendSearchLimiter`, `passwordCheckLimiter`).
 - Error bodies: every `4xx` and `5xx` response has the shape `{ "error": "<text>" }`, whichever layer sends it (controller, feature middleware, rate limiter, `errorHandler`, `notFoundHandler`). `message` is not used for errors because it is already a success-body key for a chat message (`POST` and `PATCH /api/chat/:chatid/message` return `{ "message": { ... } }`), so a client could otherwise get a string and an object under the same key from one endpoint. Validators keep their own internal `{ valid: false, message }` result; the controller puts that text under `error`. A success body that only confirms an action (`201 { "message": "Account created successfully" }` from signup) is not an error body and is unchanged.
+- API contract: the shapes of the API's JSON are written once, in `src/contract/` (`types.ts` for what the API returns, `requests.ts` for request bodies, `responses.ts` for response bodies, `errors.ts` for error bodies), and the frontend imports the same files as `@contract/...`, with `import type`. A contract file imports only other contract files, never Prisma, Express or `src/lib/`, because the frontend has none of them, and every value in it is JSON: a timestamp is a `string` there, and a service's `Date` is turned into one before it is sent (`test/contract/contract.unit.test.ts` checks both). Request bodies keep the wire's snake_case keys. A controller types its `res` with the contract (`Response<UserResponse | ApiErrorBody>`), so a body of another shape does not compile, and a validator reads its body with `bodyFields<SomeBody>(body)` from `src/lib/validation.ts`, so a key the contract does not have does not compile either. A validator still checks every field by hand: the types say which keys exist, not that a client sent them right. A service keeps its own types (a `FriendRequestSummary` holds a `Date`): the contract is the wire, not the service layer. The account module is typed; the chat and friend modules add their request, response and error types when their controllers are, and until then their shapes in `types.ts` are the transcription of `api.doc.md` that nothing checks on the server. The folder is inside `src/` because `tsc` runs with `rootDir: ./src`: a `shared/` folder at the repository root would need the build changed.
 - Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.
 - Background jobs live in the folder of the feature they belong to and are started from `server.ts`, never from `app.ts`, so tests that import the app do not start timers.
 - `server.ts` checks the callback of `app.listen`: Express 5 passes a failed listen (a port that is already taken, for one) to it instead of throwing, so the callback logs the error and exits with code 1. Without the check the process printed "Server is running" and idled on the cleanup job's timer, serving nothing.

@@ -1,3 +1,4 @@
+import type { LogoutResponse, MeResponse, MessageResponse, UserResponse } from '@contract/responses';
 import { json, noContent } from './responses';
 import type { Body, FakeServer } from './state';
 
@@ -15,19 +16,19 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
 
   switch (request) {
     case 'GET /api/account/me':
-      return json({ user: state.session });
+      return json({ user: state.session } satisfies MeResponse);
 
     case 'POST /api/account/login': {
       const account = accounts.find(({ user }) => user.email === canonicalEmail(String(body?.email)));
       if (!account || account.password !== body?.password) return json({ error: 'Invalid email or password' }, 401);
       state.session = account.user;
-      return json({ user: account.user });
+      return json({ user: account.user } satisfies UserResponse);
     }
 
     case 'POST /api/account/logout':
       if (state.logoutFails) return json({ error: 'Something went wrong' }, 500);
       state.session = null;
-      return json({ user: null });
+      return json({ user: null } satisfies LogoutResponse);
 
     case 'POST /api/account/signup': {
       if (!body?.name || !body.email || !body.tel || !body.password) return json({ error: 'All fields are required' }, 400);
@@ -40,7 +41,7 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
         user: { id, name: body.name, email, tel: body.tel, avatarUrl: null, emailVerified: false },
         password: body.password,
       });
-      return json({ message: 'Account created successfully' }, 201);
+      return json({ message: 'Account created successfully' } satisfies MessageResponse, 201);
     }
 
     case 'POST /api/account/email/verification': {
@@ -62,7 +63,7 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
 
     case 'POST /api/account/password/reset-request':
       // The same answer for every address, registered or not.
-      return json({ message: 'If an account exists for that email, a reset link is on its way' }, 202);
+      return json({ message: 'If an account exists for that email, a reset link is on its way' } satisfies MessageResponse, 202);
 
     case 'POST /api/account/password/reset': {
       const problem = passwordProblem(String(body?.new_password));

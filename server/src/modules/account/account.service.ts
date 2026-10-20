@@ -1,5 +1,6 @@
 import { ChatMemberRole, ChatRoomType } from '../../generated/prisma/client';
 import { prisma } from '../../lib/prisma';
+import type { User } from '../../contract/types';
 
 export function findExistingUser(email: string, tel: string) {
 	return prisma.user.findFirst({
@@ -45,33 +46,22 @@ export function createUser(data: {
 	});
 }
 
-// What is read from the database to build the public shape of a user (see
-// toPublicUser). Never includes passwordHash.
+// What is read from the database to build a user (see toUser). Never includes passwordHash.
 export const userSelect = { id: true, name: true, email: true, tel: true, avatarUrl: true, emailVerifiedAt: true } as const;
 
 /**
- * The public shape of a user, as returned by login, GET /account/me and
- * PATCH /account/me, and as kept in `req.user`. The timestamp of the
- * verification stays on the server: clients only get whether the address is
- * verified.
+ * A user's own account as the API shows it (`User` in contract/types.ts): returned by login,
+ * GET /api/account/me and PATCH /api/account/me, and kept in `req.user`. The timestamp of the
+ * verification stays on the server: clients only get whether the address is verified.
  */
-export type PublicUser = {
-	id: number;
-	name: string;
-	email: string;
-	tel: string;
-	avatarUrl: string | null;
-	emailVerified: boolean;
-};
-
-export function toPublicUser(user: {
+export function toUser(user: {
 	id: number;
 	name: string;
 	email: string;
 	tel: string;
 	avatarUrl: string | null;
 	emailVerifiedAt: Date | null;
-}): PublicUser {
+}): User {
 	return {
 		id: user.id,
 		name: user.name,
@@ -83,8 +73,8 @@ export function toPublicUser(user: {
 }
 
 /** Updates the profile fields that were sent and returns the user. */
-export async function updateUserProfile(userId: number, data: { name?: string; avatarUrl?: string | null }): Promise<PublicUser> {
-	return toPublicUser(await prisma.user.update({ where: { id: userId }, data, select: userSelect }));
+export async function updateUserProfile(userId: number, data: { name?: string; avatarUrl?: string | null }): Promise<User> {
+	return toUser(await prisma.user.update({ where: { id: userId }, data, select: userSelect }));
 }
 
 /** The stored password hash, or null when the account no longer exists. */

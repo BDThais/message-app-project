@@ -49,6 +49,7 @@ Next priorities:
 - App entry point: server/src/app.ts
 - Feature modules (routes, controllers, services, validators per feature): server/src/modules/
 - Middleware shared by several features: server/src/middlewares/
+- API shapes shared by the server and the frontend (request, response and error bodies): server/src/contract/
 - Prisma schema and migrations: server/prisma/
 
 ## API
