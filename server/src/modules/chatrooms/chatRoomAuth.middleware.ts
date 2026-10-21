@@ -1,22 +1,45 @@
-import type { NextFunction, Request, Response } from 'express';
+import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import type { ApiErrorBody } from '../../contract/errors';
 import type { Role, RoomType } from '../../contract/types';
+import { hasUser, withUser } from '../../middlewares/UserSessionAuth';
+import type { AuthenticatedRequest } from '../../middlewares/UserSessionAuth';
 import { getChatMembership } from './chatRoom.service';
 import { validateChatIdParam } from './chatRoom.validator';
 
 // Attached by loadChatMembership below on any route with a ':chatid'
 // param. Every handler downstream can trust this is populated - if it
 // weren't, loadChatMembership would have already 404'd the request.
+export type ChatMembership = {
+  chatId: number;
+  role: Role;
+  roomType: RoomType;
+};
+
 declare global {
   namespace Express {
     interface Request {
-      chatMembership?: {
-        chatId: number;
-        role: Role;
-        roomType: RoomType;
-      };
+      chatMembership?: ChatMembership;
     }
   }
+}
+
+/** A request that has been through requireUserAuth and loadChatMembership. */
+export type ChatRoomRequest = AuthenticatedRequest & { chatMembership: ChatMembership };
+
+/**
+ * Mounts a handler of a ':chatid' route: written against a ChatRoomRequest, so it reads `req.user`
+ * and `req.chatMembership` without a `!`, and this checks both are there. Without the
+ * router.param('chatid', loadChatMembership) of the router, the request fails with an error.
+ */
+export function withChatMembership<ResBody>(
+  handler: (req: ChatRoomRequest, res: Response<ResBody>, next: NextFunction) => unknown,
+): RequestHandler {
+  return withUser<ResBody>(async (req, res, next) => {
+    if (req.chatMembership === undefined) {
+      return next(new Error("A ':chatid' route was mounted without router.param('chatid', loadChatMembership)"));
+    }
+    await handler(req as ChatRoomRequest, res, next);
+  });
 }
 
 /**
@@ -33,6 +56,10 @@ export async function loadChatMembership(
   next: NextFunction,
   rawChatId: string
 ) {
+  if (!hasUser(req)) {
+    return next(new Error('loadChatMembership was mounted without requireUserAuth before it'));
+  }
+
   const validation = validateChatIdParam(rawChatId);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });
@@ -40,7 +67,7 @@ export async function loadChatMembership(
   const { chatId } = validation.data;
 
   try {
-    const membership = await getChatMembership(req.user!.id, chatId);
+    const membership = await getChatMembership(req.user.id, chatId);
 
     if (!membership) {
       return res.status(404).json({ error: 'Chat room not found' });

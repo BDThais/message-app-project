@@ -524,7 +524,7 @@ message-app/
     │   ├── middlewares/             // shared by several features
     │   │   ├── ErrorHandler.ts      // every error body is { error }; keeps the status of 4xx errors Express raises; notFoundHandler answers unmatched routes with a 404
     │   │   ├── SessionCookie.ts     // set/clear/read the session cookie
-    │   │   └── UserSessionAuth.ts   // requireUserAuth
+    │   │   └── UserSessionAuth.ts   // requireUserAuth; AuthenticatedRequest and withUser (see "Typed requests" in Conventions)
     │   └── modules/
     │       ├── account/
     │       │   ├── account.routes.ts
@@ -548,7 +548,7 @@ message-app/
     │       │   ├── chatRoom.controller.ts
     │       │   ├── chatRoom.validator.ts
     │       │   ├── chatRoom.serializer.ts       // the services' Dates and rows to the contract's chat shapes: toChatRoomSummary, toChatRoomCore, toCreatedChatRoom, toMessage
-    │       │   ├── chatRoomAuth.middleware.ts   // loadChatMembership, requireGroupRoom, requireChatAdmin
+    │       │   ├── chatRoomAuth.middleware.ts   // loadChatMembership, requireGroupRoom, requireChatAdmin; ChatRoomRequest and withChatMembership
     │       │   ├── chatRoom.service.ts
     │       │   ├── chatMember.service.ts
     │       │   ├── message.service.ts
@@ -613,6 +613,7 @@ message-app/
         │   └── randomToken.unit.test.ts          // generateToken and hashToken
         ├── middlewares/                      // mirrors src/middlewares/
         │   ├── errorHandler.unit.test.ts     // the handler alone, with a fake response
+        │   ├── UserSessionAuth.unit.test.ts  // withUser: runs the handler for a request with a user, an error for one without (session lookup replaced, no database)
         │   └── errorHandler.test.ts          // errors Express raises itself (malformed JSON, bad percent-encoding) and the 404 for routes nothing serves
         ├── chatrooms/
         │   ├── chatRoom.test.ts              // create, list, get, update and delete a room
@@ -630,6 +631,7 @@ message-app/
         │   ├── chatRoom.validator.unit.test.ts
         │   ├── chatRoom.serializer.unit.test.ts  // timestamps become ISO strings, a field that is not named is not sent (no database)
         │   ├── chatRoom.controller.unit.test.ts  // getChatRoomById when the room is gone after the membership check (services replaced, no database)
+        │   ├── chatRoomAuth.unit.test.ts     // withChatMembership and the guard of loadChatMembership: an error for a route mounted without its middleware (no database)
         │   ├── chatRoomCleanup.service.test.ts
         │   └── chatRoomCleanup.job.unit.test.ts
         └── friends/
@@ -653,6 +655,7 @@ Conventions:
 - Services never import Express (no `req`, `res` or cookies). HTTP concerns live in controllers and middleware, so other entry points, such as the future Socket.io handlers, can call the same services.
 - Middleware used by a single feature lives in that feature's folder (for example `chatRoomAuth.middleware.ts`, `accountRateLimit.middleware.ts`, `friendRateLimit.middleware.ts`); `src/middlewares/` only holds middleware shared across features. Rate limiters follow the same rule: each feature keeps its own limiters, keyed by IP where nobody is signed in yet (`loginLimiter`) and by user id after `requireUserAuth` (`friendSearchLimiter`, `passwordCheckLimiter`).
 - Error bodies: every `4xx` and `5xx` response has the shape `{ "error": "<text>" }`, whichever layer sends it (controller, feature middleware, rate limiter, `errorHandler`, `notFoundHandler`). `message` is not used for errors because it is already a success-body key for a chat message (`POST` and `PATCH /api/chat/:chatid/message` return `{ "message": { ... } }`), so a client could otherwise get a string and an object under the same key from one endpoint. Validators keep their own internal `{ valid: false, message }` result; the controller puts that text under `error`. A success body that only confirms an action (`201 { "message": "Account created successfully" }` from signup) is not an error body and is unchanged.
+- Typed requests: Express types `req.user` and `req.chatMembership` as optional, because only the middleware in front of a route makes them true. A handler that needs them is written against `AuthenticatedRequest` (`req.user` is there) or `ChatRoomRequest` (`req.user` and `req.chatMembership`) and is mounted with `withUser(handler)` or `withChatMembership(handler)`, which check at run time that the middleware ran. That is one check in one place instead of a `!` in every handler, and a route mounted without its middleware answers `500` through the error handler (and is logged) instead of failing on `req.user.id`. The chat room module is done; the friends and account controllers still use `req.user!`, and move over when their modules are reworked.
 - API contract: the shapes of the API's JSON are written once, in `src/contract/` (`types.ts` for what the API returns, `requests.ts` for request bodies, `responses.ts` for response bodies, `errors.ts` for error bodies), and the frontend imports the same files as `@contract/...`, with `import type`. A contract file imports only other contract files, never Prisma, Express or `src/lib/`, because the frontend has none of them, and every value in it is JSON: a timestamp is a `string` there, and a service's `Date` is turned into one before it is sent (`test/contract/contract.unit.test.ts` checks both). Request bodies keep the wire's snake_case keys. A controller types its `res` with the contract (`Response<UserResponse | ApiErrorBody>`), so a body of another shape does not compile, and a validator reads its body with `bodyFields<SomeBody>(body)` from `src/lib/validation.ts`, so a key the contract does not have does not compile either. A validator still checks every field by hand: the types say which keys exist, not that a client sent them right. A service keeps its own types, with `Date`s (`ChatRoomSummaryData` is the contract's `ChatRoomSummary` with its two timestamps as `Date`s; a `FriendRequestSummary` holds one too): the contract is the wire, not the service layer, and a serializer turns the one into the other. The chat room module's is `chatRoom.serializer.ts`: it names every field it sends, so a column added to a table later is not sent until the contract has it, and it writes timestamps with `toISOString`, the string `JSON.stringify` would have written. The account and chat room modules are typed; the friends module adds its request, response and error types when its controllers are, and until then its shapes in `types.ts` (`FriendRequest`, `Relationship`, `SearchResult`) are the transcription of `api.doc.md` that nothing checks on the server. The folder is inside `src/` because `tsc` runs with `rootDir: ./src`: a `shared/` folder at the repository root would need the build changed.
 - Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.
 - Background jobs live in the folder of the feature they belong to and are started from `server.ts`, never from `app.ts`, so tests that import the app do not start timers.

@@ -1,4 +1,4 @@
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { getSessionUser } from './SessionCookie';
 
 // Derived from getSessionUser's own return type rather than importing Prisma's User
@@ -12,6 +12,29 @@ declare global {
       user?: SessionUser;
     }
   }
+}
+
+/** A request that has been through requireUserAuth: `user` is there, not optional. */
+export type AuthenticatedRequest = Request & { user: SessionUser };
+
+export function hasUser(req: Request): req is AuthenticatedRequest {
+  return req.user !== undefined;
+}
+
+/**
+ * Mounts a handler that needs `req.user` behind requireUserAuth without a `!` in the handler: it
+ * is written against an AuthenticatedRequest, and this checks it is one. A route that was mounted
+ * without requireUserAuth in front gets an error instead of a TypeError on `req.user.id`.
+ */
+export function withUser<ResBody>(
+  handler: (req: AuthenticatedRequest, res: Response<ResBody>, next: NextFunction) => unknown,
+): RequestHandler {
+  return async (req, res, next) => {
+    if (!hasUser(req)) {
+      return next(new Error('A route that needs req.user was mounted without requireUserAuth before it'));
+    }
+    await handler(req, res, next);
+  };
 }
 
 export async function requireUserAuth(req: Request, res: Response, next: NextFunction) {
