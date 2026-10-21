@@ -35,7 +35,7 @@ export async function createChatRoom(req: Request, res: Response<CreatedChatRoom
 
   const validation = validateCreateChatRoomInput(req.body, requesterId);
   if (!validation.valid) {
-    return res.status(400).json({ error: validation.error });
+    return res.status(400).json({ error: validation.message });
   }
   const { type, memberIds, name, avatarUrl } = validation;
 

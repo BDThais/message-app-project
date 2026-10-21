@@ -18,7 +18,7 @@ type ValidationResult =
         name?: string;
         avatarUrl?: string;
     }
-    | { valid: false; error: string };
+    | { valid: false; message: string };
 
 /**
  * Validates the body of POST /api/chat and returns everything the
@@ -36,7 +36,7 @@ export function validateCreateChatRoomInput(
   const { type, member_ids, name, avatar_url } = bodyFields<CreateChatRoomBody>(body);
 
     if (type !== 'direct' && type !== 'group') {
-        return { valid: false, error: 'type must be "direct" or "group"' };
+        return { valid: false, message: 'type must be "direct" or "group"' };
     }
 
     // Same ID range as POST /api/chat/:chatid/member. An ID outside the INTEGER
@@ -45,7 +45,7 @@ export function validateCreateChatRoomInput(
       !Array.isArray(member_ids) ||
       member_ids.some((id) => !Number.isInteger(id) || id < 1 || id > MAX_ID)
     )) {
-      return { valid: false, error: 'member_ids must be an array of user IDs' };
+      return { valid: false, message: 'member_ids must be an array of user IDs' };
     }
 
     const memberIds = Array.from(new Set((member_ids ?? []) as number[])).filter(
@@ -54,27 +54,27 @@ export function validateCreateChatRoomInput(
 
     if (type === 'direct') {
         if (memberIds.length !== 1) {
-            return { valid: false, error: 'a direct chat room requires exactly one other member' };
+            return { valid: false, message: 'a direct chat room requires exactly one other member' };
         }
         if (name !== undefined || avatar_url !== undefined) {
-            return { valid: false, error: 'direct chat rooms cannot have a name or avatar' };
+            return { valid: false, message: 'direct chat rooms cannot have a name or avatar' };
         }
     }
 
     if (name !== undefined && (typeof name !== 'string' || name.trim().length === 0)) {
-        return { valid: false, error: 'name must be a non-empty string if provided' };
+        return { valid: false, message: 'name must be a non-empty string if provided' };
     }
 
     if (name !== undefined && name.trim().length > MAX_CHAT_NAME_LENGTH) {
-        return { valid: false, error: `name must be ${MAX_CHAT_NAME_LENGTH} characters or fewer` };
+        return { valid: false, message: `name must be ${MAX_CHAT_NAME_LENGTH} characters or fewer` };
     }
 
     if (avatar_url !== undefined && typeof avatar_url !== 'string') {
-        return { valid: false, error: 'avatar_url must be a string if provided' };
+        return { valid: false, message: 'avatar_url must be a string if provided' };
     }
 
     if (avatar_url !== undefined && !isValidHttpUrl(avatar_url)) {
-        return { valid: false, error: 'avatar_url must be a valid URL' };
+        return { valid: false, message: 'avatar_url must be a valid URL' };
     }
 
     return {

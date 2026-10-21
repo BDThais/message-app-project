@@ -70,8 +70,8 @@ describe('validateCreateChatRoomInput', () => {
     ['an avatar_url that is not a string', { type: 'group', avatar_url: 5 }, 'avatar_url must be a string if provided'],
     ['an avatar_url that is not a URL', { type: 'group', avatar_url: 'not a url' }, 'avatar_url must be a valid URL'],
     ['an avatar_url with another scheme', { type: 'group', avatar_url: 'javascript:alert(1)' }, 'avatar_url must be a valid URL'],
-  ])('rejects %s', (_label, body, error) => {
-    expect(validateCreateChatRoomInput(body, requesterId)).toEqual({ valid: false, error });
+  ])('rejects %s', (_label, body, message) => {
+    expect(validateCreateChatRoomInput(body, requesterId)).toEqual({ valid: false, message });
   });
 });
 
