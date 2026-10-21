@@ -8,7 +8,7 @@ export type MessageWithSender = Prisma.MessageGetPayload<{
 }>;
 
 /**
- * Creates a new message in a chat room (POST /chat/:chatid/message).
+ * Creates a new message in a chat room (POST /api/chat/:chatid/message).
  * Membership is already guaranteed by loadChatMembership by the time this
  * runs - chatId comes from req.chatMembership and senderId from req.user, so
  * both are trusted to belong together and there's no membership check here.
@@ -30,7 +30,7 @@ export type MessagesPage = {
 };
 
 /**
- * Retrieves a page of messages for a chat room (GET /chat/:chatid/message),
+ * Retrieves a page of messages for a chat room (GET /api/chat/:chatid/message),
  * newest first. When `before` is given, only messages with a smaller id are
  * returned, so paging further back means passing the id of the oldest
  * message already loaded. Fetches one extra row to determine `hasMore`
@@ -62,7 +62,7 @@ export type DeleteMessageResult =
   | 'forbidden';
 
 /**
- * Soft-deletes a message (DELETE /chat/:chatid/message/:message_id): the row
+ * Soft-deletes a message (DELETE /api/chat/:chatid/message/:message_id): the row
  * stays so its slot in the room's history isn't lost, but `deletedAt` is
  * stamped and `content` is cleared, so future reads (getMessagesForChatRoom)
  * report it as deleted instead of returning the original content. This is
@@ -112,7 +112,7 @@ export type EditMessageResult =
   | { status: 'forbidden' };
 
 /**
- * Edits a message's content (PATCH /chat/:chatid/message/:message_id) and
+ * Edits a message's content (PATCH /api/chat/:chatid/message/:message_id) and
  * stamps `editedAt` so clients can show an "edited" label. `content` is
  * expected to be already validated and trimmed by validateEditMessageBody.
  *

@@ -38,10 +38,10 @@ interface ChatMemberWriteClient {
  * them when the room already has some (see addMembersToExistingChatRoom).
  *
  * Reused by:
- * - POST /chat (room creation) — called inside a transaction alongside
+ * - POST /api/chat (room creation) — called inside a transaction alongside
  *   the ChatRoom insert, so the room and its initial members are created
  *   atomically.
- * - POST /chat/:chatid/member — called (via
+ * - POST /api/chat/:chatid/member — called (via
  *   addMembersToExistingChatRoom below) with the main `prisma` client,
  *   using the default role: 'member'.
  */
@@ -63,7 +63,7 @@ export async function addChatRoomMembers(
 }
 
 /**
- * Adds users to a room that already exists (POST /chat/:chatid/member).
+ * Adds users to a room that already exists (POST /api/chat/:chatid/member).
  *
  * Users who are already members are left completely untouched - in
  * particular an existing admin is never downgraded to 'member' - and are
@@ -133,7 +133,7 @@ export type RemoveChatMemberResult =
   | 'only_admin';
 
 /**
- * Removes one member from a room (DELETE /chat/:chatid/member/:userid).
+ * Removes one member from a room (DELETE /api/chat/:chatid/member/:userid).
  * Used both for "leave" (target is the requester) and for an admin removing
  * someone else - who is allowed to do which is decided by the controller.
  *
@@ -210,7 +210,7 @@ export type ChangeMemberRoleResult =
   | { outcome: 'only_admin' };
 
 /**
- * Changes a member's role (PATCH /chat/:chatid/member/:userid). Only
+ * Changes a member's role (PATCH /api/chat/:chatid/member/:userid). Only
  * reachable for group rooms - a direct room's two members are both admins by
  * design (see createDirectChatRoom), and the route guards against direct
  * rooms with requireGroupRoom before this ever runs.
@@ -269,7 +269,7 @@ export async function changeMemberRoleInChatRoom(
 }
 
 /**
- * Lists everyone in a room (GET /chat/:chatid/member): admins first, then by
+ * Lists everyone in a room (GET /api/chat/:chatid/member): admins first, then by
  * name. Membership is already guaranteed by loadChatMembership by the time
  * this runs, and the list is the same for every member, so nothing here
  * depends on who is asking.
@@ -299,14 +299,14 @@ export async function getMembersForChatRoom(chatId: number): Promise<ChatMemberW
 export type MarkChatRoomReadResult =
   // `lastReadMessageId` is the marker as it stands after the call: the message
   // that was asked for, or the later one that was already there.
-  | { outcome: 'marked'; lastReadMessageId: number | null }
+  | { outcome: 'marked'; lastReadMessageId: number }
   // No message with this id in this room (a soft-deleted one still counts).
   | { outcome: 'message_not_found' }
   // The requester left the room between the membership check and this call.
   | { outcome: 'not_a_member' };
 
 /**
- * Marks a room as read up to a message (PUT /chat/:chatid/read) by moving the
+ * Marks a room as read up to a message (PUT /api/chat/:chatid/read) by moving the
  * requester's `lastReadMessageId` forward.
  *
  * The marker only moves forward: asking for a message at or below the current
@@ -354,6 +354,12 @@ export async function markChatRoomRead(
   });
   if (!current) {
     return { outcome: 'not_a_member' };
+  }
+  // The update above also matches a null marker, so a row it skipped has one at or past `messageId`.
+  // A null here would mean the message the marker pointed at vanished in between; messages are never
+  // hard-deleted apart from the whole room, and that takes this row with it.
+  if (current.lastReadMessageId === null) {
+    throw new Error(`last_read_message_id of member ${memberId} in room ${chatId} is null after an update that skipped it`);
   }
 
   return { outcome: 'marked', lastReadMessageId: current.lastReadMessageId };

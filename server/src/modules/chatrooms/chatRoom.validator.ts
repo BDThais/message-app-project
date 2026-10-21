@@ -1,23 +1,19 @@
 import { MAX_INT32 as MAX_ID } from '../../lib/constants';
 import { parseIdParam } from '../../lib/parseIdParam';
-import { isRecord, isValidHttpUrl } from '../../lib/validation';
-
-type ValidRoomType = 'direct' | 'group';
+import { bodyFields, isValidHttpUrl } from '../../lib/validation';
+import type {
+  AddMembersBody, ChangeMemberRoleBody, CreateChatRoomBody, GetMessagesQuery, MarkReadBody,
+  SendMessageBody, UpdateChatRoomBody
+} from '../../contract/requests';
+import type { RoomType } from '../../contract/types';
 
 // Longest group name, counted after trimming: the same limit when a room is created and when it is renamed.
 const MAX_CHAT_NAME_LENGTH = 100;
 
-type CreateChatRoomBody = Partial<{
-  type: ValidRoomType;
-  member_ids: number[];
-  name: string;
-  avatar_url: string;
-}>;
-
 type ValidationResult =
     | {
         valid: true;
-        type: ValidRoomType;
+        type: RoomType;
         memberIds: number[];
         name?: string;
         avatarUrl?: string;
@@ -25,33 +21,25 @@ type ValidationResult =
     | { valid: false; error: string };
 
 /**
- * Validates the body of POST /chat and returns everything the
+ * Validates the body of POST /api/chat and returns everything the
  * controller needs, normalized:
  * - memberIds: deduplicated, with the requester's own ID filtered out (the
- *   controller adds them back separately since their role differs by room
+ *   service adds them back separately since their role differs by room
  *   type - always admin for direct, admin-as-creator for group).
  * - name / avatarUrl: only present when valid, camelCased to match the
  *   Prisma field names.
  */
 export function validateCreateChatRoomInput(
-  body: CreateChatRoomBody,
-  requesterId: number
-): ValidationResult;
-export function validateCreateChatRoomInput(
-  body: unknown,
-  requesterId: number
-): ValidationResult;
-export function validateCreateChatRoomInput(
   body: unknown,
   requesterId: number
 ): ValidationResult {
-  const { type, member_ids, name, avatar_url } = isRecord(body) ? body : {};
+  const { type, member_ids, name, avatar_url } = bodyFields<CreateChatRoomBody>(body);
 
     if (type !== 'direct' && type !== 'group') {
         return { valid: false, error: 'type must be "direct" or "group"' };
     }
 
-    // Same ID range as POST /chat/:chatid/member. An ID outside the INTEGER
+    // Same ID range as POST /api/chat/:chatid/member. An ID outside the INTEGER
     // column's range would make the friendship lookup fail with a 500.
     if (member_ids !== undefined && (
       !Array.isArray(member_ids) ||
@@ -104,8 +92,7 @@ type UpdateChatRoomValidation =
   | { valid: false; message: string };
 
 export function validateUpdateChatRoomBody(body: unknown): UpdateChatRoomValidation {
-  // Express leaves req.body undefined when the request has no JSON body.
-  const { name, avatar_url } = isRecord(body) ? body : {};
+  const { name, avatar_url } = bodyFields<UpdateChatRoomBody>(body);
 
   if (name === undefined && avatar_url === undefined) {
     return { valid: false, message: "At least either Name or Avatar must be provided" };
@@ -143,12 +130,12 @@ type AddMembersValidation =
   | { valid: false; message: string };
 
 /**
- * Validates the body of POST /chat/:chatid/member. Unlike room
+ * Validates the body of POST /api/chat/:chatid/member. Unlike room
  * creation, member_ids is required here (adding nobody is a client bug, not
  * a no-op). Returns the IDs deduplicated and camelCased for the service.
  */
 export function validateAddMembersBody(body: unknown): AddMembersValidation {
-  const { member_ids } = isRecord(body) ? body : {};
+  const { member_ids } = bodyFields<AddMembersBody>(body);
 
   if (
     !Array.isArray(member_ids) ||
@@ -165,9 +152,9 @@ type ChangeMemberRoleValidation =
   | { valid: true; data: { role: 'admin' | 'member' } }
   | { valid: false; message: string };
 
-/** Validates the body of PATCH /chat/:chatid/member/:userid. */
+/** Validates the body of PATCH /api/chat/:chatid/member/:userid. */
 export function validateChangeMemberRoleBody(body: unknown): ChangeMemberRoleValidation {
-  const { role } = isRecord(body) ? body : {};
+  const { role } = bodyFields<ChangeMemberRoleBody>(body);
 
   if (role !== 'admin' && role !== 'member') {
     return { valid: false, message: "'role' must be 'admin' or 'member'" };
@@ -182,9 +169,9 @@ type SendMessageValidation =
 
 const MAX_MESSAGE_LENGTH = 4000;
 
-/** Validates the body of POST /chat/:chatid/message. */
+/** Validates the body of POST /api/chat/:chatid/message. */
 export function validateSendMessageBody(body: unknown): SendMessageValidation {
-  const { content } = isRecord(body) ? body : {};
+  const { content } = bodyFields<SendMessageBody>(body);
 
   if (typeof content !== 'string' || content.trim().length === 0) {
     return { valid: false, message: "'content' must be a non-empty string" };
@@ -205,12 +192,12 @@ type MarkReadValidation =
   | { valid: false; message: string };
 
 /**
- * Validates the body of PUT /chat/:chatid/read. `message_id` is a JSON number
+ * Validates the body of PUT /api/chat/:chatid/read. `message_id` is a JSON number
  * (like the ids in `member_ids`) with the same rule as every other id:
  * a positive integer within the Postgres integer range.
  */
 export function validateMarkReadBody(body: unknown): MarkReadValidation {
-  const { message_id } = isRecord(body) ? body : {};
+  const { message_id } = bodyFields<MarkReadBody>(body);
 
   if (!Number.isInteger(message_id) || (message_id as number) < 1 || (message_id as number) > MAX_ID) {
     return { valid: false, message: "'message_id' must be a positive integer message id" };
@@ -222,7 +209,7 @@ export function validateMarkReadBody(body: unknown): MarkReadValidation {
 type EditMessageValidation = SendMessageValidation;
 
 /**
- * Validates the body of PATCH /chat/:chatid/message/:message_id. An edit is
+ * Validates the body of PATCH /api/chat/:chatid/message/:message_id. An edit is
  * held to exactly the same rules as a new message (non-empty after trimming,
  * at most 4000 characters) - a message can't be edited into something it
  * couldn't have been sent as. Kept as its own function so the two can
@@ -240,14 +227,14 @@ const DEFAULT_MESSAGE_PAGE_SIZE = 50;
 const MAX_MESSAGE_PAGE_SIZE = 100;
 
 /**
- * Validates the query string of GET /chat/:chatid/message.
+ * Validates the query string of GET /api/chat/:chatid/message.
  * `before` (a message id) is optional and, when present, is validated with
  * the same rule as `:chatid`/`:userid` (positive integer, within the
  * Postgres integer range) since message ids come from the same kind of
  * column. `limit` is optional and defaults to 50, capped at 100.
  */
 export function validateGetMessagesQuery(query: unknown): GetMessagesQueryValidation {
-  const { before, limit } = isRecord(query) ? query : {};
+  const { before, limit } = bodyFields<GetMessagesQuery>(query);
 
   let parsedBefore: number | undefined;
   if (before !== undefined) {
@@ -280,7 +267,7 @@ type ChatIdParamValidation =
   | { valid: true; data: { chatId: number } }
   | { valid: false; message: string };
 
-/** Validates the ':chatid' URL param of every /chat/:chatid route. */
+/** Validates the ':chatid' URL param of every /api/chat/:chatid route. */
 export function validateChatIdParam(rawChatId: unknown): ChatIdParamValidation {
   const chatId = parseIdParam(rawChatId);
 
@@ -293,7 +280,7 @@ type UserIdParamValidation =
   | { valid: true; data: { userId: number } }
   | { valid: false; message: string };
 
-/** Validates the ':userid' URL param of /chat/:chatid/member/:userid. */
+/** Validates the ':userid' URL param of /api/chat/:chatid/member/:userid. */
 export function validateUserIdParam(rawUserId: unknown): UserIdParamValidation {
   const userId = parseIdParam(rawUserId);
 
@@ -306,7 +293,7 @@ type MessageIdParamValidation =
   | { valid: true; data: { messageId: number } }
   | { valid: false; message: string };
 
-/** Validates the ':message_id' URL param of /chat/:chatid/message/:message_id. */
+/** Validates the ':message_id' URL param of /api/chat/:chatid/message/:message_id. */
 export function validateMessageIdParam(rawMessageId: unknown): MessageIdParamValidation {
   const messageId = parseIdParam(rawMessageId);
 

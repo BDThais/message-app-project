@@ -3,10 +3,13 @@
 // "API contract" in backend.doc.md: nothing here imports anything from outside the folder, and
 // every value is JSON (a timestamp is an ISO 8601 string here, never a Date).
 //
-// The account shapes are checked by the compiler on both sides. The chat and friend shapes are
-// still the transcription of api.doc.md they started as: their controllers do not use them yet.
+// The account shapes are checked by the compiler on both sides, and the chat room shapes on the
+// server (the frontend has no chat code yet). The friend shapes are still the transcription of
+// api.doc.md they started as: the friends controllers do not use them yet.
 
 export type Role = 'admin' | 'member';
+
+export type RoomType = 'direct' | 'group';
 
 /** Your own account: login, GET /api/account/me, PATCH /api/account/me. */
 export interface User {
@@ -28,7 +31,7 @@ export interface PublicUser {
 /** GET /api/chat, one entry per room. */
 export interface ChatRoomSummary {
   id: number;
-  type: 'direct' | 'group';
+  type: RoomType;
   /** Direct room: the other member's name (null once they are gone). Group room: its own name, may be null. */
   name: string | null;
   /** Direct room: the other member's avatar. */
@@ -48,7 +51,7 @@ export interface ChatRoomDetail extends ChatRoomSummary {
 /** The room's own columns: what PATCH /api/chat/:chatid returns. */
 export interface ChatRoomCore {
   id: number;
-  type: 'direct' | 'group';
+  type: RoomType;
   name: string | null;
   avatarUrl: string | null;
   createdAt: string;

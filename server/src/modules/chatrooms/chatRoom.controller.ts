@@ -1,4 +1,10 @@
 import type { Request, Response, NextFunction } from 'express';
+import type { ApiErrorBody } from '../../contract/errors';
+import type {
+  AddMembersResponse, ChatMessageResponse, ChatRoomCoreResponse, ChatRoomDetailResponse,
+  ChatRoomListResponse, MarkReadResponse, MemberListResponse, MemberResponse, MessageListResponse
+} from '../../contract/responses';
+import type { CreatedChatRoom } from '../../contract/types';
 import {
   validateCreateChatRoomInput, validateUpdateChatRoomBody, validateAddMembersBody,
   validateUserIdParam, validateChangeMemberRoleBody, validateSendMessageBody,
@@ -14,13 +20,14 @@ import {
   deleteChatRoomById, isForeignKeyConstraintError
 } from './chatRoom.service';
 import { createMessage, getMessagesForChatRoom, deleteMessage, editMessage } from './message.service';
+import { toChatRoomCore, toChatRoomSummary, toCreatedChatRoom, toMessage } from './chatRoom.serializer';
 
-// One body for every refusal of the friendship rule (POST /chat and
-// POST /chat/:chatid/member). It does not say which ID was refused or why, so
+// One body for every refusal of the friendship rule (POST /api/chat and
+// POST /api/chat/:chatid/member). It does not say which ID was refused or why, so
 // a stranger and a user who does not exist look the same.
 const NOT_FRIENDS_ERROR = 'Only your friends can be added to a chat room';
 
-export async function createChatRoom(req: Request, res: Response) {
+export async function createChatRoom(req: Request, res: Response<CreatedChatRoom | ApiErrorBody>) {
   if (!req.user) {
     return res.status(401).json({ error: 'Unauthorized Access' });
   }
@@ -39,7 +46,7 @@ export async function createChatRoom(req: Request, res: Response) {
       return res.status(403).json({ error: NOT_FRIENDS_ERROR });
     }
 
-    return res.status(result.created ? 201 : 200).json(result.room);
+    return res.status(result.created ? 201 : 200).json(toCreatedChatRoom(result.room));
   } catch (err) {
     if (isForeignKeyConstraintError(err)) {
       // A member_ids user was deleted after the friendship check, so they are
@@ -50,7 +57,7 @@ export async function createChatRoom(req: Request, res: Response) {
   }
 }
 
-export async function getChatRooms(req: Request, res: Response, next: NextFunction) {
+export async function getChatRooms(req: Request, res: Response<ChatRoomListResponse>, next: NextFunction) {
   try {
     const userId = req.user!.id;
 
@@ -63,17 +70,17 @@ export async function getChatRooms(req: Request, res: Response, next: NextFuncti
       (a, b) => activityTimestamp(b) - activityTimestamp(a)
     );
 
-    res.json({ chatRooms });
+    res.json({ chatRooms: chatRooms.map(toChatRoomSummary) });
   } catch (err) {
     next(err);
   }
 }
 
 // Existence + membership is already guaranteed by loadChatMembership
-// (mounted via router.param('chatid', ...)) by the time this runs, so
-// there's no 404 branch here and only the relevant one of the two
-// fetchers below gets called.
-export async function getChatRoomById(req: Request, res: Response, next: NextFunction) {
+// (mounted via router.param('chatid', ...)) by the time this runs, so only
+// the relevant one of the two fetchers below gets called, and a missing room
+// can only mean it was deleted (or the requester removed) since then.
+export async function getChatRoomById(req: Request, res: Response<ChatRoomDetailResponse | ApiErrorBody>, next: NextFunction) {
   try {
     const userId = req.user!.id;
     const { chatId, roomType, role } = req.chatMembership!;
@@ -83,13 +90,18 @@ export async function getChatRoomById(req: Request, res: Response, next: NextFun
         ? await getDirectChatRoomsForUser(userId, chatId)
         : await getGroupChatRoomsForUser(userId, chatId);
 
-    res.json({ chatRoom: { ...room, role } });
+    // The room can be gone by now: deleted, or the requester removed from it, since loadChatMembership ran.
+    if (!room) {
+      return res.status(404).json({ error: 'Chat room not found' });
+    }
+
+    res.json({ chatRoom: { ...toChatRoomSummary(room), role } });
   } catch (err) {
     next(err);
   }
 }
 
-export async function updateChatRoom(req: Request, res: Response, next: NextFunction) {
+export async function updateChatRoom(req: Request, res: Response<ChatRoomCoreResponse | ApiErrorBody>, next: NextFunction) {
   const validation = validateUpdateChatRoomBody(req.body);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });
@@ -98,33 +110,25 @@ export async function updateChatRoom(req: Request, res: Response, next: NextFunc
   try {
     const chatRoom = await updateChatRoomById(req.chatMembership!.chatId, validation.data);
 
-    res.status(200).json({
-      chatRoom: {
-        id: chatRoom.id,
-        type: chatRoom.type,
-        name: chatRoom.name,
-        avatarUrl: chatRoom.avatarUrl,
-        createdAt: chatRoom.createdAt,
-      },
-    });
+    res.status(200).json({ chatRoom: toChatRoomCore(chatRoom) });
   } catch (err) {
     next(err);
   }
 }
 
-export async function deleteChatRoom(req: Request, res: Response, next: NextFunction) {
+export async function deleteChatRoom(req: Request, res: Response<ApiErrorBody>, next: NextFunction) {
   try {
     await deleteChatRoomById(req.chatMembership!.chatId);
-    res.status(204).json({ message: 'Chat room deleted' });
+    res.status(204).end();
   } catch (err) {
     next(err);
   }
 }
 
-// Route chain (see ChatRoomRoutes.ts): loadChatMembership -> requireGroupRoom
+// Route chain (see chatRoom.routes.ts): loadChatMembership -> requireGroupRoom
 // -> requireChatAdmin, so by the time this runs the room exists, is a group
 // room, and the requester is one of its admins.
-export async function addChatRoomMembers(req: Request, res: Response, next: NextFunction) {
+export async function addChatRoomMembers(req: Request, res: Response<AddMembersResponse | ApiErrorBody>, next: NextFunction) {
   const validation = validateAddMembersBody(req.body);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });
@@ -143,7 +147,7 @@ export async function addChatRoomMembers(req: Request, res: Response, next: Next
 
     const { addedMembers, alreadyMemberIds } = result;
 
-    // Same convention as POST /chat: 201 when something was created,
+    // Same convention as POST /api/chat: 201 when something was created,
     // 200 when the request changed nothing (everyone was already a member).
     return res
       .status(addedMembers.length > 0 ? 201 : 200)
@@ -158,13 +162,13 @@ export async function addChatRoomMembers(req: Request, res: Response, next: Next
   }
 }
 
-// Route chain (see ChatRoomRoutes.ts): loadChatMembership only. There is no
+// Route chain (see chatRoom.routes.ts): loadChatMembership only. There is no
 // blanket requireGroupRoom / requireChatAdmin guard on this route because who
 // may call it depends on who the target is:
 //   - removing yourself (leaving) is allowed for every member, in any room;
 //   - removing someone else needs a group room AND an admin requester.
 // By the time this runs the room exists and the requester is a member of it.
-export async function removeChatRoomMember(req: Request, res: Response, next: NextFunction) {
+export async function removeChatRoomMember(req: Request, res: Response<ApiErrorBody>, next: NextFunction) {
   const validation = validateUserIdParam(req.params.userid);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });
@@ -208,7 +212,7 @@ export async function removeChatRoomMember(req: Request, res: Response, next: Ne
 // Route chain (see chatRoom.routes.ts): loadChatMembership -> requireGroupRoom
 // -> requireChatAdmin, so by the time this runs the room exists, is a group
 // room, and the requester is one of its admins.
-export async function changeChatRoomMemberRole(req: Request, res: Response, next: NextFunction) {
+export async function changeChatRoomMemberRole(req: Request, res: Response<MemberResponse | ApiErrorBody>, next: NextFunction) {
   const idValidation = validateUserIdParam(req.params.userid);
   if (!idValidation.valid) {
     return res.status(400).json({ error: idValidation.message });
@@ -245,7 +249,7 @@ export async function changeChatRoomMemberRole(req: Request, res: Response, next
 // the permission model in api.doc.md), so there's no
 // requireGroupRoom / requireChatAdmin guard on this route. By the time this
 // runs the room exists and the requester is a member of it.
-export async function sendChatRoomMessage(req: Request, res: Response, next: NextFunction) {
+export async function sendChatRoomMessage(req: Request, res: Response<ChatMessageResponse | ApiErrorBody>, next: NextFunction) {
   const validation = validateSendMessageBody(req.body);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });
@@ -258,7 +262,7 @@ export async function sendChatRoomMessage(req: Request, res: Response, next: Nex
       validation.data.content
     );
 
-    return res.status(201).json({ message });
+    return res.status(201).json({ message: toMessage(message) });
   } catch (err) {
     next(err);
   }
@@ -269,7 +273,7 @@ export async function sendChatRoomMessage(req: Request, res: Response, next: Nex
 // as sending (see the permission model in api.doc.md), so
 // there's no requireGroupRoom / requireChatAdmin guard on this route. By the
 // time this runs the room exists and the requester is a member of it.
-export async function getChatRoomMessages(req: Request, res: Response, next: NextFunction) {
+export async function getChatRoomMessages(req: Request, res: Response<MessageListResponse | ApiErrorBody>, next: NextFunction) {
   const validation = validateGetMessagesQuery(req.query);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });
@@ -282,7 +286,7 @@ export async function getChatRoomMessages(req: Request, res: Response, next: Nex
       validation.data.before
     );
 
-    return res.status(200).json({ messages, hasMore });
+    return res.status(200).json({ messages: messages.map(toMessage), hasMore });
   } catch (err) {
     next(err);
   }
@@ -293,7 +297,7 @@ export async function getChatRoomMessages(req: Request, res: Response, next: Nex
 // or group rooms alike, so there's no requireGroupRoom / requireChatAdmin
 // guard on this route. By the time this runs the room exists and the
 // requester is a member of it.
-export async function deleteChatRoomMessage(req: Request, res: Response, next: NextFunction) {
+export async function deleteChatRoomMessage(req: Request, res: Response<ApiErrorBody>, next: NextFunction) {
   const validation = validateMessageIdParam(req.params.message_id);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });
@@ -324,7 +328,7 @@ export async function deleteChatRoomMessage(req: Request, res: Response, next: N
 // or group rooms alike, so there's no requireGroupRoom / requireChatAdmin
 // guard on this route. By the time this runs the room exists and the
 // requester is a member of it.
-export async function editChatRoomMessage(req: Request, res: Response, next: NextFunction) {
+export async function editChatRoomMessage(req: Request, res: Response<ChatMessageResponse | ApiErrorBody>, next: NextFunction) {
   const idValidation = validateMessageIdParam(req.params.message_id);
   if (!idValidation.valid) {
     return res.status(400).json({ error: idValidation.message });
@@ -346,7 +350,7 @@ export async function editChatRoomMessage(req: Request, res: Response, next: Nex
     switch (result.status) {
       case 'edited':
       case 'unchanged':
-        return res.status(200).json({ message: result.message });
+        return res.status(200).json({ message: toMessage(result.message) });
       case 'not_found':
         return res.status(404).json({ error: 'Message not found in this chat room' });
       case 'forbidden':
@@ -361,7 +365,7 @@ export async function editChatRoomMessage(req: Request, res: Response, next: Nex
 // members takes membership alone, in direct or group rooms alike, so there's no
 // requireGroupRoom / requireChatAdmin guard on this route. By the time this
 // runs the room exists and the requester is a member of it.
-export async function getChatRoomMembers(req: Request, res: Response, next: NextFunction) {
+export async function getChatRoomMembers(req: Request, res: Response<MemberListResponse>, next: NextFunction) {
   try {
     const members = await getMembersForChatRoom(req.chatMembership!.chatId);
 
@@ -375,7 +379,7 @@ export async function getChatRoomMembers(req: Request, res: Response, next: Next
 // has their own read marker, in direct or group rooms alike, so there's no
 // requireGroupRoom / requireChatAdmin guard on this route. By the time this
 // runs the room exists and the requester is a member of it.
-export async function markChatRoomAsRead(req: Request, res: Response, next: NextFunction) {
+export async function markChatRoomAsRead(req: Request, res: Response<MarkReadResponse | ApiErrorBody>, next: NextFunction) {
   const validation = validateMarkReadBody(req.body);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });

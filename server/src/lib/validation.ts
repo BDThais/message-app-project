@@ -17,8 +17,8 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * The fields of a request body, each one `unknown` until the validator has checked it. `B` is the
- * body's type from contract/requests.ts, so a key the contract does not have (a typo, or a rename
+ * The fields of a request body (or of a query string), each one `unknown` until the validator has
+ * checked it. `B` is the body's or query's type from contract/requests.ts, so a key the contract does not have (a typo, or a rename
  * made in the contract only) does not compile when destructured. Without a JSON body (Express
  * leaves req.body undefined) or with one that is not an object, every field is undefined.
  */

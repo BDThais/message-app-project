@@ -2,14 +2,15 @@ import { addChatRoomMembers, memberResponseArgs } from './chatMember.service';
 import { findNonFriendIds } from '../friends/friend.service';
 import { prisma } from '../../lib/prisma';
 import { Prisma, ChatRoomType, ChatMemberRole } from '../../generated/prisma/client';
+import type { ChatRoomSummary } from '../../contract/types';
 
-// What POST /chat returns: the room's own columns and its members. `emptiedAt` belongs to the cleanup job and stays out of the response.
+// What POST /api/chat builds its response from: the room's own columns and its members. `emptiedAt` belongs to the cleanup job and stays out of the response.
 const roomWithMembersArgs = {
   include: { members: memberResponseArgs },
   omit: { emptiedAt: true },
 } as const;
 
-type ChatRoomWithMembers = Prisma.ChatRoomGetPayload<typeof roomWithMembersArgs>;
+export type ChatRoomWithMembers = Prisma.ChatRoomGetPayload<typeof roomWithMembersArgs>;
 
 export type CreateChatRoomResult =
   | { status: 'ok'; room: ChatRoomWithMembers; created: boolean }
@@ -18,11 +19,11 @@ export type CreateChatRoomResult =
   | { status: 'not_friends' };
 
 /**
- * Behind POST /chat. Everyone the requester invites has to be their friend,
+ * Behind POST /api/chat. Everyone the requester invites has to be their friend,
  * checked before anything is written, so a refused request creates no room
  * and no members. For a direct room the check also comes before the lookup of
  * an existing room, so a room between two former friends is not handed out
- * again here (it is still listed by GET /chat and keeps working). A group room
+ * again here (it is still listed by GET /api/chat and keeps working). A group room
  * with no `memberIds` needs no friends.
  */
 export async function createChatRoom(
@@ -97,7 +98,7 @@ export async function createDirectChatRoom(
 /**
  * Creates a group room. The requester becomes admin; everyone they invite
  * joins as a regular member - the same default role
- * POST /chat/:chatid/member will use.
+ * POST /api/chat/:chatid/member gives.
  */
 export async function createGroupChatRoom(
   tx: Prisma.TransactionClient,
@@ -125,18 +126,16 @@ export async function createGroupChatRoom(
 }
 
 
-// Shape returned to the client for every chat room, regardless of type.
-export interface ChatRoomSummary {
-  id: number;
-  type: 'direct' | 'group';
-  name: string | null;
-  avatarUrl: string | null;
+/**
+ * What the service hands over for every chat room, regardless of type: the contract's
+ * `ChatRoomSummary` with its timestamps still `Date`s. `toChatRoomSummary` (chatRoom.serializer.ts)
+ * turns it into what goes over the wire. `unreadCount` is explained at countUnreadMessages.
+ */
+export type ChatRoomSummaryData = Omit<ChatRoomSummary, 'createdAt' | 'lastMessage'> & {
   createdAt: Date;
   // The newest message that has not been deleted; null when the room has none.
   lastMessage: { content: string; createdAt: Date } | null;
-  // Messages from other people that the requester has not read yet, see countUnreadMessages.
-  unreadCount: number;
-}
+};
 
 /**
  * How many unread messages the user has in each of the given rooms, in one
@@ -177,15 +176,15 @@ export async function countUnreadMessages(
  
 /**
  * Fetch direct chat rooms for a user.
- * Reusable by GET /chat (no chatId) and later by GET /chat/:chatid
- * (pass chatId to scope the query down to a single room).
+ * Used by GET /api/chat (no chatId) and by GET /api/chat/:chatid (pass
+ * chatId to scope the query down to a single room).
  * name/avatarUrl come from the *other* member, since direct rooms have
  * no name/avatar of their own.
  */
 export async function getDirectChatRoomsForUser(
   userId: number,
   chatId?: number
-): Promise<ChatRoomSummary[]> {
+): Promise<ChatRoomSummaryData[]> {
   const rooms = await prisma.chatRoom.findMany({
     where: {
       type: 'direct',
@@ -235,7 +234,7 @@ export async function getDirectChatRoomsForUser(
 export async function getGroupChatRoomsForUser(
   userId: number,
   chatId?: number
-): Promise<ChatRoomSummary[]> {
+): Promise<ChatRoomSummaryData[]> {
   const rooms = await prisma.chatRoom.findMany({
     where: {
       type: 'group',
@@ -266,7 +265,7 @@ export async function getGroupChatRoomsForUser(
  
 // Most recent activity first: the time of the last message that has not been
 // deleted if there is one, otherwise the room's creation time.
-export function activityTimestamp(room: ChatRoomSummary): number {
+export function activityTimestamp(room: ChatRoomSummaryData): number {
   return (room.lastMessage?.createdAt ?? room.createdAt).getTime();
 }
 

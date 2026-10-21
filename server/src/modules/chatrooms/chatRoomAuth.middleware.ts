@@ -1,4 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
+import type { ApiErrorBody } from '../../contract/errors';
+import type { Role, RoomType } from '../../contract/types';
 import { getChatMembership } from './chatRoom.service';
 import { validateChatIdParam } from './chatRoom.validator';
 
@@ -10,8 +12,8 @@ declare global {
     interface Request {
       chatMembership?: {
         chatId: number;
-        role: 'admin' | 'member';
-        roomType: 'direct' | 'group';
+        role: Role;
+        roomType: RoomType;
       };
     }
   }
@@ -27,7 +29,7 @@ declare global {
  */
 export async function loadChatMembership(
   req: Request,
-  res: Response,
+  res: Response<ApiErrorBody>,
   next: NextFunction,
   rawChatId: string
 ) {
@@ -57,7 +59,7 @@ export async function loadChatMembership(
 }
 
 /** Route guard: requester must be an admin of the room. */
-export function requireChatAdmin(req: Request, res: Response, next: NextFunction) {
+export function requireChatAdmin(req: Request, res: Response<ApiErrorBody>, next: NextFunction) {
   if (req.chatMembership?.role !== 'admin') {
     return res.status(403).json({ error: 'Admin role required for this action' });
   }
@@ -70,7 +72,7 @@ export function requireChatAdmin(req: Request, res: Response, next: NextFunction
  * admins by design, so requireChatAdmin alone won't catch this case -
  * this does.
  */
-export function requireGroupRoom(req: Request, res: Response, next: NextFunction) {
+export function requireGroupRoom(req: Request, res: Response<ApiErrorBody>, next: NextFunction) {
   if (req.chatMembership?.roomType !== 'group') {
     return res.status(403).json({ error: 'Not available for direct chat rooms' });
   }
