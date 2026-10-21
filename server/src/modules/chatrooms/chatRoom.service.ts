@@ -4,7 +4,7 @@ import { prisma } from '../../lib/prisma';
 import { Prisma, ChatRoomType, ChatMemberRole } from '../../generated/prisma/client';
 import type { ChatRoomSummary, RoomType } from '../../contract/types';
 
-// What POST /api/chat builds its response from: the room's own columns and its members. `emptiedAt` belongs to the cleanup job and stays out of the response.
+// The room's own columns and its members. `emptiedAt` belongs to the cleanup job and stays out of the response.
 const roomWithMembersArgs = {
   include: { members: memberResponseArgs },
   omit: { emptiedAt: true },
@@ -19,12 +19,9 @@ export type CreateChatRoomResult =
   | { status: 'not_friends' };
 
 /**
- * Behind POST /api/chat. Everyone the requester invites has to be their friend,
- * checked before anything is written, so a refused request creates no room
- * and no members. For a direct room the check also comes before the lookup of
- * an existing room, so a room between two former friends is not handed out
- * again here (it is still listed by GET /api/chat and keeps working). A group room
- * with no `memberIds` needs no friends.
+ * Creates a room, or finds the existing direct room. The invitees' friendships are checked before
+ * anything is written, so a refused request creates nothing, and for a direct room before the lookup
+ * of an existing room, so a room between two former friends is not handed out again.
  */
 export async function createChatRoom(
   type: ChatRoomType,
@@ -59,9 +56,8 @@ export function isForeignKeyConstraintError(err: unknown): boolean {
 }
 
 /**
- * Creates (or reuses) a direct room between the requester and one other
- * user. Both members are admins - a direct room has no name/avatar to
- * protect and no add/remove-member action applies to a 1:1 room.
+ * Both members of a direct room are admins: it has no name or avatar to protect, and no
+ * add/remove-member action applies to a 1:1 room.
  */
 export async function createDirectChatRoom(
   tx: Prisma.TransactionClient,
@@ -95,11 +91,6 @@ export async function createDirectChatRoom(
   return { room, created: true };
 }
 
-/**
- * Creates a group room. The requester becomes admin; everyone they invite
- * joins as a regular member - the same default role
- * POST /api/chat/:chatid/member gives.
- */
 export async function createGroupChatRoom(
   tx: Prisma.TransactionClient,
   requesterId: number,
@@ -125,7 +116,6 @@ export async function createGroupChatRoom(
   return { room, created: true };
 }
 
-
 /**
  * What the service hands over for every chat room, regardless of type: the contract's
  * `ChatRoomSummary` with its timestamps still `Date`s. `toChatRoomSummary` (chatRoom.serializer.ts)
@@ -138,19 +128,15 @@ export type ChatRoomSummaryData = Omit<ChatRoomSummary, 'createdAt' | 'lastMessa
 };
 
 /**
- * How many unread messages the user has in each of the given rooms, in one
- * query. A message is unread when it is in the room, has an id above the
- * user's own `lastReadMessageId` for that room (every message when the marker
- * is still null), was not sent by the user and has not been deleted. Rooms
- * with nothing unread are absent from the map, so read it with `?? 0`.
+ * Unread messages per room for one user, in one query; rooms with nothing unread are absent from the
+ * map, so read it with `?? 0`. A message is unread when it is above the user's `lastReadMessageId`
+ * for that room (every message while the marker is null), was not sent by the user and is not deleted.
  *
- * Written as SQL because the threshold is a column of each room's own
- * chat_members row, which a Prisma relation filter cannot refer to; the
- * alternative is one count query per room. `sender_id` is NULL for messages
- * whose author deleted their account: those are still somebody else's
- * messages, so the test is `IS NULL OR <>` (a plain `<>` would drop them).
- * The (chat_id, id) index serves the lookup, and `COUNT(*)::int` keeps the
- * result a number rather than a BigInt.
+ * Raw SQL because the threshold is a column of each room's own chat_members row, which a Prisma
+ * relation filter cannot refer to (the alternative is one count query per room). `sender_id` is NULL
+ * for messages whose author deleted their account: those are still somebody else's, so the test is
+ * `IS NULL OR <>` (a plain `<>` would drop them). The (chat_id, id) index serves the lookup, and
+ * `COUNT(*)::int` keeps the result a number rather than a BigInt.
  */
 export async function countUnreadMessages(
   userId: number,
@@ -175,11 +161,8 @@ export async function countUnreadMessages(
 }
  
 /**
- * Fetch direct chat rooms for a user.
- * Used by GET /api/chat (no chatId) and by GET /api/chat/:chatid (pass
- * chatId to scope the query down to a single room).
- * name/avatarUrl come from the *other* member, since direct rooms have
- * no name/avatar of their own.
+ * Direct rooms of a user, or just one with `chatId`. name and avatarUrl come from the *other* member:
+ * a direct room has none of its own.
  */
 export async function getDirectChatRoomsForUser(
   userId: number,
@@ -227,10 +210,7 @@ export async function getDirectChatRoomsForUser(
   });
 }
  
-/**
- * Fetch group chat rooms for a user. Same reuse intent as the direct
- * variant above. Group rooms use their own name/avatarUrl fields.
- */
+/** Group rooms of a user, or just one with `chatId`, with the room's own name and avatarUrl. */
 export async function getGroupChatRoomsForUser(
   userId: number,
   chatId?: number

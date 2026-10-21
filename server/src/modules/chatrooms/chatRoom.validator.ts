@@ -21,13 +21,9 @@ type ValidationResult =
     | { valid: false; message: string };
 
 /**
- * Validates the body of POST /api/chat and returns everything the
- * controller needs, normalized:
- * - memberIds: deduplicated, with the requester's own ID filtered out (the
- *   service adds them back separately since their role differs by room
- *   type - always admin for direct, admin-as-creator for group).
- * - name / avatarUrl: only present when valid, camelCased to match the
- *   Prisma field names.
+ * Returns everything the controller needs, normalized: `memberIds` deduplicated and without the
+ * requester's own ID (the service adds them back, with a role that depends on the room type), `name`
+ * and `avatarUrl` only when valid, camelCased to match the Prisma field names.
  */
 export function validateCreateChatRoomInput(
   body: unknown,
@@ -39,8 +35,8 @@ export function validateCreateChatRoomInput(
         return { valid: false, message: 'type must be "direct" or "group"' };
     }
 
-    // Same ID range as POST /api/chat/:chatid/member. An ID outside the INTEGER
-    // column's range would make the friendship lookup fail with a 500.
+    // Same ID range as validateAddMembersBody. An ID outside the INTEGER column's range would make the
+    // friendship lookup fail with a 500.
     if (member_ids !== undefined && (
       !Array.isArray(member_ids) ||
       member_ids.some((id) => !Number.isInteger(id) || id < 1 || id > MAX_ID)
@@ -86,7 +82,6 @@ export function validateCreateChatRoomInput(
     };
 }
 
-
 type UpdateChatRoomValidation =
   | { valid: true; data: { name?: string; avatarUrl?: string | null } }
   | { valid: false; message: string };
@@ -129,11 +124,7 @@ type AddMembersValidation =
   | { valid: true; data: { memberIds: number[] } }
   | { valid: false; message: string };
 
-/**
- * Validates the body of POST /api/chat/:chatid/member. Unlike room
- * creation, member_ids is required here (adding nobody is a client bug, not
- * a no-op). Returns the IDs deduplicated and camelCased for the service.
- */
+/** member_ids is required here, unlike at room creation: adding nobody is a client bug, not a no-op. */
 export function validateAddMembersBody(body: unknown): AddMembersValidation {
   const { member_ids } = bodyFields<AddMembersBody>(body);
 
@@ -152,7 +143,6 @@ type ChangeMemberRoleValidation =
   | { valid: true; data: { role: 'admin' | 'member' } }
   | { valid: false; message: string };
 
-/** Validates the body of PATCH /api/chat/:chatid/member/:userid. */
 export function validateChangeMemberRoleBody(body: unknown): ChangeMemberRoleValidation {
   const { role } = bodyFields<ChangeMemberRoleBody>(body);
 
@@ -169,7 +159,6 @@ type SendMessageValidation =
 
 const MAX_MESSAGE_LENGTH = 4000;
 
-/** Validates the body of POST /api/chat/:chatid/message. */
 export function validateSendMessageBody(body: unknown): SendMessageValidation {
   const { content } = bodyFields<SendMessageBody>(body);
 
@@ -191,11 +180,6 @@ type MarkReadValidation =
   | { valid: true; data: { messageId: number } }
   | { valid: false; message: string };
 
-/**
- * Validates the body of PUT /api/chat/:chatid/read. `message_id` is a JSON number
- * (like the ids in `member_ids`) with the same rule as every other id:
- * a positive integer within the Postgres integer range.
- */
 export function validateMarkReadBody(body: unknown): MarkReadValidation {
   const { message_id } = bodyFields<MarkReadBody>(body);
 
@@ -209,11 +193,8 @@ export function validateMarkReadBody(body: unknown): MarkReadValidation {
 type EditMessageValidation = SendMessageValidation;
 
 /**
- * Validates the body of PATCH /api/chat/:chatid/message/:message_id. An edit is
- * held to exactly the same rules as a new message (non-empty after trimming,
- * at most 4000 characters) - a message can't be edited into something it
- * couldn't have been sent as. Kept as its own function so the two can
- * diverge later without touching the send route.
+ * An edit is held to exactly the rules of a new message: a message can't be edited into something it
+ * couldn't have been sent as. Its own function so the two can diverge without touching the send route.
  */
 export function validateEditMessageBody(body: unknown): EditMessageValidation {
   return validateSendMessageBody(body);
@@ -226,13 +207,6 @@ type GetMessagesQueryValidation =
 const DEFAULT_MESSAGE_PAGE_SIZE = 50;
 const MAX_MESSAGE_PAGE_SIZE = 100;
 
-/**
- * Validates the query string of GET /api/chat/:chatid/message.
- * `before` (a message id) is optional and, when present, is validated with
- * the same rule as `:chatid`/`:userid` (positive integer, within the
- * Postgres integer range) since message ids come from the same kind of
- * column. `limit` is optional and defaults to 50, capped at 100.
- */
 export function validateGetMessagesQuery(query: unknown): GetMessagesQueryValidation {
   const { before, limit } = bodyFields<GetMessagesQuery>(query);
 
@@ -267,7 +241,6 @@ type ChatIdParamValidation =
   | { valid: true; data: { chatId: number } }
   | { valid: false; message: string };
 
-/** Validates the ':chatid' URL param of every /api/chat/:chatid route. */
 export function validateChatIdParam(rawChatId: unknown): ChatIdParamValidation {
   const chatId = parseIdParam(rawChatId);
 
@@ -280,7 +253,6 @@ type UserIdParamValidation =
   | { valid: true; data: { userId: number } }
   | { valid: false; message: string };
 
-/** Validates the ':userid' URL param of /api/chat/:chatid/member/:userid. */
 export function validateUserIdParam(rawUserId: unknown): UserIdParamValidation {
   const userId = parseIdParam(rawUserId);
 
@@ -293,7 +265,6 @@ type MessageIdParamValidation =
   | { valid: true; data: { messageId: number } }
   | { valid: false; message: string };
 
-/** Validates the ':message_id' URL param of /api/chat/:chatid/message/:message_id. */
 export function validateMessageIdParam(rawMessageId: unknown): MessageIdParamValidation {
   const messageId = parseIdParam(rawMessageId);
 

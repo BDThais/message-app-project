@@ -8,10 +8,8 @@ export type MessageWithSender = Prisma.MessageGetPayload<{
 }>;
 
 /**
- * Creates a new message in a chat room (POST /api/chat/:chatid/message).
- * Membership is already guaranteed by loadChatMembership by the time this
- * runs - chatId comes from req.chatMembership and senderId from req.user, so
- * both are trusted to belong together and there's no membership check here.
+ * Creates a message. There is no membership check: chatId and senderId come from req.chatMembership
+ * and req.user, which loadChatMembership has already vouched for.
  */
 export async function createMessage(
   chatId: number,
@@ -30,12 +28,8 @@ export type MessagesPage = {
 };
 
 /**
- * Retrieves a page of messages for a chat room (GET /api/chat/:chatid/message),
- * newest first. When `before` is given, only messages with a smaller id are
- * returned, so paging further back means passing the id of the oldest
- * message already loaded. Fetches one extra row to determine `hasMore`
- * without a separate count query. Membership is already guaranteed by
- * loadChatMembership by the time this runs.
+ * A page of messages, newest first. It fetches one row more than asked for, to know `hasMore`
+ * without a separate count query.
  */
 export async function getMessagesForChatRoom(
   chatId: number,
@@ -61,21 +55,7 @@ export type DeleteMessageResult =
   // The requester didn't send this message.
   | 'forbidden';
 
-/**
- * Soft-deletes a message (DELETE /api/chat/:chatid/message/:message_id): the row
- * stays so its slot in the room's history isn't lost, but `deletedAt` is
- * stamped and `content` is cleared, so future reads (getMessagesForChatRoom)
- * report it as deleted instead of returning the original content. This is
- * the "delete for everyone" behavior specified in api.doc.md;
- * there is no separate "delete for me" mode.
- *
- * Deleting is limited to the message's own sender, in direct or group rooms
- * alike - there is no admin-moderation override for other members' messages
- * (see the permission model in api.doc.md). Membership in
- * `chatId` is already guaranteed by loadChatMembership by the time this
- * runs; this only additionally confirms the message belongs to that room and
- * isn't already deleted.
- */
+/** Soft delete: the row stays, `content` is cleared and `deletedAt` stamped. Only the sender may. */
 export async function deleteMessage(
   chatId: number,
   messageId: number,
@@ -102,9 +82,8 @@ export async function deleteMessage(
 }
 
 export type EditMessageResult =
-  // `edited` means the content changed and `editedAt` was stamped; `unchanged`
-  // means the new content equals the current one, so nothing was written.
-  // Kept apart so the future Socket.io layer only broadcasts real edits.
+  // `edited`: the content changed and `editedAt` was stamped. `unchanged`: the new content equals the
+  // current one and nothing was written, so a broadcast of edits can skip it.
   | { status: 'edited' | 'unchanged'; message: MessageWithSender }
   // No message with this id in this room, or it was deleted.
   | { status: 'not_found' }
@@ -112,20 +91,10 @@ export type EditMessageResult =
   | { status: 'forbidden' };
 
 /**
- * Edits a message's content (PATCH /api/chat/:chatid/message/:message_id) and
- * stamps `editedAt` so clients can show an "edited" label. `content` is
- * expected to be already validated and trimmed by validateEditMessageBody.
- *
- * Same access rules as deleteMessage: only the message's own sender, in
- * direct or group rooms alike, with no admin override. Membership in
- * `chatId` is already guaranteed by loadChatMembership by the time this
- * runs; this only additionally confirms the message belongs to that room
- * and hasn't been deleted - a deleted message can never be edited back to
- * life.
- *
- * Saving the content the message already has is not an edit: it returns
- * `unchanged` without touching the row, so `editedAt` never gets stamped on
- * a message that visibly didn't change.
+ * Edits a message's content and stamps `editedAt`. `content` is already validated and trimmed by
+ * validateEditMessageBody. Saving the content the message already has is not an edit: it returns
+ * `unchanged` without touching the row, so `editedAt` never gets stamped on a message that visibly
+ * did not change.
  */
 export async function editMessage(
   chatId: number,

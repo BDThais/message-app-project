@@ -21,13 +21,13 @@ chatRoomRouter.patch('/:chatid', requireGroupRoom, requireChatAdmin, withChatMem
 chatRoomRouter.delete('/:chatid', requireGroupRoom, requireChatAdmin, withChatMembership(deleteChatRoom));
 chatRoomRouter.get('/:chatid/member', withChatMembership(getChatRoomMembers)); // membership alone is enough, direct or group
 chatRoomRouter.post('/:chatid/member', requireGroupRoom, requireChatAdmin, withChatMembership(addChatRoomMembers));
-chatRoomRouter.delete('/:chatid/member/:userid', withChatMembership(removeChatRoomMember)); // No blanket guard: any member may remove themself; removing someone else is checked in the controller.
+chatRoomRouter.delete('/:chatid/member/:userid', withChatMembership(removeChatRoomMember)); // No blanket guard: any member may remove themself (leave); removing someone else needs a group room and an admin, checked in the controller.
 chatRoomRouter.patch('/:chatid/member/:userid', requireGroupRoom, requireChatAdmin, withChatMembership(changeChatRoomMemberRole));
 
 chatRoomRouter.post('/:chatid/message', withChatMembership(sendChatRoomMessage)); // membership alone is enough
 chatRoomRouter.get('/:chatid/message', withChatMembership(getChatRoomMessages)); // membership alone is enough
 chatRoomRouter.patch('/:chatid/message/:message_id', withChatMembership(editChatRoomMessage)); // membership alone is enough; sender-only check is in the service
-chatRoomRouter.delete('/:chatid/message/:message_id', withChatMembership(deleteChatRoomMessage)); // membership alone is enough; sender-only check is in the controller/service
+chatRoomRouter.delete('/:chatid/message/:message_id', withChatMembership(deleteChatRoomMessage)); // membership alone is enough; sender-only check is in the service
 
 chatRoomRouter.put('/:chatid/read', withChatMembership(markChatRoomAsRead)); // membership alone is enough; moves the requester's own marker
 

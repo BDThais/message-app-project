@@ -1,26 +1,22 @@
 import { prisma } from '../../lib/prisma';
 
 /**
- * Deletes chat rooms that have stayed empty for longer than the retention
- * period. Deleting a room cascades to its messages (onDelete: Cascade in the
- * schema). Called on a timer by chatRoomCleanup.job.ts.
+ * Deletes chat rooms that have stayed empty for longer than the retention period; the delete
+ * cascades to their messages.
  *
- * Two steps, so the cleanup doesn't depend on every code path remembering to
- * stamp a room when it empties:
+ * Two steps, so the cleanup doesn't depend on every code path remembering to stamp a room when it
+ * empties:
  *
- * 1. Stamp: a room with no members and no `emptiedAt` (for example one whose
- *    members' accounts were all deleted, since that removes their memberships
- *    without going through DELETE /api/chat/:chatid/member/:userid) gets
- *    `emptiedAt = now`. The retention clock starts here, so such a room is
- *    never deleted in the same run that discovers it.
- * 2. Delete: rooms whose `emptiedAt` is older than the retention period.
- *    `members: { none: {} }` is repeated in this delete on purpose - a room
- *    that somehow has members again is never deleted, whatever its stamp says.
+ * 1. Stamp: a room with no members and no `emptiedAt` (for example one whose members' accounts were
+ *    all deleted, which removes their memberships without going through the remove-member route)
+ *    gets `emptiedAt = now`. The retention clock starts here, so such a room is never deleted in
+ *    the same run that discovers it.
+ * 2. Delete: rooms whose `emptiedAt` is older than the retention period. `members: { none: {} }` is
+ *    repeated in this delete on purpose: a room that somehow has members again is never deleted,
+ *    whatever its stamp says.
  *
- * There's no step for "a stamped room gained members again" because it can't
- * happen through the API: every /api/chat/:chatid route requires the
- * requester to be a member, so nobody can reach an empty room to join or
- * add anyone to it.
+ * There is no step for "a stamped room gained members again": every chat route requires the
+ * requester to be a member, so nobody can reach an empty room to join or add anyone to it.
  */
 export async function purgeExpiredEmptyChatRooms(
   retentionMs: number,

@@ -6,9 +6,6 @@ import type { AuthenticatedRequest } from '../../middlewares/UserSessionAuth';
 import { getChatMembership } from './chatRoom.service';
 import { validateChatIdParam } from './chatRoom.validator';
 
-// Attached by loadChatMembership below on any route with a ':chatid'
-// param. Every handler downstream can trust this is populated - if it
-// weren't, loadChatMembership would have already 404'd the request.
 export type ChatMembership = {
   chatId: number;
   role: Role;
@@ -43,12 +40,9 @@ export function withChatMembership<ResBody>(
 }
 
 /**
- * Register once per router that has ':chatid' routes:
- *   router.param('chatid', loadChatMembership);
- * Confirms the room exists *and* the requester is a member of it in a
- * single query, then attaches the result to req.chatMembership. 404s
- * either way otherwise, so a non-member can't tell a real room id from
- * a made-up one.
+ * The `router.param('chatid', ...)` callback. It confirms the room exists *and* the requester is a
+ * member of it in a single query, and answers 404 either way otherwise, so a non-member can't tell a
+ * real room id from a made-up one.
  */
 export async function loadChatMembership(
   req: Request,
@@ -85,7 +79,6 @@ export async function loadChatMembership(
   }
 }
 
-/** Route guard: requester must be an admin of the room. */
 export function requireChatAdmin(req: Request, res: Response<ApiErrorBody>, next: NextFunction) {
   if (req.chatMembership?.role !== 'admin') {
     return res.status(403).json({ error: 'Admin role required for this action' });
@@ -94,10 +87,8 @@ export function requireChatAdmin(req: Request, res: Response<ApiErrorBody>, next
 }
 
 /**
- * Route guard for actions restricted to group rooms (rename, delete,
- * add members, remove someone else). Direct rooms make both members
- * admins by design, so requireChatAdmin alone won't catch this case -
- * this does.
+ * Direct rooms make both members admins by design, so requireChatAdmin alone does not keep them out
+ * of an action that is for group rooms only: this does.
  */
 export function requireGroupRoom(req: Request, res: Response<ApiErrorBody>, next: NextFunction) {
   if (req.chatMembership?.roomType !== 'group') {

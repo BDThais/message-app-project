@@ -3,13 +3,10 @@ import { prisma } from '../../lib/prisma';
 import { findNonFriendIds } from '../friends/friend.service';
 
 /**
- * How a member entry leaves the API: the membership (`chatId`, `role`,
- * `lastReadMessageId`) plus the user as `member: { id, name, avatarUrl }`.
- * `memberId` is left out because it is the same value as `member.id`, so a
- * client reads the user from one place. Spread into every query whose result
- * is sent to the client (room creation, list members, add members, change role)
- * so the four endpoints cannot drift apart. It only shapes the output: `memberId` is still
- * usable in `where` and `orderBy`.
+ * How a member entry leaves the API: the membership plus the user as `member`, without a separate
+ * `memberId` (the same value as `member.id`). Spread into every query whose result is sent to the
+ * client, so the endpoints that return members cannot drift apart. It only shapes the output:
+ * `memberId` is still usable in `where` and `orderBy`.
  */
 export const memberResponseArgs = {
   omit: { memberId: true },
@@ -17,10 +14,8 @@ export const memberResponseArgs = {
 } as const;
 
 /**
- * Minimal shape needed to write chat_members rows. Both the main `prisma`
- * client and a `$transaction` callback's `tx` client satisfy this
- * structurally, so the same function works standalone or as part of an
- * atomic transaction — no explicit Prisma transaction type import needed.
+ * What writing chat_members rows needs. Both `prisma` and a `$transaction` callback's `tx` satisfy it,
+ * so the same function runs on its own or inside a transaction.
  */
 interface ChatMemberWriteClient {
   chatMember: {
@@ -32,18 +27,10 @@ interface ChatMemberWriteClient {
 }
 
 /**
- * Adds one or more users to a chat room as chat members with the given role.
- * `lastReadMessageId` is the read marker they start with: null for a room that
- * has no messages yet (room creation), or the message that counts as read for
- * them when the room already has some (see addMembersToExistingChatRoom).
- *
- * Reused by:
- * - POST /api/chat (room creation) — called inside a transaction alongside
- *   the ChatRoom insert, so the room and its initial members are created
- *   atomically.
- * - POST /api/chat/:chatid/member — called (via
- *   addMembersToExistingChatRoom below) with the main `prisma` client,
- *   using the default role: 'member'.
+ * Adds users to a room with the given role. `lastReadMessageId` is the read marker they start with:
+ * null for a new room, or the message that counts as read for them when the room already has some
+ * (see addMembersToExistingChatRoom). Room creation calls it inside the transaction that inserts the
+ * room, so the room and its first members appear together or not at all.
  */
 export async function addChatRoomMembers(
   client: ChatMemberWriteClient,
@@ -63,30 +50,17 @@ export async function addChatRoomMembers(
 }
 
 /**
- * Adds users to a room that already exists (POST /api/chat/:chatid/member).
+ * Adds users to a room that already exists: all or nobody (`not_friends` adds no one).
  *
- * Users who are already members are left completely untouched - in
- * particular an existing admin is never downgraded to 'member' - and are
- * reported back in `alreadyMemberIds` instead of failing the request.
- * Everyone else joins with the default role: 'member', but only if they are
- * a friend of the requester. The friend check covers just the users who would
- * be added: an existing member is skipped whether or not they are still a
- * friend, so repeating a request never fails because of someone already in
- * the room. If any of the others is not a friend (or does not exist, which is
- * not told apart) the result is `not_friends` and *nobody* from this request
- * is added.
+ * The friend check covers only the users who would be added, so repeating a request never fails
+ * because of someone who is already in the room.
  *
- * Messages that exist when someone joins count as read for them: their read
- * marker starts at the room's newest message that has not been deleted (null
- * when there is none), so their unreadCount is 0 and only what is sent
- * afterwards is unread. Users who are already members keep their own marker.
- * The newest message is looked up just before the insert, not in the same
- * statement: a message sent in between is above the marker and so stays unread
- * for the new member, which is right because it was sent after they joined.
+ * The newest message is looked up just before the insert, not in the same statement: a message sent
+ * in between is above the marker, so it stays unread for the new member, which is right because it
+ * was sent after they joined.
  *
- * The insert is a single statement, so if a user is deleted after the friend
- * check the foreign-key error (see isForeignKeyConstraintError) is thrown and
- * likewise nobody from this request is added.
+ * The insert is a single statement: a user deleted after the friend check makes it fail with the
+ * foreign-key error (see isForeignKeyConstraintError) and nobody from this request is added.
  */
 export async function addMembersToExistingChatRoom(
   chatId: number,
@@ -133,24 +107,13 @@ export type RemoveChatMemberResult =
   | 'only_admin';
 
 /**
- * Removes one member from a room (DELETE /api/chat/:chatid/member/:userid).
- * Used both for "leave" (target is the requester) and for an admin removing
- * someone else - who is allowed to do which is decided by the controller.
+ * Removes one member: "leave" (the target is the requester) or an admin removing someone else, which
+ * the controller decides. A group room that still has members keeps at least one admin.
  *
- * Business rule enforced here: a group room that still has members must
- * always keep at least one admin, so the only admin can't be removed while
- * anyone else remains. Direct rooms are exempt (both members are admins).
- * The room row itself is never deleted here: when the last member leaves,
- * the room is stamped with `emptiedAt` and stays (with no members) until the
- * cleanup job deletes it after the retention period
- * (see chatRoomCleanup.service.ts).
- *
- * Why the room row is locked (SELECT ... FOR UPDATE): the rule above is
- * "check the admin count, then delete". Without a lock, two admins leaving
- * at the same moment can both pass the check (each still sees the other as
- * an admin) and both get deleted, leaving members and no admin. Locking the
- * room row makes concurrent removals in the same room run one at a time, so
- * the second one re-reads the counts after the first has finished.
+ * The room row is locked (SELECT ... FOR UPDATE) because that rule is "check the admin count, then
+ * delete": without the lock, two admins leaving at the same moment can both pass the check, each
+ * seeing the other as an admin, and both be deleted, leaving members and no admin. Locked,
+ * concurrent removals in a room run one at a time, and the second re-reads the counts.
  */
 export async function removeMemberFromChatRoom(
   chatId: number,
@@ -210,21 +173,12 @@ export type ChangeMemberRoleResult =
   | { outcome: 'only_admin' };
 
 /**
- * Changes a member's role (PATCH /api/chat/:chatid/member/:userid). Only
- * reachable for group rooms - a direct room's two members are both admins by
- * design (see createDirectChatRoom), and the route guards against direct
- * rooms with requireGroupRoom before this ever runs.
+ * Changes a member's role. Group rooms only: a direct room's two members are both admins by design,
+ * and the route's requireGroupRoom keeps this from running for one. A group room that still has
+ * members keeps at least one admin, the same rule as removeMemberFromChatRoom.
  *
- * Business rule enforced here: a group room that still has members must
- * always keep at least one admin, so its only admin can't be demoted to
- * 'member' while anyone else remains - the same invariant
- * removeMemberFromChatRoom enforces for leaving/removal. Promoting a member
- * to admin, or setting a role a member already has, is always allowed.
- *
- * The room row is locked (SELECT ... FOR UPDATE) for the same reason as in
- * removeMemberFromChatRoom: without it, two concurrent demotions could each
- * still see the other admin in place and both succeed, leaving members with
- * no admin at all.
+ * The room row is locked (SELECT ... FOR UPDATE) for the same reason as there: two concurrent
+ * demotions could each still see the other admin in place and both succeed.
  */
 export async function changeMemberRoleInChatRoom(
   chatId: number,
@@ -269,16 +223,10 @@ export async function changeMemberRoleInChatRoom(
 }
 
 /**
- * Lists everyone in a room (GET /api/chat/:chatid/member): admins first, then by
- * name. Membership is already guaranteed by loadChatMembership by the time
- * this runs, and the list is the same for every member, so nothing here
- * depends on who is asking.
- *
- * The sort is done here, not in the query, so the order does not depend on the
- * database's collation: with a plain `ORDER BY name` a "C" collation puts
- * every capital letter before every lowercase one ("Zed" before "alice").
- * Names that differ only by case compare equal, and the query's order by user
- * id decides between them (Array.prototype.sort is stable).
+ * Lists everyone in a room, admins first, then by name. The sort is done here, not in the query, so
+ * the order does not depend on the database's collation (with a "C" collation a plain `ORDER BY name`
+ * puts "Zed" before "alice"). Names that differ only by case compare equal, and the query's order by
+ * user id decides between them (Array.prototype.sort is stable).
  */
 export async function getMembersForChatRoom(chatId: number): Promise<ChatMemberWithUser[]> {
   const members = await prisma.chatMember.findMany({
@@ -306,21 +254,16 @@ export type MarkChatRoomReadResult =
   | { outcome: 'not_a_member' };
 
 /**
- * Marks a room as read up to a message (PUT /api/chat/:chatid/read) by moving the
- * requester's `lastReadMessageId` forward.
+ * Moves the requester's read marker forward to a message. A message at or below the marker changes
+ * nothing and is not an error.
  *
- * The marker only moves forward: asking for a message at or below the current
- * marker changes nothing and is not an error, so out-of-order requests from
- * several tabs cannot move it back. That rule is the `where` of one
- * conditional `updateMany` (marker is null or lower than the new value), not a
- * read followed by a write, so two requests racing each other cannot undo the
- * later one. Only when the update changed nothing is the marker read, to
+ * That rule is the `where` of one conditional `updateMany` (marker is null or lower than the new
+ * value), not a read followed by a write, so two requests racing each other (several tabs, out of
+ * order) cannot move the marker back. The marker is read only when the update changed nothing, to
  * report where it stands.
  *
- * The message must belong to this room, soft-deleted or not (a deleted message
- * keeps its place in the history, so a client that has just loaded it can
- * still be told it was read). Membership of the requester is already
- * guaranteed by loadChatMembership.
+ * The message must belong to this room. A soft-deleted one still counts: it keeps its place in the
+ * history.
  */
 export async function markChatRoomRead(
   chatId: number,
