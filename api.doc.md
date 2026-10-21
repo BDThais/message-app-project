@@ -23,7 +23,7 @@ The specification of the HTTP API the server exposes: what a client sends and wh
 
 The shapes of the JSON this API sends and receives are defined once, as TypeScript, in `server/src/contract/`. The server and the frontend both compile against that folder (the frontend imports it as `@contract/...`), so those files are the specification of the shapes, and the comment on a field says what it means:
 
-- `types.ts`: `Role`, `User` (your own account), `PublicUser` (any other user, never with an email or a tel), `ChatRoomSummary`, `ChatRoomDetail`, `ChatRoomCore`, `CreatedChatRoom`, `Member`, `Message`, `FriendRequest`, `Relationship` and `SearchResult`.
+- `types.ts`: `Role`, `User` (your own account), `PublicUser` (any other user, never with an email or a tel), `ChatRoomSummary`, `ChatRoomDetail`, `CreatedChatRoom`, `Member`, `Message`, `FriendRequest`, `Relationship` and `SearchResult`.
 - `requests.ts`: the request bodies, with their snake_case keys. `responses.ts`: the bodies of successful responses. `errors.ts`: `ApiErrorBody` and the error bodies that carry an extra key.
 
 A change to a shape is made in those files, in the same patch as the code that sends it. This document keeps what a compiler cannot say: status codes, error texts, rules and who may call what. The endpoint sections below use the contract's names (`User`, `PublicUser`, ...).
@@ -216,7 +216,7 @@ Creates a room, or reuses the existing direct room between the two users.
 - `member_ids` is an array of user ids (`400 member_ids must be an array of user IDs`); duplicates and the requester's own id are dropped.
 - A direct room needs exactly one other id (`400 a direct chat room requires exactly one other member`) and cannot have a name or an avatar (`400 direct chat rooms cannot have a name or avatar`).
 - A group room may omit `member_ids` or send an empty array (the creator is its only member). The requester is always added as an admin, everyone else as a member. `name` and `avatar_url` are optional: `name` is a non-empty string of at most 100 characters after trimming (it is stored trimmed; `400 name must be a non-empty string if provided`, `400 name must be 100 characters or fewer`), `avatar_url` an `http:` or `https:` URL (`400 avatar_url must be a string if provided`, `400 avatar_url must be a valid URL`). These are the same rules as `PATCH /api/chat/:chatid`.
-- Response `201` for a new room and `200` when an existing direct room is reused: a `CreatedChatRoom`. The room is returned as stored, not as a summary (no `lastMessage`, `unreadCount` or `role`), and for a direct room `name` and `avatarUrl` are `null`: show the other member from `members`. Only `GET /api/chat` and `GET /api/chat/:chatid` derive them. Merge it into the room list or refetch `GET /api/chat`, do not write it over a `ChatRoomSummary`.
+- Response `201` for a new room and `200` when an existing direct room is reused: `{ "chatRoom": CreatedChatRoom }`. That is a `ChatRoomDetail` (the summary of `GET /api/chat` plus the requester's `role`) with the room's `members` added, so a direct room has the other member's `name` and `avatarUrl`, and a reused room its real `lastMessage` and `unreadCount`. It can be cached like any other room; the extra `members` can be ignored or used to show the room without a second request.
 - `403 Only your friends can be added to a chat room` (see "Friendship requirement").
 
 ### GET /api/chat
@@ -242,7 +242,7 @@ Renames a group room and/or changes its avatar. Admin only, group rooms only.
 
 - At least one of `name` and `avatar_url` (`400 At least either Name or Avatar must be provided`).
 - `name` is a non-empty string of at most 100 characters after trimming (`400 'name' must be a non-empty string`, `400 'name' must be 100 characters or fewer`); `avatar_url` an `http:` or `https:` URL, or `null` to clear it (`400 'avatar_url' must be a string or null`, `400 'avatar_url' must be a valid URL`).
-- Response `200`: `{ "chatRoom": ChatRoomCore }`: only the room's own columns, no `lastMessage`, `unreadCount` or `role`, so merge it into the cached room instead of replacing the summary.
+- Response `200`: `{ "chatRoom": ChatRoomDetail }`, the room as `GET /api/chat/:chatid` shows it, so it replaces the cached room. `404 Chat room not found` if the room was deleted while the request ran.
 - `403 Admin role required for this action`, `403 Not available for direct chat rooms`.
 
 ### DELETE /api/chat/:chatid

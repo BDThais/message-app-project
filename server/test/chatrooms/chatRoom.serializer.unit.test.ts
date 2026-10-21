@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toChatRoomCore, toChatRoomSummary, toCreatedChatRoom, toMessage } from '../../src/modules/chatrooms/chatRoom.serializer';
+import { toChatRoomDetail, toChatRoomSummary, toCreatedChatRoom, toMessage } from '../../src/modules/chatrooms/chatRoom.serializer';
 
 const created = new Date('2026-09-13T12:00:00.000Z');
 const later = new Date('2026-09-14T08:30:15.123Z');
@@ -43,18 +43,26 @@ describe('toChatRoomSummary', () => {
   });
 });
 
-describe('toChatRoomCore and toCreatedChatRoom', () => {
-  const row = { id: 7, type: 'direct' as const, name: null, avatarUrl: null, createdAt: created, emptiedAt: null };
+describe('toChatRoomDetail and toCreatedChatRoom', () => {
+  const summary = {
+    id: 7,
+    type: 'direct' as const,
+    name: 'Bob',
+    avatarUrl: null,
+    createdAt: created,
+    lastMessage: { content: 'Hi', createdAt: later },
+    unreadCount: 1,
+  };
   const member = { chatId: 7, role: 'admin' as const, lastReadMessageId: null, member: { id: 1, name: 'Alice', avatarUrl: null } };
 
-  it('gives the five columns of the room, with the timestamp as a string', () => {
-    expect(toChatRoomCore(row)).toEqual({ id: 7, type: 'direct', name: null, avatarUrl: null, createdAt: '2026-09-13T12:00:00.000Z' });
+  it('is the summary with the requester\'s role', () => {
+    expect(toChatRoomDetail(summary, 'member')).toEqual({ ...toChatRoomSummary(summary), role: 'member' });
   });
 
-  it('adds the members as they are, and never the cleanup job\'s emptiedAt', () => {
-    const room = toCreatedChatRoom({ ...row, members: [member] });
+  it('adds the members as they are to the detail, and nothing else', () => {
+    const room = toCreatedChatRoom(summary, 'admin', [member]);
 
-    expect(room).toEqual({ id: 7, type: 'direct', name: null, avatarUrl: null, createdAt: '2026-09-13T12:00:00.000Z', members: [member] });
+    expect(room).toEqual({ ...toChatRoomDetail(summary, 'admin'), members: [member] });
     expect(overTheWire(room)).toEqual(room);
   });
 });

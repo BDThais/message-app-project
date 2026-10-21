@@ -1,5 +1,5 @@
-import type { ChatRoomCore, ChatRoomSummary, CreatedChatRoom, Message } from '../../contract/types';
-import type { ChatRoomSummaryData, ChatRoomWithMembers } from './chatRoom.service';
+import type { ChatRoomDetail, ChatRoomSummary, CreatedChatRoom, Member, Message, Role } from '../../contract/types';
+import type { ChatRoomSummaryData } from './chatRoom.service';
 import type { MessageWithSender } from './message.service';
 
 // From what the services return (Prisma rows and summaries that hold `Date`s) to the shapes of
@@ -26,20 +26,14 @@ export function toChatRoomSummary(room: ChatRoomSummaryData): ChatRoomSummary {
   };
 }
 
-/** The room's own columns: what PATCH /api/chat/:chatid returns, and the start of POST /api/chat's body. */
-export function toChatRoomCore(room: Omit<ChatRoomCore, 'createdAt'> & { createdAt: Date }): ChatRoomCore {
-  return {
-    id: room.id,
-    type: room.type,
-    name: room.name,
-    avatarUrl: room.avatarUrl,
-    createdAt: iso(room.createdAt),
-  };
+/** What GET /api/chat/:chatid and PATCH /api/chat/:chatid return: the summary plus the requester's role. */
+export function toChatRoomDetail(room: ChatRoomSummaryData, role: Role): ChatRoomDetail {
+  return { ...toChatRoomSummary(room), role };
 }
 
-/** What POST /api/chat returns. Its members are already shaped by `memberResponseArgs` (chatMember.service.ts). */
-export function toCreatedChatRoom(room: ChatRoomWithMembers): CreatedChatRoom {
-  return { ...toChatRoomCore(room), members: room.members };
+/** What POST /api/chat returns. The members are already shaped by `memberResponseArgs` (chatMember.service.ts). */
+export function toCreatedChatRoom(room: ChatRoomSummaryData, role: Role, members: Member[]): CreatedChatRoom {
+  return { ...toChatRoomDetail(room, role), members };
 }
 
 export function toMessage(message: MessageWithSender): Message {

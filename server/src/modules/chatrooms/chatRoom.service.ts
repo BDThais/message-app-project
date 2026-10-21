@@ -2,7 +2,7 @@ import { addChatRoomMembers, memberResponseArgs } from './chatMember.service';
 import { findNonFriendIds } from '../friends/friend.service';
 import { prisma } from '../../lib/prisma';
 import { Prisma, ChatRoomType, ChatMemberRole } from '../../generated/prisma/client';
-import type { ChatRoomSummary } from '../../contract/types';
+import type { ChatRoomSummary, RoomType } from '../../contract/types';
 
 // What POST /api/chat builds its response from: the room's own columns and its members. `emptiedAt` belongs to the cleanup job and stays out of the response.
 const roomWithMembersArgs = {
@@ -283,4 +283,20 @@ export async function deleteChatRoomById(chatId: number) {
   return prisma.chatRoom.delete({
     where: { id: chatId },
   });
+}
+
+/**
+ * One room as its requester sees it, or undefined when the room is gone or they are not in it. It
+ * is the summary of GET /api/chat for a single room, whatever the room's type.
+ */
+export async function getChatRoomSummaryForUser(
+  userId: number,
+  chatId: number,
+  roomType: RoomType
+): Promise<ChatRoomSummaryData | undefined> {
+  const [room] =
+    roomType === 'direct'
+      ? await getDirectChatRoomsForUser(userId, chatId)
+      : await getGroupChatRoomsForUser(userId, chatId);
+  return room;
 }

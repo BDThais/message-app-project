@@ -3,10 +3,9 @@ import type { AuthenticatedRequest } from '../../middlewares/UserSessionAuth';
 import type { ChatRoomRequest } from './chatRoomAuth.middleware';
 import type { ApiErrorBody } from '../../contract/errors';
 import type {
-  AddMembersResponse, ChatMessageResponse, ChatRoomCoreResponse, ChatRoomDetailResponse,
-  ChatRoomListResponse, MarkReadResponse, MemberListResponse, MemberResponse, MessageListResponse
+  AddMembersResponse, ChatMessageResponse, ChatRoomDetailResponse, ChatRoomListResponse, CreatedChatRoomResponse,
+  MarkReadResponse, MemberListResponse, MemberResponse, MessageListResponse
 } from '../../contract/responses';
-import type { CreatedChatRoom } from '../../contract/types';
 import {
   validateCreateChatRoomInput, validateUpdateChatRoomBody, validateAddMembersBody,
   validateUserIdParam, validateChangeMemberRoleBody, validateSendMessageBody,
@@ -18,18 +17,19 @@ import {
 } from './chatMember.service';
 import {
   createChatRoom as createChatRoomService, updateChatRoomById,
-  getDirectChatRoomsForUser, getGroupChatRoomsForUser, activityTimestamp,
+  getDirectChatRoomsForUser, getGroupChatRoomsForUser, getChatRoomSummaryForUser, activityTimestamp,
   deleteChatRoomById, isForeignKeyConstraintError
 } from './chatRoom.service';
 import { createMessage, getMessagesForChatRoom, deleteMessage, editMessage } from './message.service';
-import { toChatRoomCore, toChatRoomSummary, toCreatedChatRoom, toMessage } from './chatRoom.serializer';
+import { toChatRoomDetail, toChatRoomSummary, toCreatedChatRoom, toMessage } from './chatRoom.serializer';
 
 // One body for every refusal of the friendship rule (POST /api/chat and
 // POST /api/chat/:chatid/member). It does not say which ID was refused or why, so
 // a stranger and a user who does not exist look the same.
 const NOT_FRIENDS_ERROR = 'Only your friends can be added to a chat room';
+const CHAT_ROOM_NOT_FOUND = 'Chat room not found';
 
-export async function createChatRoom(req: AuthenticatedRequest, res: Response<CreatedChatRoom | ApiErrorBody>) {
+export async function createChatRoom(req: AuthenticatedRequest, res: Response<CreatedChatRoomResponse | ApiErrorBody>) {
   const requesterId = req.user.id;
 
   const validation = validateCreateChatRoomInput(req.body, requesterId);
@@ -45,7 +45,16 @@ export async function createChatRoom(req: AuthenticatedRequest, res: Response<Cr
       return res.status(403).json({ error: NOT_FRIENDS_ERROR });
     }
 
-    return res.status(result.created ? 201 : 200).json(toCreatedChatRoom(result.room));
+    // The room as its creator sees it. For a direct room that is the other member's name and avatar,
+    // and a reused room has the messages it already has.
+    const { room, created } = result;
+    const me = room.members.find((member) => member.member.id === requesterId);
+    const summary = await getChatRoomSummaryForUser(requesterId, room.id, room.type);
+    if (!me || !summary) {
+      return res.status(404).json({ error: CHAT_ROOM_NOT_FOUND });
+    }
+
+    return res.status(created ? 201 : 200).json({ chatRoom: toCreatedChatRoom(summary, me.role, room.members) });
   } catch (err) {
     if (isForeignKeyConstraintError(err)) {
       // A member_ids user was deleted after the friendship check, so they are
@@ -84,32 +93,35 @@ export async function getChatRoomById(req: ChatRoomRequest, res: Response<ChatRo
     const userId = req.user.id;
     const { chatId, roomType, role } = req.chatMembership;
 
-    const [room] =
-      roomType === 'direct'
-        ? await getDirectChatRoomsForUser(userId, chatId)
-        : await getGroupChatRoomsForUser(userId, chatId);
+    const room = await getChatRoomSummaryForUser(userId, chatId, roomType);
 
     // The room can be gone by now: deleted, or the requester removed from it, since loadChatMembership ran.
     if (!room) {
-      return res.status(404).json({ error: 'Chat room not found' });
+      return res.status(404).json({ error: CHAT_ROOM_NOT_FOUND });
     }
 
-    res.json({ chatRoom: { ...toChatRoomSummary(room), role } });
+    res.json({ chatRoom: toChatRoomDetail(room, role) });
   } catch (err) {
     next(err);
   }
 }
 
-export async function updateChatRoom(req: ChatRoomRequest, res: Response<ChatRoomCoreResponse | ApiErrorBody>, next: NextFunction) {
+export async function updateChatRoom(req: ChatRoomRequest, res: Response<ChatRoomDetailResponse | ApiErrorBody>, next: NextFunction) {
   const validation = validateUpdateChatRoomBody(req.body);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });
   }
 
   try {
-    const chatRoom = await updateChatRoomById(req.chatMembership.chatId, validation.data);
+    const { chatId, roomType, role } = req.chatMembership;
+    await updateChatRoomById(chatId, validation.data);
 
-    res.status(200).json({ chatRoom: toChatRoomCore(chatRoom) });
+    const room = await getChatRoomSummaryForUser(req.user.id, chatId, roomType);
+    if (!room) {
+      return res.status(404).json({ error: CHAT_ROOM_NOT_FOUND });
+    }
+
+    res.status(200).json({ chatRoom: toChatRoomDetail(room, role) });
   } catch (err) {
     next(err);
   }
@@ -399,7 +411,7 @@ export async function markChatRoomAsRead(req: ChatRoomRequest, res: Response<Mar
       case 'not_a_member':
         // Left the room while this request was running: same answer as
         // loadChatMembership gives a user who is not in the room.
-        return res.status(404).json({ error: 'Chat room not found' });
+        return res.status(404).json({ error: CHAT_ROOM_NOT_FOUND });
     }
   } catch (err) {
     next(err);

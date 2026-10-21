@@ -24,20 +24,22 @@ describe('POST /chat', () => {
     });
 
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({ type: 'group', name: 'Project chat', avatarUrl: null });
+    expect(Object.keys(res.body)).toEqual(['chatRoom']);
+    const { chatRoom } = res.body;
+    expect(chatRoom).toMatchObject({ type: 'group', name: 'Project chat', avatarUrl: null, role: 'admin', lastMessage: null, unreadCount: 0 });
     // The whole shape, so a column added to the table does not leak into the response by accident (`emptiedAt` did once).
-    expect(Object.keys(res.body).sort()).toEqual(['avatarUrl', 'createdAt', 'id', 'members', 'name', 'type']);
+    expect(Object.keys(chatRoom).sort()).toEqual(['avatarUrl', 'createdAt', 'id', 'lastMessage', 'members', 'name', 'role', 'type', 'unreadCount']);
     // Each entry is exactly this: the user is only under `member`, with no separate `memberId`.
-    const members = [...res.body.members].sort((a, b) => a.member.id - b.member.id);
+    const members = [...chatRoom.members].sort((a, b) => a.member.id - b.member.id);
     expect(members).toEqual([
       {
-        chatId: res.body.id,
+        chatId: chatRoom.id,
         role: 'admin',
         lastReadMessageId: null,
         member: { id: user.id, name: 'Alice', avatarUrl: null },
       },
       {
-        chatId: res.body.id,
+        chatId: chatRoom.id,
         role: 'member',
         lastReadMessageId: null,
         member: { id: member.id, name: 'Bob', avatarUrl: null },
@@ -54,7 +56,7 @@ describe('POST /chat', () => {
     const res = await agent.post('/api/chat').send({ type: 'group', name: 'Notes to self' });
 
     expect(res.status).toBe(201);
-    expect(await memberIdsOf(res.body.id)).toEqual([user.id]);
+    expect(await memberIdsOf(res.body.chatRoom.id)).toEqual([user.id]);
   });
 
   it('creates and reuses a direct room between two friends', async () => {
@@ -69,11 +71,32 @@ describe('POST /chat', () => {
 
     expect(first.status).toBe(201);
     expect(second.status).toBe(200);
-    expect(second.body.id).toBe(first.body.id);
-    expect(Object.keys(first.body).sort()).toEqual(['avatarUrl', 'createdAt', 'id', 'members', 'name', 'type']);
-    expect(Object.keys(second.body).sort()).toEqual(Object.keys(first.body).sort());
+    expect(second.body.chatRoom.id).toBe(first.body.chatRoom.id);
+    expect(Object.keys(first.body.chatRoom).sort()).toEqual(['avatarUrl', 'createdAt', 'id', 'lastMessage', 'members', 'name', 'role', 'type', 'unreadCount']);
+    expect(Object.keys(second.body.chatRoom).sort()).toEqual(Object.keys(first.body.chatRoom).sort());
     expect(await prisma.chatRoom.count()).toBe(1);
     expect(await prisma.chatMember.count()).toBe(2);
+  });
+
+  it('returns a direct room as its creator sees it: the other member\'s name, and what the room already holds when it is reused', async () => {
+    const user = await createUser('Alice');
+    const otherUser = await createUser('Bob');
+    await makeFriends(user.id, otherUser.id);
+    const agent = await loginAs(user);
+    const body = { type: 'direct', member_ids: [otherUser.id] };
+
+    const first = await agent.post('/api/chat').send(body);
+    await prisma.message.create({ data: { chatId: first.body.chatRoom.id, senderId: otherUser.id, content: 'Hi Alice' } });
+    const second = await agent.post('/api/chat').send(body);
+
+    // The stored room has no name of its own: Alice sees Bob's, as in the room list.
+    expect(first.body.chatRoom).toMatchObject({ name: 'Bob', role: 'admin', lastMessage: null, unreadCount: 0 });
+    expect(second.body.chatRoom).toMatchObject({
+      name: 'Bob',
+      role: 'admin',
+      lastMessage: { content: 'Hi Alice' },
+      unreadCount: 1,
+    });
   });
 
   it('refuses a direct room with someone who is not a friend, and creates nothing', async () => {
@@ -228,11 +251,17 @@ describe('PATCH /chat/:chatid', () => {
       .send({ name: 'Updated project chat', avatar_url: 'https://example.com/project.png' });
 
     expect(res.status).toBe(200);
+    expect(Object.keys(res.body)).toEqual(['chatRoom']);
+    // The room as GET /api/chat/:chatid shows it, so a client can replace its cached room with this one.
     expect(res.body.chatRoom).toMatchObject({
       id: room.id,
       name: 'Updated project chat',
       avatarUrl: 'https://example.com/project.png',
+      role: 'admin',
+      lastMessage: null,
+      unreadCount: 0,
     });
+    expect(Object.keys(res.body.chatRoom).sort()).toEqual(['avatarUrl', 'createdAt', 'id', 'lastMessage', 'name', 'role', 'type', 'unreadCount']);
     expect(await prisma.chatRoom.findUnique({ where: { id: room.id } })).toMatchObject({
       name: 'Updated project chat',
       avatarUrl: 'https://example.com/project.png',

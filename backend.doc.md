@@ -212,7 +212,7 @@ POST /api/chat
 - `createChatRoom` (`chatRoom.service.ts`) runs in one transaction and checks the friendships (`findNonFriendIds`, see "Friendship and messaging") before anything is written, so a refused request creates no room and no members. For a direct room the check also comes before the lookup of an existing room
 - a direct room is reused with a `findFirst` for a direct room that has both users as members, so hitting "message" on a friend never creates a duplicate; the requester and the other user are both added as admins
 - a group room: the requester is added as admin and the invitees as members, with the same default role `POST /api/chat/:chatid/member` uses
-- the room is returned with its `members` and nothing else of the cleanup job's: `emptiedAt` is left out of the query (`omit` in `roomWithMembersArgs`, `chatRoom.service.ts`), and `chatRoom.test.ts` pins the exact set of keys so a new column cannot leak in unnoticed
+- the response is `{ "chatRoom": CreatedChatRoom }`: the room as its creator sees it (`getChatRoomSummaryForUser`, the same summary as `GET /api/chat/:chatid`, plus their `role`) with its `members` added, so a direct room carries the other member's name and a reused one its real `lastMessage` and `unreadCount`. The summary is read after the room is created or found, and a room that is gone by then answers `404 Chat room not found`. `emptiedAt` is left out of the stored room's query (`omit` in `roomWithMembersArgs`, `chatRoom.service.ts`) and the serializer names every field; `chatRoom.test.ts` pins the exact set of keys so a new column cannot leak in unnoticed
 - each entry of `members` is built from `memberResponseArgs` (`chatMember.service.ts`), the shape every member payload shares: the user is only under `member`, there is no separate `memberId`, it would repeat `member.id`
 
 GET /api/chat
@@ -225,12 +225,12 @@ GET /api/chat
 
 GET /api/chat/:chatid
 
-- same summary function as `GET /api/chat` for one room, plus the requester's `role`
+- same summary function as `GET /api/chat` for one room (`getChatRoomSummaryForUser`, which `POST /api/chat` and `PATCH /api/chat/:chatid` use too), plus the requester's `role`
 - the room can be gone by the time it is read (deleted, or the requester removed, after `loadChatMembership` ran): that answers `404 Chat room not found`, the answer a non-member gets, and not a `200` with only a `role`
 
 PATCH /api/chat/:chatid
 
-- guarded by `requireGroupRoom` and `requireChatAdmin`; validation is `validateUpdateChatRoomBody`; the response is the room's own columns only (no summary fields)
+- guarded by `requireGroupRoom` and `requireChatAdmin`; validation is `validateUpdateChatRoomBody`; the response is `{ "chatRoom": ChatRoomDetail }`, the room read back after the update with `getChatRoomSummaryForUser` (so it is what `GET /api/chat/:chatid` would answer, and `404 Chat room not found` if the room was deleted in between)
 
 DELETE /api/chat/:chatid
 
@@ -506,7 +506,7 @@ message-app/
     │   ├── config/
     │   │   └── config.ts            // every number is read by numberSetting: Number(), blank = not set, never parseInt
     │   ├── contract/                // the shapes of the API's JSON, shared with the frontend (see "API contract" in Conventions)
-    │   │   ├── types.ts             // Role, User, PublicUser, ChatRoomSummary/Detail/Core, CreatedChatRoom, Member, Message, FriendRequest, Relationship, SearchResult
+    │   │   ├── types.ts             // Role, User, PublicUser, ChatRoomSummary/Detail, CreatedChatRoom, Member, Message, FriendRequest, Relationship, SearchResult
     │   │   ├── requests.ts          // request bodies, snake_case as on the wire (account only so far)
     │   │   ├── responses.ts         // bodies of successful responses (account only so far)
     │   │   └── errors.ts            // ApiErrorBody and the error bodies with an extra key
@@ -547,7 +547,7 @@ message-app/
     │       │   ├── chatRoom.routes.ts
     │       │   ├── chatRoom.controller.ts
     │       │   ├── chatRoom.validator.ts
-    │       │   ├── chatRoom.serializer.ts       // the services' Dates and rows to the contract's chat shapes: toChatRoomSummary, toChatRoomCore, toCreatedChatRoom, toMessage
+    │       │   ├── chatRoom.serializer.ts       // the services' Dates and rows to the contract's chat shapes: toChatRoomSummary, toChatRoomDetail, toCreatedChatRoom, toMessage
     │       │   ├── chatRoomAuth.middleware.ts   // loadChatMembership, requireGroupRoom, requireChatAdmin; ChatRoomRequest and withChatMembership
     │       │   ├── chatRoom.service.ts
     │       │   ├── chatMember.service.ts

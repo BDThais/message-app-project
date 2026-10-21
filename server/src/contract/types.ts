@@ -42,23 +42,14 @@ export interface ChatRoomSummary {
   unreadCount: number;
 }
 
-/** GET /api/chat/:chatid. */
+/** One room as its requester sees it: GET /api/chat/:chatid, and what PATCH /api/chat/:chatid returns. */
 export interface ChatRoomDetail extends ChatRoomSummary {
   /** The requester's own role. */
   role: Role;
 }
 
-/** The room's own columns: what PATCH /api/chat/:chatid returns. */
-export interface ChatRoomCore {
-  id: number;
-  type: RoomType;
-  name: string | null;
-  avatarUrl: string | null;
-  createdAt: string;
-}
-
-/** What POST /api/chat returns: the room as stored, with its members. A direct room's name and avatarUrl are null here. */
-export interface CreatedChatRoom extends ChatRoomCore {
+/** What POST /api/chat returns: the room as its creator sees it, with its members, so the client can show it without a second request. */
+export interface CreatedChatRoom extends ChatRoomDetail {
   members: Member[];
 }
 
