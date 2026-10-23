@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 // lookup behind the module is replaced and no database is needed.
 vi.mock('../../src/middlewares/SessionCookie', () => ({ getSessionUser: vi.fn() }));
 
-import { hasUser, withUser } from '../../src/middlewares/UserSessionAuth';
+import { hasUser, userKey, withUser } from '../../src/middlewares/UserSessionAuth';
 
 const fakeRequest = (fields: object = {}) => fields as unknown as Request;
 const fakeResponse = () => ({}) as unknown as Response;
@@ -44,5 +44,15 @@ describe('withUser', () => {
     const handler = vi.fn().mockRejectedValue(new Error('boom'));
 
     await expect(withUser(handler)(fakeRequest({ user: { id: 1 } }), fakeResponse(), vi.fn())).rejects.toThrow('boom');
+  });
+});
+
+describe('userKey', () => {
+  it('is the id of the signed-in user, as the string a rate limiter counts under', () => {
+    expect(userKey(fakeRequest({ user: { id: 17 } }))).toBe('17');
+  });
+
+  it('throws, instead of counting everybody under one key, when requireUserAuth was not mounted before the limiter', () => {
+    expect(() => userKey(fakeRequest())).toThrow(/requireUserAuth/);
   });
 });

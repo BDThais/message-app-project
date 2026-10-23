@@ -1,5 +1,5 @@
 import Router from 'express';
-import { requireUserAuth } from '../../middlewares/UserSessionAuth';
+import { requireUserAuth, withUser } from '../../middlewares/UserSessionAuth';
 import { friendSearchLimiter, friendRequestLimiter } from './friendRateLimit.middleware';
 import {
   searchUserByTel,
@@ -15,13 +15,13 @@ const friendRouter = Router();
 
 friendRouter.use(requireUserAuth);
 
-friendRouter.get('/', getFriends);
+friendRouter.get('/', withUser(getFriends));
 // The limiter is per user, so it has to come after requireUserAuth (which sets req.user).
-friendRouter.get('/search/:tel', friendSearchLimiter, searchUserByTel);
-friendRouter.post('/requests', friendRequestLimiter, sendFriendRequest);
-friendRouter.get('/requests', getFriendRequests);
-friendRouter.post('/requests/:id/accept', acceptFriendRequest);
-friendRouter.delete('/requests/:id', deleteFriendRequest);
-friendRouter.delete('/:id', unfriend);
+friendRouter.get('/search/:tel', friendSearchLimiter, withUser(searchUserByTel));
+friendRouter.post('/requests', friendRequestLimiter, withUser(sendFriendRequest));
+friendRouter.get('/requests', withUser(getFriendRequests));
+friendRouter.post('/requests/:id/accept', withUser(acceptFriendRequest));
+friendRouter.delete('/requests/:id', withUser(deleteFriendRequest));
+friendRouter.delete('/:id', withUser(unfriend));
 
 export default friendRouter;

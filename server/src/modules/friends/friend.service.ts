@@ -1,25 +1,7 @@
 import { prisma } from '../../lib/prisma';
 import { Prisma } from '../../generated/prisma/client';
-import type { PublicUser } from '../../contract/types';
-
-/**
- * How the requester relates to the user a search found; the client picks the
- * button to show from it.
- */
-export type FriendRelationship = 'self' | 'friend' | 'request_sent' | 'request_received' | 'none';
-
-/**
- * A user as other users see them (never email or tel), plus their relationship
- * to the requester. `requestId` is only present for the two request states, so
- * the client can cancel or accept without another call.
- */
-export type UserSearchResult = {
-  id: number;
-  name: string;
-  avatarUrl: string | null;
-  relationship: FriendRelationship;
-  requestId?: number;
-};
+import type { FriendRequest, PublicUser, SearchResult } from '../../contract/types';
+import type { FriendRequestDirection } from '../../contract/requests';
 
 /**
  * Exact phone-number lookup behind GET /friend/search/:tel. `tel` is expected
@@ -44,7 +26,7 @@ export type UserSearchResult = {
 export async function findUserByTel(
   requesterId: number,
   tel: string
-): Promise<UserSearchResult | null> {
+): Promise<SearchResult | null> {
   const user = await prisma.user.findUnique({
     where: { tel },
     select: {
@@ -83,18 +65,13 @@ export async function findUserByTel(
 }
 
 /**
- * A pending friend request as the API shows it. `user` is always the *other*
- * party: the receiver in what POST /friend/requests answers with and in the
- * outgoing list, the sender in the incoming list.
+ * A friend request as the service hands it over: the contract's `FriendRequest` with its timestamp
+ * still a `Date` (`toFriendRequest` in friend.serializer.ts makes it the string of the wire).
  */
-export type FriendRequestSummary = {
-  id: number;
-  createdAt: Date;
-  user: PublicUser;
-};
+export type FriendRequestData = Omit<FriendRequest, 'createdAt'> & { createdAt: Date };
 
 export type SendFriendRequestResult =
-  | { status: 'created'; request: FriendRequestSummary }
+  | { status: 'created'; request: FriendRequestData }
   | { status: 'receiver_not_found' }
   | { status: 'already_friends' }
   | { status: 'already_sent' }
@@ -170,13 +147,6 @@ export async function createFriendRequest(
   }
 }
 
-/**
- * Which side of the pending requests GET /friend/requests lists: `incoming`
- * is the inbox (requests others sent to the requester), `outgoing` is what the
- * requester sent and can still cancel.
- */
-export type FriendRequestDirection = 'incoming' | 'outgoing';
-
 const publicUserSelect = { id: true, name: true, avatarUrl: true } as const;
 
 // Newest first. `id` breaks ties between requests with the same createdAt, so
@@ -200,7 +170,7 @@ const newestFirst: Prisma.PendingFriendRequestOrderByWithRelationInput[] = [
 export async function listFriendRequests(
   requesterId: number,
   direction: FriendRequestDirection
-): Promise<FriendRequestSummary[]> {
+): Promise<FriendRequestData[]> {
   if (direction === 'incoming') {
     const rows = await prisma.pendingFriendRequest.findMany({
       where: { receiverId: requesterId },

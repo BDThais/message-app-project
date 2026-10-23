@@ -1,7 +1,8 @@
 import { isValidPhoneNumber } from 'libphonenumber-js';
 import { MAX_INT32 as MAX_ID } from '../../lib/constants';
 import { parseIdParam } from '../../lib/parseIdParam';
-import type { FriendRequestDirection } from './friend.service';
+import { bodyFields } from '../../lib/validation';
+import type { FriendRequestDirection, GetFriendRequestsQuery, SendFriendRequestBody } from '../../contract/requests';
 
 // A full E.164 number in its canonical spelling: '+', a country code that
 // does not start with 0, and at most 15 digits in total.
@@ -50,10 +51,7 @@ export function validateSendFriendRequestBody(
   body: unknown,
   requesterId: number
 ): SendFriendRequestValidation {
-  // Express leaves req.body undefined when the request has no JSON body.
-  const { receiver_id } = typeof body === 'object' && body !== null
-    ? (body as Record<string, unknown>)
-    : {};
+  const { receiver_id } = bodyFields<SendFriendRequestBody>(body);
 
   if (!Number.isInteger(receiver_id) || (receiver_id as number) < 1 || (receiver_id as number) > MAX_ID) {
     return { valid: false, message: "'receiver_id' must be a valid user ID" };
@@ -78,9 +76,7 @@ type GetFriendRequestsQueryValidation =
  * into an array. Other query parameters are ignored.
  */
 export function validateGetFriendRequestsQuery(query: unknown): GetFriendRequestsQueryValidation {
-  const { direction } = typeof query === 'object' && query !== null
-    ? (query as Record<string, unknown>)
-    : {};
+  const { direction } = bodyFields<GetFriendRequestsQuery>(query);
 
   if (direction === undefined || direction === 'incoming') {
     return { valid: true, data: { direction: 'incoming' } };

@@ -1,4 +1,5 @@
 import { createRateLimiter } from '../../lib/rateLimiter';
+import { userKey } from '../../middlewares/UserSessionAuth';
 
 // Per-user limiters (keyed by user id, not IP) for the friend routes. They
 // read req.user, which requireUserAuth sets, so mount them after it.
@@ -9,7 +10,7 @@ import { createRateLimiter } from '../../lib/rateLimiter';
 export const friendSearchLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   limit: 30,
-  keyGenerator: (req) => String(req.user!.id),
+  keyGenerator: userKey,
   message: { error: 'Too many searches, try again later' },
 });
 
@@ -19,6 +20,6 @@ export const friendSearchLimiter = createRateLimiter({
 export const friendRequestLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000,
   limit: 20,
-  keyGenerator: (req) => String(req.user!.id),
+  keyGenerator: userKey,
   message: { error: 'Too many friend requests, try again later' },
 });

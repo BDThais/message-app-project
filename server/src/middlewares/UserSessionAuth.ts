@@ -37,6 +37,17 @@ export function withUser<ResBody>(
   };
 }
 
+/**
+ * The key of a per-user rate limiter. Without requireUserAuth before it there is no user to count:
+ * an error, not one counter shared by everybody.
+ */
+export function userKey(req: Request): string {
+  if (!hasUser(req)) {
+    throw new Error('A per-user rate limiter was mounted without requireUserAuth before it');
+  }
+  return String(req.user.id);
+}
+
 export async function requireUserAuth(req: Request, res: Response, next: NextFunction) {
   try {
     const user = await getSessionUser(req, res);

@@ -3,9 +3,8 @@
 // "API contract" in backend.doc.md: nothing here imports anything from outside the folder, and
 // every value is JSON (a timestamp is an ISO 8601 string here, never a Date).
 //
-// The account shapes are checked by the compiler on both sides, and the chat room shapes on the
-// server (the frontend has no chat code yet). The friend shapes are still the transcription of
-// api.doc.md they started as: the friends controllers do not use them yet.
+// Every shape here is checked by the compiler on the server: the controllers answer with them. The
+// frontend checks the account ones (it has no chat or friends code yet).
 
 export type Role = 'admin' | 'member';
 

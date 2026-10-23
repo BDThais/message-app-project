@@ -2,8 +2,8 @@
 // listed with the type a valid request has; what the server does with a request that does not
 // match (which rule fails first, the error text) is in api.doc.md and in the validators.
 //
-// The account and chat room bodies are here; the friends module adds its own when its validators
-// read their bodies through these types (see `bodyFields` in lib/validation.ts).
+// Every body and query the API reads is here, and its validator reads it through these types (see
+// `bodyFields` in lib/validation.ts).
 
 import type { Role, RoomType } from './types';
 
@@ -87,4 +87,16 @@ export interface MarkReadBody {
 export interface GetMessagesQuery {
   before?: string;
   limit?: string;
+}
+
+export interface SendFriendRequestBody {
+  receiver_id: number;
+}
+
+/** Which side of the pending requests GET /api/friend/requests lists: the inbox, or what the requester sent and can still cancel. */
+export type FriendRequestDirection = 'incoming' | 'outgoing';
+
+/** The query string of GET /api/friend/requests. `direction` defaults to 'incoming'. */
+export interface GetFriendRequestsQuery {
+  direction?: string;
 }

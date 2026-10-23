@@ -1,7 +1,9 @@
 // The JSON bodies of successful responses, named after what they carry. An endpoint that answers
-// 204 has no body and no type here. The account and chat room endpoints are typed so far.
+// 204 has no body and no type here.
 
-import type { ChatRoomDetail, ChatRoomSummary, CreatedChatRoom, Member, Message, User } from './types';
+import type {
+  ChatRoomDetail, ChatRoomSummary, CreatedChatRoom, FriendRequest, Member, Message, PublicUser, SearchResult, User
+} from './types';
 
 /** POST /api/account/signup (201) and POST /api/account/password/reset-request (202). */
 export interface MessageResponse {
@@ -68,4 +70,29 @@ export interface MessageListResponse {
 /** PUT /api/chat/:chatid/read: the marker as it stands after the call. */
 export interface MarkReadResponse {
   lastReadMessageId: number;
+}
+
+/** GET /api/friend/search/:tel: `user` is null when nobody has that number (still a 200). */
+export interface SearchUserResponse {
+  user: SearchResult | null;
+}
+
+/** POST /api/friend/requests (201). */
+export interface FriendRequestResponse {
+  request: FriendRequest;
+}
+
+/** GET /api/friend/requests. */
+export interface FriendRequestListResponse {
+  requests: FriendRequest[];
+}
+
+/** POST /api/friend/requests/:id/accept (201): the new friend. */
+export interface AcceptedFriendResponse {
+  friend: PublicUser;
+}
+
+/** GET /api/friend. */
+export interface FriendListResponse {
+  friends: PublicUser[];
 }
