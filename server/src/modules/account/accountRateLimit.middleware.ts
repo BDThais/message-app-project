@@ -1,7 +1,8 @@
 import { ipKeyGenerator } from 'express-rate-limit';
 import { normalizeEmail } from '../../lib/emailAddress';
 import { createRateLimiter } from '../../lib/rateLimiter';
-import { isRecord } from '../../lib/validation';
+import { bodyFields } from '../../lib/validation';
+import type { PasswordResetRequestBody } from '../../contract/requests';
 import { userKey } from '../../middlewares/UserSessionAuth';
 
 // Limiters for the account routes. Login is keyed by IP (the default) because
@@ -71,7 +72,7 @@ const MAX_EMAIL_LENGTH = 254;
 // when the body has no usable address. The two kinds of key have prefixes, so an address that looks
 // like an IP cannot use up that IP's budget.
 export function passwordResetEmailKey(req: { body?: unknown; ip?: string | undefined }): string {
-  const email = isRecord(req.body) ? req.body.email : undefined;
+  const { email } = bodyFields<PasswordResetRequestBody>(req.body);
   if (typeof email === 'string' && email.length <= MAX_EMAIL_LENGTH) return `email:${normalizeEmail(email)}`;
 
   return `ip:${ipKeyGenerator(req.ip ?? '')}`;
