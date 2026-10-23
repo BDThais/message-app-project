@@ -325,6 +325,7 @@ DELETE /api/friend/requests/:id
 - it deletes only the request `:id` names. When two users sent each other a request at the same instant, the other request of the pair stays: it is a different request (which is why `:id` is a request ID and not a user ID), and accepting it still clears the pair
 - the permission check and the delete are one `deleteMany` statement narrowed to requests the requester is a party to, not a lookup followed by a delete. A double click or a second tab sending the same call twice at once, or the sender cancelling while the receiver rejects, is therefore answered with `204` and `404`, never a `5xx`; either way the request is gone
 - no rate limiter: it only works on a request the requester is a party to, so it reveals nothing about other users
+- only the request row goes: the other party is not notified and nothing else changes, so after a rejection or a cancellation either user can send a new request
 
 GET /api/friend
 

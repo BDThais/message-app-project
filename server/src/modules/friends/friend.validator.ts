@@ -13,17 +13,13 @@ type TelParamValidation =
   | { valid: false; message: string };
 
 /**
- * Validates the ':tel' URL param of GET /friend/search/:tel.
- *
  * Two checks, both required:
- * - isValidPhoneNumber with no default country, the same call signup makes
- *   (signup.validator.ts), so the number must carry its country code and be
- *   a real number for that country;
- * - the canonical E.164 spelling. isValidPhoneNumber alone also accepts
- *   '+1 415 555 2671', '+1 (415) 555-2671', '+14155552671 ext. 123' and
- *   non-ASCII digits. The lookup is an exact string match, so accepting
- *   those spellings would answer "nobody found" for a number that is
- *   registered, which is worse than a 400 that says what format to send.
+ * - isValidPhoneNumber with no default country, the same call signup makes (signup.validator.ts), so the number
+ *   must carry its country code and be a real number for that country;
+ * - the canonical E.164 spelling. isValidPhoneNumber alone also accepts '+1 415 555 2671', '+1 (415) 555-2671',
+ *   '+14155552671 ext. 123' and non-ASCII digits. The lookup is an exact string match, so accepting those
+ *   spellings would answer "nobody found" for a number that is registered, which is worse than a 400 that says
+ *   what format to send.
  */
 export function validateTelParam(rawTel: unknown): TelParamValidation {
   if (typeof rawTel !== 'string' || !E164_RE.test(rawTel) || !isValidPhoneNumber(rawTel)) {
@@ -40,13 +36,7 @@ type SendFriendRequestValidation =
   | { valid: true; data: { receiverId: number } }
   | { valid: false; message: string };
 
-/**
- * Validates the body of POST /friend/requests. `receiver_id` must be a
- * positive integer within the Postgres integer range (the same rule as the
- * IDs in POST /chat's `member_ids`) and must not be the requester's own ID.
- * Whether it refers to an existing user is the service's question, not the
- * validator's.
- */
+/** Whether `receiver_id` refers to an existing user is the service's question, not the validator's. */
 export function validateSendFriendRequestBody(
   body: unknown,
   requesterId: number
@@ -68,13 +58,7 @@ type GetFriendRequestsQueryValidation =
   | { valid: true; data: { direction: FriendRequestDirection } }
   | { valid: false; message: string };
 
-/**
- * Validates the query string of GET /friend/requests. `direction` is optional
- * and defaults to `incoming` (the inbox); the only other value is `outgoing`.
- * Anything else is a 400, including an empty value (`?direction=`), a
- * different case (`Incoming`) and a repeated parameter, which Express parses
- * into an array. Other query parameters are ignored.
- */
+/** Anything but the two exact values is a 400, including an empty value, a different case and a repeated parameter (Express parses it into an array). */
 export function validateGetFriendRequestsQuery(query: unknown): GetFriendRequestsQueryValidation {
   const { direction } = bodyFields<GetFriendRequestsQuery>(query);
 
@@ -93,12 +77,7 @@ type RequestIdParamValidation =
   | { valid: true; data: { requestId: number } }
   | { valid: false; message: string };
 
-/**
- * Validates the ':id' URL param of the /friend/requests/:id routes, which is a
- * *request* ID (PendingFriendRequest.id), not a user ID. Only plain digit
- * strings between 1 and the Postgres integer maximum are accepted (see
- * parseIdParam).
- */
+/** The ':id' of the requests routes is a *request* ID (PendingFriendRequest.id), not a user ID. */
 export function validateRequestIdParam(rawRequestId: unknown): RequestIdParamValidation {
   const requestId = parseIdParam(rawRequestId);
 
@@ -111,12 +90,7 @@ type UserIdParamValidation =
   | { valid: true; data: { userId: number } }
   | { valid: false; message: string };
 
-/**
- * Validates the ':id' URL param of DELETE /friend/:id, which is a *user* ID
- * (the friend to remove), unlike the /friend/requests/:id routes. Only plain
- * digit strings between 1 and the Postgres integer maximum are accepted (see
- * parseIdParam).
- */
+/** The ':id' of the unfriend route is a *user* ID (the friend to remove), unlike the requests routes. */
 export function validateUserIdParam(rawUserId: unknown): UserIdParamValidation {
   const userId = parseIdParam(rawUserId);
 

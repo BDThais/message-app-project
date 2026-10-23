@@ -15,6 +15,8 @@ const friendRouter = Router();
 
 friendRouter.use(requireUserAuth);
 
+// Only the two routes that let a user find out something about somebody else have a limiter (search and send):
+// every other route works on what already concerns the requester.
 friendRouter.get('/', withUser(getFriends));
 // The limiter is per user, so it has to come after requireUserAuth (which sets req.user).
 friendRouter.get('/search/:tel', friendSearchLimiter, withUser(searchUserByTel));

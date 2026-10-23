@@ -22,9 +22,6 @@ import {
   removeFriend,
 } from './friend.service';
 
-// Route chain (see friend.routes.ts): requireUserAuth -> friendSearchLimiter,
-// so by the time this runs the requester is signed in and within their search
-// quota. Finding nobody is a normal outcome, not an error: 200 with user: null.
 export async function searchUserByTel(req: AuthenticatedRequest, res: Response<SearchUserResponse | ApiErrorBody>, next: NextFunction) {
   const validation = validateTelParam(req.params.tel);
   if (!validation.valid) {
@@ -40,9 +37,6 @@ export async function searchUserByTel(req: AuthenticatedRequest, res: Response<S
   }
 }
 
-// Route chain (see friend.routes.ts): requireUserAuth -> friendRequestLimiter.
-// The service reports the expected refusals as a `status`; anything it throws
-// is unexpected and goes to the shared error handler.
 export async function sendFriendRequest(req: AuthenticatedRequest, res: Response<FriendRequestResponse | FriendRequestConflictBody | ApiErrorBody>, next: NextFunction) {
   const requesterId = req.user.id;
 
@@ -74,9 +68,6 @@ export async function sendFriendRequest(req: AuthenticatedRequest, res: Response
   }
 }
 
-// Route chain (see friend.routes.ts): requireUserAuth only. Listing what
-// already concerns the requester tells them nothing about anyone else, so it
-// has no limiter. An empty list is a normal outcome: 200 with requests: [].
 export async function getFriendRequests(req: AuthenticatedRequest, res: Response<FriendRequestListResponse | ApiErrorBody>, next: NextFunction) {
   const validation = validateGetFriendRequestsQuery(req.query);
   if (!validation.valid) {
@@ -92,10 +83,6 @@ export async function getFriendRequests(req: AuthenticatedRequest, res: Response
   }
 }
 
-// Route chain (see friend.routes.ts): requireUserAuth only. Accepting works
-// only on a request addressed to the requester, so it tells them nothing about
-// anyone else and has no limiter. A request that does not exist and one that
-// belongs to somebody else get the same 404.
 export async function acceptFriendRequest(req: AuthenticatedRequest, res: Response<AcceptedFriendResponse | ApiErrorBody>, next: NextFunction) {
   const validation = validateRequestIdParam(req.params.id);
   if (!validation.valid) {
@@ -116,11 +103,7 @@ export async function acceptFriendRequest(req: AuthenticatedRequest, res: Respon
   }
 }
 
-// Route chain (see friend.routes.ts): requireUserAuth only. Either party can
-// delete a request: the receiver rejects it, the sender cancels it. It only
-// works on a request the requester is a party to, so it tells them nothing
-// about anyone else and has no limiter. A request that does not exist and one
-// between two other users get the same 404. `:id` is a *request* ID.
+// `:id` is a *request* ID, not a user's.
 export async function deleteFriendRequest(req: AuthenticatedRequest, res: Response<ApiErrorBody>, next: NextFunction) {
   const validation = validateRequestIdParam(req.params.id);
   if (!validation.valid) {
@@ -141,9 +124,6 @@ export async function deleteFriendRequest(req: AuthenticatedRequest, res: Respon
   }
 }
 
-// Route chain (see friend.routes.ts): requireUserAuth only. The list is the
-// requester's own, so it tells them nothing about anyone else and has no
-// limiter. No friends is a normal outcome: 200 with friends: [].
 export async function getFriends(req: AuthenticatedRequest, res: Response<FriendListResponse>, next: NextFunction) {
   try {
     const friends = await listFriends(req.user.id);
@@ -154,10 +134,7 @@ export async function getFriends(req: AuthenticatedRequest, res: Response<Friend
   }
 }
 
-// Route chain (see friend.routes.ts): requireUserAuth only. Unfriending works
-// only on the requester's own friend list, so it tells them nothing about
-// anyone else and has no limiter. `:id` is a *user* ID. A user who does not
-// exist and one who is not a friend get the same 404.
+// `:id` is a *user* ID, not a request's.
 export async function unfriend(req: AuthenticatedRequest, res: Response<ApiErrorBody>, next: NextFunction) {
   const validation = validateUserIdParam(req.params.id);
   if (!validation.valid) {

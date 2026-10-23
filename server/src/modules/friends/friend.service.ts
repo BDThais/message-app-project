@@ -4,24 +4,16 @@ import type { FriendRequest, PublicUser, SearchResult } from '../../contract/typ
 import type { FriendRequestDirection } from '../../contract/requests';
 
 /**
- * Exact phone-number lookup behind GET /friend/search/:tel. `tel` is expected
- * to be validated already (see validateTelParam). Returns null when nobody has
+ * Exact phone-number lookup; `tel` is already validated (see validateTelParam). Returns null when nobody has
  * that number.
  *
- * The relationship comes from the same query as the user. Each of the three
- * relations below is narrowed to rows that involve the requester, so it holds
- * at most one row:
- * - friendOfLists: friend-list rows that name the found user as the friend,
- *   narrowed to the requester's own row. That is the row GET /friend reads,
- *   so the two endpoints agree on who is a friend.
- * - sentFriendRequests: requests the found user sent to the requester.
- * - receivedFriendRequests: requests the requester sent to the found user.
+ * The relationship comes from the same query as the user. Each of the three relations is narrowed to rows
+ * that involve the requester, so it holds at most one row. `friendOfLists` is the requester's own friend-list
+ * row, the one listFriends reads, so the two agree on who is a friend.
  *
- * When more than one applies, the first match wins, in this order: self,
- * friend, request_received, request_sent. Two requests can only coexist in
- * both directions through the known send-at-the-same-instant race (see
- * "Friend endpoints" in backend.doc.md); "received" wins because accepting it
- * clears both.
+ * When more than one applies, the first match wins: self, friend, request_received, request_sent. Two requests
+ * can only coexist in both directions through the known send-at-the-same-instant race (see "Friend endpoints"
+ * in backend.doc.md); "received" wins because accepting it clears both.
  */
 export async function findUserByTel(
   requesterId: number,
@@ -84,22 +76,17 @@ function isPrismaError(err: unknown, code: string): boolean {
 }
 
 /**
- * Behind POST /friend/requests. `receiverId` is expected to be validated
- * already (see validateSendFriendRequestBody). Nothing is thrown for the
- * outcomes the API answers with a 4xx; they come back as a `status` instead.
+ * `receiverId` is already validated (see validateSendFriendRequestBody). The refusals the API answers with a
+ * 4xx come back as a `status`; nothing is thrown for them.
  *
- * The receiver and their relationship to the sender come from one query, with
- * each relation narrowed to rows that involve the sender (the same shape as
- * findUserByTel). When more than one applies, the first match wins, in this
- * order: already friends, receiver already sent one, sender already sent one.
+ * The receiver and their relationship to the sender come from one query, as in findUserByTel. When more than
+ * one applies, the first match wins: already friends, receiver already sent one, sender already sent one.
  *
- * The checks and the insert are not one transaction on purpose. A duplicate
- * that slips in between (double click, two tabs) hits the unique constraint
- * (P2002) and is reported as `already_sent`, the same as if the check had
- * caught it. A receiver deleted in that gap fails the foreign key (P2003) and
- * is reported as `receiver_not_found`. Two users sending each other a request
- * at the same instant can both succeed; that race is accepted (see "Friend
- * endpoints" in backend.doc.md) because accepting clears both directions.
+ * The checks and the insert are not one transaction on purpose. A duplicate that slips in between (double click,
+ * two tabs) hits the unique constraint (P2002) and is reported as `already_sent`, the same as if the check had
+ * caught it. A receiver deleted in that gap fails the foreign key (P2003) and is reported as
+ * `receiver_not_found`. Two users sending each other a request at the same instant can both succeed; that race
+ * is accepted (see "Friend endpoints" in backend.doc.md) because accepting clears both directions.
  */
 export async function createFriendRequest(
   senderId: number,
@@ -157,15 +144,12 @@ const newestFirst: Prisma.PendingFriendRequestOrderByWithRelationInput[] = [
 ];
 
 /**
- * Behind GET /friend/requests: the requester's pending requests in one
- * direction, newest first, each with the other party as `user`. The other
- * party is selected down to `{ id, name, avatarUrl }` in the query itself, so
- * email and tel never leave the database. There is no pagination yet.
+ * The requester's pending requests in one direction, newest first. The other party is selected down to
+ * `{ id, name, avatarUrl }` in the query itself, so email and tel never leave the database.
  *
- * Both queries are served by an index: `incoming` filters on receiverId (the
- * @@index added for the inbox), `outgoing` on senderId (the leading column of
- * @@unique([senderId, receiverId])). Requests cascade with their users, so
- * the other party always exists.
+ * Both queries are served by an index: `incoming` filters on receiverId (the @@index added for the inbox),
+ * `outgoing` on senderId (the leading column of @@unique([senderId, receiverId])). Requests cascade with their
+ * users, so the other party always exists.
  */
 export async function listFriendRequests(
   requesterId: number,
@@ -197,21 +181,16 @@ export type AcceptFriendRequestResult =
   | { status: 'not_found' };
 
 /**
- * Behind POST /friend/requests/:id/accept. `requestId` is expected to be
- * validated already (see validateRequestIdParam). Only the receiver can accept:
- * the request is looked up by its ID *and* `receiverId = requesterId`.
+ * `requestId` is already validated (see validateRequestIdParam). Only the receiver can accept: the request is
+ * looked up by its ID *and* `receiverId = requesterId`.
  *
- * One transaction: create both friend-list rows, then delete every pending
- * request between the two users in either direction (this also clears the
- * send-at-the-same-instant race, see "Friend endpoints" in backend.doc.md).
- * The rows are created with `skipDuplicates`, so a half-written friendship is
- * completed and a repeated or concurrent accept does not fail. They are also
- * always created in the same order, so concurrent accepts do not deadlock on
- * each other's rows (see below).
+ * One transaction: create both friend-list rows, then delete every pending request between the two users in
+ * either direction (which also clears the send-at-the-same-instant race). The rows are created with
+ * `skipDuplicates`, so a half-written friendship is completed and a repeated or concurrent accept does not
+ * fail, and always in the same order, so concurrent accepts do not deadlock (see below).
  *
- * A sender who is deleted in the gap between the lookup and the insert fails
- * the foreign key (P2003); their requests are gone with them, so it is reported
- * as `not_found`, like any other request that no longer exists.
+ * A sender who is deleted in the gap between the lookup and the insert fails the foreign key (P2003); their
+ * requests are gone with them, so it is reported as `not_found`, like any other request that no longer exists.
  */
 export async function acceptPendingFriendRequest(
   requesterId: number,
@@ -265,21 +244,14 @@ export async function acceptPendingFriendRequest(
 export type DeleteFriendRequestResult = { status: 'deleted' } | { status: 'not_found' };
 
 /**
- * Behind DELETE /friend/requests/:id: the receiver rejects the request, the
- * sender cancels it, and either way the row is simply deleted. `requestId` is
- * expected to be validated already (see validateRequestIdParam).
+ * `requestId` is already validated (see validateRequestIdParam). The receiver rejects the request, the sender
+ * cancels it; either way the row is deleted.
  *
- * One `deleteMany` statement, narrowed to requests the requester is a party to,
- * rather than a lookup followed by a delete. The statement is the permission
- * check and the delete at once, so there is no gap for a second tab to slip
- * through: of two concurrent calls one deletes the row (`deleted`) and the other
- * finds nothing (`not_found`), never an error. A request that does not exist
- * and one between two other users are not told apart (both match zero rows), so
- * nobody can probe other users' requests.
- *
- * Only the request row goes. The other party is not notified and nothing else
- * changes, so after a rejection or a cancellation either user can send a new
- * request.
+ * One `deleteMany`, narrowed to requests the requester is a party to, rather than a lookup followed by a delete:
+ * the statement is the permission check and the delete at once, so there is no gap for a second tab to slip
+ * through. Of two concurrent calls one deletes the row (`deleted`) and the other finds nothing (`not_found`),
+ * never an error. A request that does not exist and one between two other users both match zero rows, so nobody
+ * can probe other users' requests.
  */
 export async function removePendingFriendRequest(
   requesterId: number,
@@ -296,24 +268,19 @@ export async function removePendingFriendRequest(
 }
 
 /**
- * Behind GET /friend: the requester's friends as `{ id, name, avatarUrl }`,
- * sorted by name without regard to case, with the user ID breaking ties so the
- * order never changes from one call to the next. There is no pagination yet.
+ * The requester's friends as `{ id, name, avatarUrl }`, sorted by name without regard to case, with the user ID
+ * breaking ties so the order never changes between calls.
  *
- * It reads the requester's *own* friend-list rows, the same rows
- * GET /friend/search/:tel, DELETE /friend/:id and `findNonFriendIds` use, so
- * every endpoint agrees on who is a friend. The friend is selected down to
- * the public fields in the query itself, so email and tel are never read.
- * The rows are served by the primary key `(userId, friendId)`, and friend-list
- * rows cascade with their users, so the friend always exists.
+ * It reads the requester's *own* friend-list rows, the same rows findUserByTel, removeFriend and findNonFriendIds
+ * use, so every endpoint agrees on who is a friend. The friend is selected down to the public fields in the query
+ * itself, so email and tel are never read. The rows are served by the primary key `(userId, friendId)`, and
+ * friend-list rows cascade with their users, so the friend always exists.
  *
- * The sort happens here and not in the query on purpose: Prisma cannot order
- * by `lower(name)`, and a plain `orderBy` follows the database's collation,
- * which differs between installations (a case-sensitive order puts every
- * capitalised name before every lower-case one). Names are letters and digits
- * only (see signup.validator.ts), so lower-casing them is enough. When the
- * list gets a `limit`/`before`, the order has to move into the query (a raw
- * `ORDER BY lower(name), id`).
+ * The sort happens here and not in the query on purpose: Prisma cannot order by `lower(name)`, and a plain
+ * `orderBy` follows the database's collation, which differs between installations (a case-sensitive order puts
+ * every capitalised name before every lower-case one). Names are letters and digits only (see
+ * signup.validator.ts), so lower-casing them is enough. If the list ever gets a `limit`/`before`, the order has
+ * to move into the query (a raw `ORDER BY lower(name), id`).
  */
 export async function listFriends(requesterId: number): Promise<PublicUser[]> {
   const rows = await prisma.friendListMember.findMany({
@@ -334,22 +301,16 @@ export async function listFriends(requesterId: number): Promise<PublicUser[]> {
 }
 
 /**
- * Which of `userIds` are not friends of the requester. Used by the chat-room
- * endpoints, which only let people start a conversation with their friends
- * (see "Friendship and messaging" in backend.doc.md). Two users are friends
- * when the requester's *own* friend-list row names the other one, the same row
- * GET /friend, GET /friend/search/:tel and DELETE /friend/:id read, so every
- * endpoint agrees on who is a friend.
+ * Which of `userIds` are not friends of the requester. Two users are friends when the requester's *own*
+ * friend-list row names the other one, the row every friend endpoint reads.
  *
- * A user who does not exist has no friend-list row either, so they come back
- * as a non-friend like any stranger; callers answer both the same way and
- * nobody can probe which user IDs exist. `userIds` must already be valid IDs
- * (integers from 1 to MAX_INT32, as the chat-room validators ensure): an ID
- * outside the column's range would make the database refuse the query.
+ * A user who does not exist has no friend-list row either, so they come back as a non-friend like any stranger;
+ * callers answer both the same way and nobody can probe which user IDs exist. `userIds` must already be valid IDs
+ * (integers from 1 to MAX_INT32, as the chat-room validators ensure): an ID outside the column's range would make
+ * the database refuse the query.
  *
- * Takes the client so it can run inside the caller's transaction. It does not
- * lock anything: a friendship removed right after the check still counts as
- * the friendship it was when the check ran.
+ * Takes the client so it can run inside the caller's transaction. It does not lock anything: a friendship removed
+ * right after the check still counts as the friendship it was when the check ran.
  */
 export async function findNonFriendIds(
   client: Prisma.TransactionClient,
@@ -370,24 +331,15 @@ export async function findNonFriendIds(
 export type RemoveFriendResult = { status: 'removed' } | { status: 'not_friends' };
 
 /**
- * Behind DELETE /friend/:id. `friendId` is expected to be validated already
- * (see validateUserIdParam). The two are friends when the requester's own
- * friend-list row names `friendId`; that is the row GET /friend and
- * findUserByTel read, so the endpoints agree on who is a friend. Anything else
- * (a stranger, a user who does not exist, the requester's own ID) is
- * `not_friends`, so nobody can probe which user IDs exist.
+ * `friendId` is already validated (see validateUserIdParam). The two are friends when the requester's own
+ * friend-list row names `friendId`; anything else (a stranger, a user who does not exist, the requester's own ID)
+ * is `not_friends`, so nobody can probe which user IDs exist.
  *
- * One transaction: check the requester's row, then delete both rows of the
- * pair in a single `deleteMany`. That also removes a leftover row on the other
- * side, so the pair is gone for both of them. Unlike accepting, this needs no
- * fixed row order: both rows go in one DELETE statement, so two friends
- * removing each other at the same instant just queue on the same rows. The
- * second of two concurrent calls finds nothing left to delete and may still
- * answer `removed`; that is harmless, the friendship is gone either way.
- *
- * Existing direct chat rooms and their messages are left alone, and so are
- * pending friend requests (a pair that are friends has none, accepting clears
- * them).
+ * One transaction: check the requester's row, then delete both rows of the pair in a single `deleteMany`, which
+ * also removes a leftover row on the other side. Unlike accepting, this needs no fixed row order: both rows go in
+ * one DELETE statement, so two friends removing each other at the same instant just queue on the same rows. The
+ * second of two concurrent calls finds nothing left to delete and may still answer `removed`; that is harmless,
+ * the friendship is gone either way.
  */
 export async function removeFriend(
   requesterId: number,
