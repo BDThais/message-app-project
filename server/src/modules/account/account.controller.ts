@@ -3,6 +3,7 @@ import type { ApiErrorBody, DeleteAccountConflictBody } from '../../contract/err
 import type { LoginBody } from '../../contract/requests';
 import type { LogoutResponse, MeResponse, MessageResponse, UserResponse } from '../../contract/responses';
 import { bodyFields } from '../../lib/validation';
+import type { AuthenticatedRequest } from '../../middlewares/UserSessionAuth';
 import { normalizeEmail } from '../../lib/emailAddress';
 import { hashPassword, verifyPassword } from '../../lib/passwordHash';
 import { validateAccountBody, checkDuplication, normalizeTel, uniqueViolationMessage } from './signup.validator';
@@ -119,14 +120,14 @@ export async function logout(req: Request, res: Response<LogoutResponse>, next: 
   }
 }
 
-export async function updateMe(req: Request, res: Response<UserResponse | ApiErrorBody>, next: NextFunction) {
+export async function updateMe(req: AuthenticatedRequest, res: Response<UserResponse | ApiErrorBody>, next: NextFunction) {
   try {
     const validation = validateUpdateProfileBody(req.body);
     if (!validation.valid) {
       return res.status(400).json({ error: validation.message });
     }
 
-    const user = await updateUserProfile(req.user!.id, validation.data);
+    const user = await updateUserProfile(req.user.id, validation.data);
     res.status(200).json({ user });
   } catch (error) {
     console.error('Error updating profile:', error);
@@ -134,7 +135,7 @@ export async function updateMe(req: Request, res: Response<UserResponse | ApiErr
   }
 }
 
-export async function updatePassword(req: Request, res: Response<ApiErrorBody>, next: NextFunction) {
+export async function updatePassword(req: AuthenticatedRequest, res: Response<ApiErrorBody>, next: NextFunction) {
   try {
     const validation = validateChangePasswordBody(req.body);
     if (!validation.valid) {
@@ -142,7 +143,7 @@ export async function updatePassword(req: Request, res: Response<ApiErrorBody>, 
     }
     const { currentPassword, newPassword } = validation.data;
 
-    const userId = req.user!.id;
+    const userId = req.user.id;
     const currentHash = await findPasswordHash(userId);
     if (!currentHash || !(await verifyPassword(currentHash, currentPassword))) {
       return res.status(401).json({ error: 'Current password is incorrect' });
@@ -166,14 +167,14 @@ export async function updatePassword(req: Request, res: Response<ApiErrorBody>, 
   }
 }
 
-export async function deleteMe(req: Request, res: Response<DeleteAccountConflictBody | ApiErrorBody>, next: NextFunction) {
+export async function deleteMe(req: AuthenticatedRequest, res: Response<DeleteAccountConflictBody | ApiErrorBody>, next: NextFunction) {
   try {
     const validation = validateDeleteAccountBody(req.body);
     if (!validation.valid) {
       return res.status(400).json({ error: validation.message });
     }
 
-    const userId = req.user!.id;
+    const userId = req.user.id;
     const currentHash = await findPasswordHash(userId);
     if (!currentHash || !(await verifyPassword(currentHash, validation.data.password))) {
       return res.status(401).json({ error: 'Password is incorrect' });
@@ -220,9 +221,9 @@ export async function verifyEmail(req: Request, res: Response<ApiErrorBody>, nex
   }
 }
 
-export async function resendEmailVerification(req: Request, res: Response<ApiErrorBody>, next: NextFunction) {
+export async function resendEmailVerification(req: AuthenticatedRequest, res: Response<ApiErrorBody>, next: NextFunction) {
   try {
-    const result = await issueEmailVerification(req.user!.id);
+    const result = await issueEmailVerification(req.user.id);
     if (result.status === 'no_user') {
       // The account was deleted after requireUserAuth found the session.
       return res.status(401).json({ error: 'Unauthorized Access' });

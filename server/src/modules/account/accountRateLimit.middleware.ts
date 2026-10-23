@@ -2,6 +2,7 @@ import { ipKeyGenerator } from 'express-rate-limit';
 import { normalizeEmail } from '../../lib/emailAddress';
 import { createRateLimiter } from '../../lib/rateLimiter';
 import { isRecord } from '../../lib/validation';
+import { userKey } from '../../middlewares/UserSessionAuth';
 
 // Limiters for the account routes. Login is keyed by IP (the default) because
 // nobody is signed in yet at that point.
@@ -21,7 +22,7 @@ export const loginLimiter = createRateLimiter({
 export const passwordCheckLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   limit: 10,
-  keyGenerator: (req) => String(req.user!.id),
+  keyGenerator: userKey,
   message: { error: 'Too many attempts, try again later' },
 });
 
@@ -42,7 +43,7 @@ export const emailVerifyLimiter = createRateLimiter({
 export const emailVerificationRequestLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000,
   limit: 5,
-  keyGenerator: (req) => String(req.user!.id),
+  keyGenerator: userKey,
   message: { error: 'Too many verification emails requested, try again later' },
 });
 
