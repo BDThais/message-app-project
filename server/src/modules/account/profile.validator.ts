@@ -13,7 +13,6 @@ type UpdateProfileValidation =
  * only the fields that were sent, camelCased to match the Prisma field names.
  */
 export function validateUpdateProfileBody(body: unknown): UpdateProfileValidation {
-  // Express leaves req.body undefined when the request has no JSON body.
   const { name, avatar_url } = bodyFields<UpdateProfileBody>(body);
 
   if (name === undefined && avatar_url === undefined) {

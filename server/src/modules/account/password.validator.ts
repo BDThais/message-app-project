@@ -14,7 +14,6 @@ type ChangePasswordValidation =
  * not a 400).
  */
 export function validateChangePasswordBody(body: unknown): ChangePasswordValidation {
-  // Express leaves req.body undefined when the request has no JSON body.
   const { current_password, new_password } = bodyFields<ChangePasswordBody>(body);
 
   if (

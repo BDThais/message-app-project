@@ -12,7 +12,6 @@ type VerifyEmailValidation =
  * message, the same for every way a link can be dead).
  */
 export function validateVerifyEmailBody(body: unknown): VerifyEmailValidation {
-  // Express leaves req.body undefined when the request has no JSON body.
   const { token } = bodyFields<VerifyEmailBody>(body);
 
   if (typeof token !== 'string' || token === '') {

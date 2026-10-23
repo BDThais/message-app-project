@@ -11,7 +11,6 @@ type DeleteAccountValidation =
  * the controller to find out (a wrong one is a 401, not a 400).
  */
 export function validateDeleteAccountBody(body: unknown): DeleteAccountValidation {
-  // Express leaves req.body undefined when the request has no JSON body.
   const { password } = bodyFields<DeleteAccountBody>(body);
 
   if (typeof password !== 'string' || password === '') {

@@ -15,7 +15,6 @@ type ResetRequestValidation =
  * stored and as login looks it up; it is not trimmed.
  */
 export function validatePasswordResetRequestBody(body: unknown): ResetRequestValidation {
-  // Express leaves req.body undefined when the request has no JSON body.
   const { email } = bodyFields<PasswordResetRequestBody>(body);
 
   if (typeof email !== 'string' || email === '') {
