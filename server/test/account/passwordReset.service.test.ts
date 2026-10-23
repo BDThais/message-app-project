@@ -121,7 +121,7 @@ describe('issuePasswordReset', () => {
     expect(await prisma.passwordResetToken.count()).toBe(0);
     const stored = await prisma.emailVerificationToken.findUniqueOrThrow({ where: { userId: alice.id } });
     expect(stored).toMatchObject({ email: alice.email, tokenHash: hashToken(result.token), createdAt: now });
-    // It is the same link POST /account/email/verification would have sent: it verifies the address.
+    // It is the same link POST /api/account/email/verification would have sent: it verifies the address.
     expect(await verifyEmailToken(result.token)).toEqual({ status: 'verified' });
   });
 

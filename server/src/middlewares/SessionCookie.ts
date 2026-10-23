@@ -15,7 +15,7 @@ const cookieBaseOptions = () =>
 
 /**
  * Sends the session id to the browser as a cookie.
- * Used by POST /account/login, with the session returned by createSession.
+ * Used by POST /api/account/login, with the session returned by createSession.
  */
 export function setSessionCookie(res: Response, session: { id: string; expiresAt: Date }): void {
   res.cookie(config.SESSION_COOKIE, session.id, {
@@ -26,7 +26,7 @@ export function setSessionCookie(res: Response, session: { id: string; expiresAt
 
 /**
  * Tells the browser to drop the session cookie.
- * Used by POST /account/logout. The logout route still needs to delete the
+ * Used by POST /api/account/logout. The logout route still needs to delete the
  * session row itself (deleteSession in session.service.ts).
  */
 export function clearSessionCookie(res: Response): void {
@@ -36,7 +36,7 @@ export function clearSessionCookie(res: Response): void {
 /**
  * Reads the session cookie off the request and resolves it to a user.
  * Returns null if there's no cookie, no matching session, or the session has expired.
- * Used by GET /account/me and by the requireUserAuth middleware.
+ * Used by GET /api/account/me and by the requireUserAuth middleware.
  */
 export async function getSessionUser(req: Request, res: Response) {
   const sessionId = req.cookies?.[config.SESSION_COOKIE];

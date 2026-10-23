@@ -21,7 +21,7 @@ describe('GET /chat/:chatid/member', () => {
     const res = await agent.get(`/api/chat/${room.id}/member`);
 
     expect(res.status).toBe(200);
-    // Same shape as PATCH /chat/:chatid/member/:userid: the user only under
+    // Same shape as PATCH /api/chat/:chatid/member/:userid: the user only under
     // `member`. 'bea' sorts before 'Carl' because the name order ignores case.
     expect(res.body).toEqual({
       members: [

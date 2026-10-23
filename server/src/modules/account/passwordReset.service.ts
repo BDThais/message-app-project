@@ -35,7 +35,7 @@ export type IssuePasswordResetResult =
   // A new reset link was stored (replacing the old one): mail `token` to `email`.
   | { status: 'reset_link'; email: string; token: string }
   // The account never verified its address, so it gets the verification link instead (a reset
-  // link goes only to a verified address). It was stored the way POST /account/email/verification
+  // link goes only to a verified address). It was stored the way POST /api/account/email/verification
   // stores it: mail `token` to `email` as a verification link.
   | { status: 'verification_link'; email: string; token: string }
   // No account has this address (compared exactly, like login does).
@@ -45,7 +45,7 @@ export type IssuePasswordResetResult =
 
 /**
  * Stores a new reset link for the account with this address, replacing the
- * old one (POST /account/password/reset-request). The caller answers the same
+ * old one (POST /api/account/password/reset-request). The caller answers the same
  * way whatever this returns, so the answer does not reveal who is registered.
  * `email` is the canonical address (normalizeEmail): the validator has already
  * lower-cased it, and the lookup is an exact match on the stored form.
@@ -106,7 +106,7 @@ export type ResetPasswordResult =
   | { status: 'invalid' };
 
 /**
- * Uses a token from a reset mail (POST /account/password/reset): the account
+ * Uses a token from a reset mail (POST /api/account/password/reset): the account
  * gets `newPasswordHash` and is signed out everywhere, expired sessions
  * included, so nobody who held a session before the reset keeps it. The
  * caller hashes the password first, so an unknown token costs the same time

@@ -52,7 +52,7 @@ export function buildVerificationLink(baseUrl: string, token: string): string {
  * mail, so by the time this runs the response is already sent, and a provider
  * outage must not turn into an unhandled rejection. A failure is logged (the
  * mailer's errors do not contain the address) and the mail is lost; the user
- * asks again with POST /account/email/verification.
+ * asks again with POST /api/account/email/verification.
  *
  * Call it after responding, never before.
  */

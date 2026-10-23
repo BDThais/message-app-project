@@ -46,7 +46,7 @@ export function validatePassword(password: string): string | null {
  * isValidPhoneNumber also accepts spaces, dashes, parentheses, non-ASCII digits
  * and extensions, and the unique constraint on `tel` compares raw strings, so
  * '+1 (415) 555-2671' and '+14155552671' would otherwise both register, and
- * GET /friend/search/:tel (an exact match) could never find the first one.
+ * GET /api/friend/search/:tel (an exact match) could never find the first one.
  * An extension is not part of E.164 and is dropped.
  *
  * isValidPhoneNumber stays the gate on purpose: it rejects a few inputs that

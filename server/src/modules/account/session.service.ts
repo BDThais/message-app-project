@@ -33,7 +33,7 @@ export function checkSessionSettings(settings: SessionSettings): void {
  * The id is 256 random bits (generateToken): it is the only thing that proves
  * who is calling, so it must not be guessable.
  * Deletes any expired session already on file for this account first, per spec.
- * Used by POST /account/login, after the email/password check passes.
+ * Used by POST /api/account/login, after the email/password check passes.
  */
 export async function createSession(userId: number) {
   const expiresAt = new Date(Date.now() + config.SESSION_TTL_MS);

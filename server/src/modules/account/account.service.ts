@@ -126,7 +126,7 @@ export type DeleteAccountResult =
 	| { status: 'stale_password' };
 
 /**
- * Deletes the account (DELETE /account/me). The foreign keys do the rest in
+ * Deletes the account (DELETE /api/account/me). The foreign keys do the rest in
  * the same statement: the user's sessions, room memberships, friend-list
  * entries and friend requests (sent and received) are deleted with the user,
  * while their messages stay in the room with `senderId` set to null.

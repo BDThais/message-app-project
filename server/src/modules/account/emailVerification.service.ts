@@ -40,7 +40,7 @@ export type IssueVerificationResult =
 
 /**
  * Stores a new verification link for the account's current address, replacing
- * the old one (POST /account/email/verification).
+ * the old one (POST /api/account/email/verification).
  *
  * The user row is locked first (SELECT ... FOR UPDATE): without it two
  * simultaneous requests could both find the stored link older than the
@@ -95,7 +95,7 @@ export type VerifyEmailResult =
   | { status: 'invalid' };
 
 /**
- * Uses a token from a verification mail (POST /account/email/verify): the
+ * Uses a token from a verification mail (POST /api/account/email/verify): the
  * account's address counts as verified from `now` on.
  *
  * In one transaction the token row is deleted, and the user is updated only if

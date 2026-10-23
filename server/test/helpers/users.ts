@@ -37,7 +37,7 @@ export function createSessionRow(userId: number, expiresAt: Date) {
  * Returns a supertest agent that is already signed in as `user`.
  *
  * It writes the session row and sends its cookie directly instead of calling
- * POST /account/login, so chat-room tests don't depend on the login route
+ * POST /api/account/login, so chat-room tests don't depend on the login route
  * (that is tested in test/account/) and don't hit its rate limiter.
  */
 export async function loginAs(user: { id: number }) {

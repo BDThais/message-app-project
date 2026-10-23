@@ -40,7 +40,7 @@ describe('POST /friend/requests/:id/accept', () => {
       [bob.id, alice.id],
     ]);
     expect(await prisma.pendingFriendRequest.count()).toBe(0);
-    // Starting a conversation is the client's next call (POST /chat), not part of accepting.
+    // Starting a conversation is the client's next call (POST /api/chat), not part of accepting.
     expect(await prisma.chatRoom.count()).toBe(0);
   });
 

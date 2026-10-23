@@ -3,8 +3,8 @@ import { prisma } from '../../src/lib/prisma';
 import { createUser, loginAs, type TestAgent } from '../helpers/users';
 import { createDirectRoom, createGroupRoom } from '../helpers/chatRooms';
 
-// The two message-related fields of a room summary, as GET /chat and
-// GET /chat/:chatid return them: `lastMessage` (the newest message that has
+// The two message-related fields of a room summary, as GET /api/chat and
+// GET /api/chat/:chatid return them: `lastMessage` (the newest message that has
 // not been deleted) and `unreadCount`. The rest of the summary (names, avatars,
 // the order of the list) is in chatRoom.test.ts.
 

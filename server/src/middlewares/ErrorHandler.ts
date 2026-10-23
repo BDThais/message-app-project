@@ -30,7 +30,7 @@ export function notFoundHandler(_req: Request, res: Response) {
 //
 // Every error body in this API is `{ error: string }`. The key is not `message`
 // because several success bodies already use `message` for a chat message
-// object (POST/PATCH /chat/:chatid/message), so a client could not tell the two
+// object (POST/PATCH /api/chat/:chatid/message), so a client could not tell the two
 // apart by looking at the body.
 export function errorHandler(err: unknown, req: Request, res: Response, next: NextFunction) {
   if (res.headersSent) {

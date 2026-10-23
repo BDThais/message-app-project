@@ -276,7 +276,7 @@ describe(`POST ${signUpRoute} (verification email)`, () => {
 
     await request(app).post(signUpRoute).send(validBody);
 
-    // The cooldown of POST /account/email/verification counts from this time.
+    // The cooldown of POST /api/account/email/verification counts from this time.
     const stored = await prisma.emailVerificationToken.findFirstOrThrow();
     expect(stored.createdAt.getTime()).toBeGreaterThanOrEqual(before - 1000);
     expect(stored.createdAt.getTime()).toBeLessThanOrEqual(Date.now() + 1000);
