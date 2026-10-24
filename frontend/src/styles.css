@@ -1,97 +1,50 @@
-/* Deliberately plain: step 1 is about wiring, not looks. The visual design comes with the real screens. */
-:root {
-  color-scheme: light dark;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  line-height: 1.5;
+@import 'tailwindcss';
+
+/*
+ * Components use these tokens (bg-surface, text-muted, ...) and never a palette color (bg-white,
+ * text-zinc-500), so the dark theme is written once, here, and no component needs a dark: variant.
+ * light-dark() picks the first value in the light theme and the second in the dark one; the theme
+ * is the system's (color-scheme below).
+ */
+@theme {
+  --color-canvas: light-dark(#f3f4f8, #0e1014);
+  --color-surface: light-dark(#ffffff, #171a21);
+  --color-sunken: light-dark(#eceef4, #20242d);
+  --color-line: light-dark(#dcdfe8, #2a2f3a);
+  /* Borders of controls: a field has to stand out from its card at 3:1, which --color-line does not. */
+  --color-edge: light-dark(#7d8497, #69718a);
+  --color-fg: light-dark(#14161c, #eceef4);
+  --color-muted: light-dark(#586074, #a0a7b8);
+  --color-accent: light-dark(#4f46e5, #5b54ec);
+  --color-accent-strong: light-dark(#4338ca, #4b44d9);
+  --color-on-accent: #ffffff;
+  --color-accent-soft: light-dark(#ecebfd, #222449);
+  --color-link: light-dark(#4338ca, #a5b4fc);
+  --color-danger: light-dark(#b3261e, #ff9d97);
+  --color-danger-soft: light-dark(#fdeceb, #3a1c1f);
+  --color-success: light-dark(#17724a, #74e2a8);
+  --color-success-soft: light-dark(#e4f4ec, #14301f);
 }
 
-body {
-  margin: 0;
-}
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
 
-.page {
-  padding: 1.5rem;
-}
+  body {
+    @apply bg-canvas text-fg antialiased;
+  }
 
-.page-narrow {
-  max-width: 24rem;
-  margin: 0 auto;
-}
+  /* Every page has one h1 and none sets its own size. */
+  h1 {
+    @apply text-2xl font-semibold tracking-tight;
+  }
 
-.app-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.75rem 1.5rem;
-  border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent);
-}
+  a {
+    @apply text-link underline underline-offset-2 hover:decoration-2;
+  }
 
-.app-header-user {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.form {
-  display: grid;
-  gap: 1rem;
-}
-
-.field {
-  display: grid;
-  gap: 0.25rem;
-}
-
-.field-hint {
-  margin: 0;
-  font-size: 0.85rem;
-  opacity: 0.75;
-}
-
-.form-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.25rem;
-}
-
-.banner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 1rem;
-  padding: 0.6rem 1.5rem;
-  background: color-mix(in srgb, currentColor 8%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent);
-}
-
-.banner p {
-  margin: 0;
-}
-
-.form-error {
-  margin: 0;
-  color: light-dark(#b00020, #ff8a8a);
-}
-
-input,
-button {
-  font: inherit;
-}
-
-input {
-  padding: 0.5rem;
-}
-
-button {
-  padding: 0.5rem 0.9rem;
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: default;
-}
-
-:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
 }

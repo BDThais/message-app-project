@@ -1,6 +1,10 @@
 import { useState, type SyntheticEvent } from 'react';
 import { Link, useRouter } from '@tanstack/react-router';
 import { TextField } from '@/components/ui/TextField';
+import { Button } from '@/components/ui/Button';
+import { Form } from '@/components/ui/Form';
+import { FormLinks } from '@/components/ui/FormLinks';
+import { Notice } from '@/components/ui/Notice';
 import { safeRedirectPath } from '../guards';
 import { useLogin } from '../queries';
 
@@ -29,7 +33,7 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
   return (
     <>
       <h1>Sign in</h1>
-      <form onSubmit={handleSubmit} className="form">
+      <Form onSubmit={handleSubmit}>
         <TextField
           label="Email"
           type="email"
@@ -48,19 +52,15 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-        {login.error && (
-          <p role="alert" className="form-error">
-            {login.error.message}
-          </p>
-        )}
-        <button type="submit" disabled={login.isPending}>
+        {login.error && <Notice tone="error" role="alert">{login.error.message}</Notice>}
+        <Button type="submit" fullWidth disabled={login.isPending}>
           {login.isPending ? 'Signing in…' : 'Sign in'}
-        </button>
-      </form>
-      <p className="form-links">
+        </Button>
+      </Form>
+      <FormLinks>
         <Link to="/signup">Create an account</Link>
         <Link to="/forgot-password">Forgot your password?</Link>
-      </p>
+      </FormLinks>
     </>
   );
 }

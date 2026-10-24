@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/Button';
 import { useResendVerificationEmail } from '../queries';
 
 /**
@@ -9,18 +10,21 @@ export function VerifyEmailBanner({ email }: { email: string }) {
   const resend = useResendVerificationEmail();
 
   return (
-    <aside className="banner" aria-label="Email verification">
+    <aside
+      aria-label="Email verification"
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-accent-soft px-4 py-2.5 text-sm sm:px-6"
+    >
       <p>
         Your email address <strong>{email}</strong> is not verified yet.
       </p>
-      <button type="button" disabled={resend.isPending} onClick={() => resend.mutate()}>
+      <Button type="button" size="sm" variant="secondary" disabled={resend.isPending} onClick={() => resend.mutate()}>
         {resend.isPending ? 'Sending…' : 'Resend verification email'}
-      </button>
+      </Button>
       {resend.isSuccess && (
         <p role="status">Verification email sent. It can take a few minutes; check your spam folder too.</p>
       )}
       {resend.error && (
-        <p role="alert" className="form-error">
+        <p role="alert" className="text-danger">
           {resend.error.message}
         </p>
       )}

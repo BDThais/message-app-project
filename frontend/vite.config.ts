@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 
 // https://vite.dev/config/
@@ -18,6 +19,7 @@ export default defineConfig(({ mode }) => {
       // from the files in src/routes (commit that file).
       tanstackRouter({ target: 'react', autoCodeSplitting: true }),
       react(),
+      tailwindcss(),
     ],
     server: {
       // The server's mails link to http://localhost:5173/... (EMAIL_VERIFICATION_URL and

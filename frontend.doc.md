@@ -14,7 +14,7 @@ The frontend is built as a series of small steps (see "Implementation steps"). E
 - TanStack Query (all data that comes from the server)
 - Socket.io client (planned, step 6)
 - Vitest + Testing Library + jsdom (tests)
-- Styling: not decided yet (see "Open questions")
+- Styling: Tailwind CSS v4 (`tailwindcss`, `@tailwindcss/vite`); see "Styling"
 
 Node `^20.19.0 || >=22.12.0` is required (Vite 8).
 
@@ -42,13 +42,15 @@ Completed (step 2, "account screens"):
 
 Completed (the structure review after step 2, 2026-10-18): the tests moved to `test/`, and the layout and test setup changed as listed in "Structure review".
 
+Completed (styling, 2026-10-24): Tailwind CSS v4 chosen and every screen built so far styled with it (see "Styling"). The colors are tokens with a light and a dark value in `styles.css`; `components/ui/` got `Button`, `Notice`, `Form`, `FormLinks` and `Logo`, and `Page` and `TextField` were restyled; the header, the verification banner and the not-found page follow. No test changed: the tests find things by role and label, never by class.
+
 Still planned:
 
 - Room list, conversation, sending/editing/deleting messages (step 3)
 - Friends (step 4)
 - Account settings and room management (step 5)
 - Socket.io (step 6)
-- Visual design, deployment configuration (step 7)
+- Deployment configuration, polish and phone layout of the chat screens (step 7); each new screen is styled when it is written
 
 ## Running the frontend
 
@@ -90,6 +92,31 @@ Two kinds of state, kept apart:
 
 Why it matters here: when a socket event arrives (step 6), the handler does not "update the screen". It updates the cache, and every screen that shows that data re-renders. Mutations (send, edit, delete) update the same cache with the result the API returned.
 
+## Styling
+
+Tailwind CSS v4, through its Vite plugin (`@tailwindcss/vite` in `vite.config.ts`). The idea in one paragraph: Tailwind has one small class for one CSS declaration (`p-4` is `padding: 1rem`, `flex` is `display: flex`, `text-muted` is a color), and a component lists the ones it needs in `className`. At build time Tailwind reads the class names in `src/` and writes a stylesheet with only the rules that are used. No per-component stylesheet has to be named, found, or kept in step with the markup.
+
+Why this and not plain CSS or CSS Modules (decided 2026-10-24):
+
+- The screens of this app are mostly layout and states: rows and columns, hover, focus and disabled, a light and a dark theme, a phone layout. A utility says each of those in a few characters at the place it applies (`sm:p-6`, `enabled:hover:bg-sunken`); a stylesheet needs a class name, a rule and a media query for each.
+- The styles live in the component, so a component that is moved or deleted takes its styles along. The single `styles.css` of steps 1 and 2 could only grow, and its header comment was already out of date.
+- Spacing, sizes and radii come from a fixed scale, which keeps screens designed by a developer without a designer consistent.
+- It is a build step and no runtime: the result is one CSS file. v4 needs no config file (it is configured in CSS) and has a first-party Vite plugin.
+- Not chosen: CSS Modules, the runner-up (no dependency and scoped names, but a second file and a second set of names per component, and dark mode and breakpoints written by hand each time); CSS-in-JS libraries such as styled-components or Emotion (they work out the styles in the browser while the app runs); vanilla-extract (type-safe, but a new way of writing and a build step for an app this size). For dialogs and menus in step 5 a headless component library can be added on top of Tailwind.
+- The price: long class lists (which is what the shared components below are for), and a class that does not exist gives no style and no error.
+
+Rules:
+
+- **Colors come from tokens,** declared once in `@theme` in `styles.css` with the light value and the dark value side by side (`light-dark(#fff, #171a21)`): `bg-surface`, `text-muted`, `border-edge`, `bg-accent`, `text-danger`. A component never uses a palette color (`bg-white`, `text-zinc-500`) and never needs a `dark:` variant: the dark theme is the second value of the token. A new color is a new token.
+- **The theme is the system's** (`color-scheme: light dark`), with no toggle. To see the other one: browser developer tools, Rendering, "Emulate CSS media feature prefers-color-scheme".
+- **A look that is used twice is a component in `components/ui/`,** not a repeated class string and not `@apply`. `Button`, `Notice`, `Form`, `FormLinks`, `TextField`, `Page` and `Logo` have no `className` prop on purpose: the look is the same everywhere, spacing around a component is its parent's job, and a missing look is added to the component as a variant.
+- **`styles.css` holds the tokens and a few base rules** (body colors, `h1`, links, the focus ring) and nothing else; every page has one `h1` and none sets its size.
+- **A class name is written out in full in the source.** Tailwind finds classes by reading the text of the files, so `bg-${tone}` is never found; a lookup object (`tones` in `Notice`) is how a class varies.
+- **Contrast:** every text and background pair of the tokens is at least 4.5:1, and the border of a control against its card at least 3:1, in both themes (checked on 2026-10-24 on the values in `styles.css`). Check the pairs again when a color changes.
+- **`light-dark()` is compiled by `vite build`** into a pair of variables (`--lightningcss-light` and `--lightningcss-dark`) for older browsers, while `npm run dev` keeps it as written. When a color looks wrong, look at both (`npm run build`, then `npm run preview`).
+- **A mistyped class shows nothing.** `npm run build`, then search `dist/assets/*.css` for the class with its `:` and `/` escaped with a backslash (`enabled\:hover\:bg-sunken`); a lint rule would do it for good (see "Open questions").
+- **Layout:** the signed-in shell is a column that is at least as high as the window (`min-h-dvh`), so the page scrolls. The conversation of step 3 needs a shell exactly as high as the window, with a message list that scrolls by itself (`h-dvh`, `min-h-0`): change `AppLayout` and the wide `Page` then.
+
 ## Project structure
 
 ```text
@@ -98,9 +125,11 @@ frontend/
 ├── .gitignore
 ├── index.html
 ├── package.json
+├── public/
+│   └── favicon.svg
 ├── tsconfig.json                 // the app: src/ and test/, browser types, the @/ and @contract/ aliases
 ├── tsconfig.node.json            // vite.config.ts and vitest.config.ts, Node types
-├── vite.config.ts                // router plugin, React plugin, the @/ and @contract/ aliases, port 5173, /api proxy
+├── vite.config.ts                // router plugin, React plugin, Tailwind plugin, the @/ and @contract/ aliases, port 5173, /api proxy
 ├── vitest.config.ts              // test settings: runs test/**/*.test.ts(x), the two aliases; kept apart so tests skip the router plugin and the proxy
 ├── test/                         // every test and its helpers, mirroring src/ (like the server's test/)
 │   ├── app.test.tsx              // the sign-in loop through the real app against a fake API
@@ -127,7 +156,7 @@ frontend/
     ├── createApp.ts              // builds the query client and the router and connects them; also used by tests
     ├── router.tsx                // router settings and the type registration
     ├── routeTree.gen.ts          // GENERATED by the router plugin; committed
-    ├── styles.css                // deliberately plain for now
+    ├── styles.css                // Tailwind entry: the color tokens (light and dark) and the base rules, nothing else (see "Styling")
     ├── routes/                   // thin: URL, guard, and which feature components to show
     │   ├── __root.tsx            // router context type, not-found page
     │   ├── index.tsx             // "/" -> /chat
@@ -143,7 +172,12 @@ frontend/
     │   └── _app/chat.index.tsx   // placeholder
     ├── components/
     │   └── ui/
-    │       ├── Page.tsx          // the page frame: the <main>, narrow or wide
+    │       ├── Page.tsx          // the page frame: the <main>, a centered card (narrow) or a column
+    │       ├── Logo.tsx          // the mark and the name
+    │       ├── Button.tsx        // variant (primary, secondary), size (md, sm), fullWidth; no className
+    │       ├── Notice.tsx        // tone (info, success, error) and the role the caller gives it
+    │       ├── Form.tsx          // <form> with the spacing between fields
+    │       ├── FormLinks.tsx     // the row of links under a form or a notice
     │       └── TextField.tsx     // label + input + hint, wired together
     ├── features/
     │   └── account/
@@ -160,7 +194,7 @@ frontend/
         └── queryClient.ts        // createQueryClient, shouldRetry
 ```
 
-Planned additions: `features/chats/` and `features/friends/` (each with `types.ts`, `api.ts`, `queries.ts`, `components/`), more of `components/ui/` (buttons, avatar, dialog), and `lib/socket.ts` (step 6). `features/chats/` holds rooms, members, messages and read markers together, like the server's `chatrooms` module: they share one query-key factory, and the cache functions of a room and of its messages need each other (a new message changes the room's `lastMessage` and `unreadCount`; a removed room drops its messages), which two folders could only do by importing each other. `lib/socket.ts` only creates the connection. The code that applies an event to the cache belongs to the features (`features/chats/`, `features/friends/`), because `lib/` may not import from `features/`.
+Planned additions: `features/chats/` and `features/friends/` (each with `types.ts`, `api.ts`, `queries.ts`, `components/`), more of `components/ui/` (avatar, dialog), and `lib/socket.ts` (step 6). `features/chats/` holds rooms, members, messages and read markers together, like the server's `chatrooms` module: they share one query-key factory, and the cache functions of a room and of its messages need each other (a new message changes the room's `lastMessage` and `unreadCount`; a removed room drops its messages), which two folders could only do by importing each other. `lib/socket.ts` only creates the connection. The code that applies an event to the cache belongs to the features (`features/chats/`, `features/friends/`), because `lib/` may not import from `features/`.
 
 ## Conventions
 
@@ -294,7 +328,7 @@ Client side:
 
 ### Step 7 — design, polish, deployment
 
-- Visual design (see "Open questions"), empty and error states, keyboard use, mobile layout.
+- Polish of the chat and friends screens (the account screens are styled, see "Styling"), empty and error states, keyboard use, phone layout of the chat screens (the account screens already work at phone width).
 - Production setup as described in "How the frontend talks to the server".
 
 ## Testing
@@ -348,14 +382,13 @@ Sound from the start, and kept: the direction of the imports (`routes/` use `fea
 - **Vitest 5** in the frontend (the server uses Vitest 4): Vitest 5 installed cleanly next to Vite 8, while installing Vitest 4 there failed with an npm error in the sandbox this was built in. Align the two later if it matters.
 - **The API's shapes are code in one folder, `server/src/contract/`,** that the server and the frontend both compile against, rather than a copy in each feature's `types.ts` (with the one in `api.doc.md` and the fake API's, a third and fourth copy that no compiler compares). The folder is inside the server's `src/` because the server's `tsc` runs with `rootDir: ./src`: a `shared/` folder at the repository root would need the server's build changed, and an npm workspace would merge two lockfiles. Zod schemas and an OpenAPI generator were left out: the validators' rule order and error texts are part of the API, and both would mean rewriting them. The price is that the frontend's type check reads files under `server/`, which `test/structure.test.ts` limits to this folder and to `import type`.
 - **The API specification has its own document**, `./api.doc.md`, that this document and `./backend.doc.md` both point to, so an endpoint change is made in one place. The backend doc keeps how the endpoints are built.
-- **Plain CSS** in step 1; no styling library until the first real screens. Step 2 still used plain CSS (a few classes in `styles.css`); see "Open questions".
+- **Plain CSS in steps 1 and 2, then Tailwind CSS v4** (2026-10-24, before step 3 grows the CSS). The reasons and the rules are in "Styling".
 - **The mailed-link pages read the token once into state and strip the fragment** (see "Routing and authentication"), and `recheckSession` resets `me` after a verification or a reset instead of patching the cached user.
 - **Signup shows a notice, not a sign-in.** The server does not sign anyone in at signup; the notice does not promise the mail (a mail that cannot be sent does not fail the request) and points to the banner's resend button.
 
 ## Open questions
 
-- Styling: plain CSS with a small set of tokens, or a utility library such as Tailwind. Not decided in step 2, which stayed with a few plain classes; decide before step 3 grows the CSS, or leave it to step 7.
-- ESLint and Prettier: neither the server nor the frontend has them yet.
+- ESLint and Prettier: neither the server nor the frontend has them yet. Tailwind gives two more reasons: `prettier-plugin-tailwindcss` puts the classes of every `className` in one fixed order (they are written by hand now), and a Tailwind-aware lint rule, such as the one in `eslint-plugin-better-tailwindcss` (check its rule list), can report a class that does not exist, which Tailwind itself silently ignores.
 - Optimistic updates for sending a message (show it at once, mark it failed if the request fails): worth it after step 3 has been used for a while.
 - Long conversations: virtualized message list if scrolling gets slow.
 - Pagination for `GET /api/chat` and `GET /api/friend` once the lists can grow (the server notes this already).

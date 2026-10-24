@@ -1,6 +1,10 @@
 import { useState, type SyntheticEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import { TextField } from '@/components/ui/TextField';
+import { Button } from '@/components/ui/Button';
+import { Form } from '@/components/ui/Form';
+import { FormLinks } from '@/components/ui/FormLinks';
+import { Notice } from '@/components/ui/Notice';
 import { useRequestPasswordReset } from '../queries';
 
 export function ForgotPasswordForm() {
@@ -19,7 +23,7 @@ export function ForgotPasswordForm() {
   return (
     <>
       <h1>Forgot your password?</h1>
-      <form onSubmit={handleSubmit} className="form">
+      <Form onSubmit={handleSubmit}>
         <TextField
           label="Email"
           type="email"
@@ -30,18 +34,14 @@ export function ForgotPasswordForm() {
           onChange={(event) => setEmail(event.target.value)}
           hint="The address you signed up with."
         />
-        {request.error && (
-          <p role="alert" className="form-error">
-            {request.error.message}
-          </p>
-        )}
-        <button type="submit" disabled={request.isPending}>
+        {request.error && <Notice tone="error" role="alert">{request.error.message}</Notice>}
+        <Button type="submit" fullWidth disabled={request.isPending}>
           {request.isPending ? 'Sending…' : 'Send reset link'}
-        </button>
-      </form>
-      <p className="form-links">
+        </Button>
+      </Form>
+      <FormLinks>
         <Link to="/login">Back to sign in</Link>
-      </p>
+      </FormLinks>
     </>
   );
 }
@@ -58,9 +58,9 @@ function ResetRequested({ email }: { email: string }) {
         address was never verified, the mail holds a verification link instead: verify it first, then ask for a new reset
         link.
       </p>
-      <p>
+      <FormLinks>
         <Link to="/login">Back to sign in</Link>
-      </p>
+      </FormLinks>
     </>
   );
 }

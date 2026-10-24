@@ -1,4 +1,6 @@
 import { Outlet } from '@tanstack/react-router';
+import { Button } from '@/components/ui/Button';
+import { Logo } from '@/components/ui/Logo';
 import { useMe, useSignOut } from '../queries';
 import { useRedirectWhenSignedOut } from '../useRedirectWhenSignedOut';
 import { VerifyEmailBanner } from './VerifyEmailBanner';
@@ -13,15 +15,15 @@ export function AppLayout() {
   if (!user) return null;
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <strong>Message App</strong>
-        <span className="app-header-user">
-          {user.name}
-          <button type="button" disabled={isSigningOut} onClick={signOut}>
+    <div className="flex min-h-dvh flex-col">
+      <header className="flex items-center justify-between gap-4 border-b border-line bg-surface px-4 py-2.5 sm:px-6">
+        <Logo />
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="truncate text-sm text-muted">{user.name}</span>
+          <Button type="button" size="sm" variant="secondary" disabled={isSigningOut} onClick={signOut}>
             Sign out
-          </button>
-        </span>
+          </Button>
+        </div>
       </header>
       {!user.emailVerified && <VerifyEmailBanner email={user.email} />}
       <Outlet />

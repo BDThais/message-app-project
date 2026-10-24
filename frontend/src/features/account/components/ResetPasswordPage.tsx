@@ -1,6 +1,10 @@
 import { useState, type SyntheticEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import { TextField } from '@/components/ui/TextField';
+import { Button } from '@/components/ui/Button';
+import { Form } from '@/components/ui/Form';
+import { FormLinks } from '@/components/ui/FormLinks';
+import { Notice } from '@/components/ui/Notice';
 import { useFragmentToken } from '../fragmentToken';
 import { PASSWORD_HINT } from '../hints';
 import { useResetPassword } from '../queries';
@@ -17,9 +21,9 @@ function IncompleteLink() {
     <>
       <h1>Choose a new password</h1>
       <p>This link is incomplete. Open the link from the email again, or ask for a new one.</p>
-      <p>
+      <FormLinks>
         <Link to="/forgot-password">Send me a new link</Link>
-      </p>
+      </FormLinks>
     </>
   );
 }
@@ -34,10 +38,12 @@ function NewPasswordForm({ token }: { token: string }) {
     return (
       <>
         <h1>Password changed</h1>
-        <p role="status">Your password was changed and every device was signed out. Sign in with the new password.</p>
-        <p>
+        <Notice tone="success" role="status">
+          Your password was changed and every device was signed out. Sign in with the new password.
+        </Notice>
+        <FormLinks>
           <Link to="/login">Sign in</Link>
-        </p>
+        </FormLinks>
       </>
     );
   }
@@ -50,7 +56,7 @@ function NewPasswordForm({ token }: { token: string }) {
   return (
     <>
       <h1>Choose a new password</h1>
-      <form onSubmit={handleSubmit} className="form">
+      <Form onSubmit={handleSubmit}>
         <TextField
           label="New password"
           type="password"
@@ -61,18 +67,14 @@ function NewPasswordForm({ token }: { token: string }) {
           onChange={(event) => setNewPassword(event.target.value)}
           hint={PASSWORD_HINT}
         />
-        {reset.error && (
-          <p role="alert" className="form-error">
-            {reset.error.message}
-          </p>
-        )}
-        <button type="submit" disabled={reset.isPending}>
+        {reset.error && <Notice tone="error" role="alert">{reset.error.message}</Notice>}
+        <Button type="submit" fullWidth disabled={reset.isPending}>
           {reset.isPending ? 'Saving…' : 'Change password'}
-        </button>
-      </form>
-      <p className="form-links">
+        </Button>
+      </Form>
+      <FormLinks>
         <Link to="/forgot-password">Link expired? Send me a new one</Link>
-      </p>
+      </FormLinks>
     </>
   );
 }

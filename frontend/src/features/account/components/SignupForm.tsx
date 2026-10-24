@@ -1,6 +1,10 @@
 import { useState, type SyntheticEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import { TextField } from '@/components/ui/TextField';
+import { Button } from '@/components/ui/Button';
+import { Form } from '@/components/ui/Form';
+import { FormLinks } from '@/components/ui/FormLinks';
+import { Notice } from '@/components/ui/Notice';
 import { PASSWORD_HINT } from '../hints';
 import { useSignup } from '../queries';
 
@@ -23,7 +27,7 @@ export function SignupForm() {
   return (
     <>
       <h1>Create an account</h1>
-      <form onSubmit={handleSubmit} className="form">
+      <Form onSubmit={handleSubmit}>
         <TextField
           label="Name"
           name="name"
@@ -63,18 +67,14 @@ export function SignupForm() {
           onChange={(event) => setPassword(event.target.value)}
           hint={PASSWORD_HINT}
         />
-        {signup.error && (
-          <p role="alert" className="form-error">
-            {signup.error.message}
-          </p>
-        )}
-        <button type="submit" disabled={signup.isPending}>
+        {signup.error && <Notice tone="error" role="alert">{signup.error.message}</Notice>}
+        <Button type="submit" fullWidth disabled={signup.isPending}>
           {signup.isPending ? 'Creating account…' : 'Create account'}
-        </button>
-      </form>
-      <p className="form-links">
+        </Button>
+      </Form>
+      <FormLinks>
         <Link to="/login">I already have an account</Link>
-      </p>
+      </FormLinks>
     </>
   );
 }
@@ -90,9 +90,9 @@ function CheckYourEmail({ email }: { email: string }) {
         You can sign in right away: verifying the address is only needed to reset a forgotten password. If the mail does
         not arrive, sign in and use the button in the banner at the top of the page to send a new one.
       </p>
-      <p>
+      <FormLinks>
         <Link to="/login">Sign in</Link>
-      </p>
+      </FormLinks>
     </>
   );
 }

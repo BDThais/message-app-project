@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Link } from '@tanstack/react-router';
+import { FormLinks } from '@/components/ui/FormLinks';
+import { Notice } from '@/components/ui/Notice';
 import { useFragmentToken } from '../fragmentToken';
 import { useVerifyEmail } from '../queries';
 
@@ -30,20 +32,20 @@ export function VerifyEmailPage() {
           in the banner at the top of the page to send a new one.
         </p>
       ) : isSuccess ? (
-        <p role="status">Your email address is verified.</p>
+        <Notice tone="success" role="status">Your email address is verified.</Notice>
       ) : error ? (
         <>
-          <p role="alert" className="form-error">
+          <Notice tone="error" role="alert">
             {error.message}
-          </p>
+          </Notice>
           <p>If the link has expired, sign in and use the button in the banner at the top of the page to send a new one.</p>
         </>
       ) : (
-        <p role="status">Verifying your email address…</p>
+        <Notice tone="info" role="status">Verifying your email address…</Notice>
       )}
-      <p>
+      <FormLinks>
         <Link to="/chat">Continue</Link>
-      </p>
+      </FormLinks>
     </>
   );
 }
