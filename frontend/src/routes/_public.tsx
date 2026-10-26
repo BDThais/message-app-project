@@ -6,7 +6,7 @@ import { Page } from '@/components/ui/Page';
 // own, instead of standing outside the layouts, so that the page frame is written in one place.
 export const Route = createFileRoute('/_public')({
   component: () => (
-    <Page narrow>
+    <Page layout="narrow">
       <Outlet />
     </Page>
   ),

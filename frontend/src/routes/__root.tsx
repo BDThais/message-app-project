@@ -14,7 +14,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 
 function NotFound() {
   return (
-    <Page narrow>
+    <Page layout="narrow">
       <h1>Page not found</h1>
       <p>
         <Link to="/chat">Go to your chats</Link>

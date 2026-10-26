@@ -1,4 +1,5 @@
 import type { User } from '@/features/account/types';
+import type { Message, PublicUser, RoomType } from '@contract/types';
 
 export const PASSWORD = 'Str0ng!Pass';
 export const NEW_PASSWORD = 'An0ther!Pass';
@@ -11,6 +12,20 @@ export const john: User = {
   avatarUrl: null,
   emailVerified: false,
 };
+
+export const bea: PublicUser = { id: 2, name: 'Bea', avatarUrl: null };
+export const carl: PublicUser = { id: 3, name: 'Carl', avatarUrl: null };
+
+/** A room of John's, as his list shows it: `name` is the other member's for a direct room, like the server's list. */
+export interface FakeRoom {
+  id: number;
+  type: RoomType;
+  name: string | null;
+  avatarUrl: string | null;
+  createdAt: string;
+  /** John's own read marker. */
+  lastReadMessageId: number | null;
+}
 
 export interface Account {
   user: User;
@@ -27,8 +42,8 @@ export interface Call {
 }
 
 /**
- * The fake server's state, shared by the endpoint files of every feature (accounts today, rooms and
- * friends when their endpoints are faked). `signedIn` says whether the cookie in this browser
+ * The fake server's state, shared by the endpoint files of every feature (accounts and chat rooms
+ * today, friends when their endpoints are faked). `signedIn` says whether the cookie in this browser
  * belongs to John.
  */
 export function createState({ signedIn }: { signedIn: boolean }) {
@@ -42,6 +57,49 @@ export function createState({ signedIn }: { signedIn: boolean }) {
     sessionUserId: signedIn ? john.id : (null as number | null),
     /** Make POST /account/email/verification answer 429, as it does within a minute of the last mail. */
     resendLimited: false,
+    /** Make POST, PATCH and DELETE on a message answer 400 with this text. */
+    messageWriteError: null as string | null,
+    /** John's rooms and their messages, oldest first (a message's id is its place). */
+    rooms: [] as FakeRoom[],
+    messages: [] as Message[],
+    /** Gives John a room. A room starts empty, unread-free and created long before any message. */
+    addRoom(room: Pick<FakeRoom, 'id' | 'name'> & Partial<Omit<FakeRoom, 'id' | 'name'>>): FakeRoom {
+      const added: FakeRoom = {
+        type: 'direct',
+        avatarUrl: null,
+        createdAt: '2026-10-01T09:00:00.000Z',
+        lastReadMessageId: null,
+        ...room,
+      };
+      this.rooms.push(added);
+      return added;
+    },
+    /** Puts a message at the end of a room, as if `sender` (`null`: a deleted account) had just sent it. */
+    addMessage({
+      chatId,
+      sender,
+      content,
+      createdAt,
+    }: {
+      chatId: number;
+      sender: PublicUser | null;
+      content: string;
+      createdAt?: string;
+    }): Message {
+      const id = this.messages.length + 1;
+      const message: Message = {
+        id,
+        chatId,
+        senderId: sender?.id ?? null,
+        content,
+        createdAt: createdAt ?? new Date(Date.UTC(2026, 9, 20, 9, 0, id)).toISOString(),
+        editedAt: null,
+        deletedAt: null,
+        sender,
+      };
+      this.messages.push(message);
+      return message;
+    },
     /** Make POST /account/logout answer 500, so the sign-out fails and the session stays. */
     logoutFails: false,
     /** While set, every request waits for it before it is answered (to look at a request that is still running). */

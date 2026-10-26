@@ -41,7 +41,7 @@ describe('the app', () => {
 
     await signIn(user);
 
-    expect(await screen.findByText(`Signed in as ${john.email}.`)).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Chats' })).toBeTruthy();
     expect(router.state.location.pathname).toBe('/chat');
   });
 
@@ -168,7 +168,7 @@ describe('the app', () => {
 });
 
 describe('the route tree', () => {
-  it('shows /chat inside the chat layout, where the room-list sidebar goes in step 3', async () => {
+  it('shows /chat inside the chat layout, which holds the room-list sidebar', async () => {
     stubApi({ signedIn: true });
     const { router } = renderApp('/chat');
 

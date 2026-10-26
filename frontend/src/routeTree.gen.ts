@@ -20,6 +20,7 @@ import { Route as GuestSignupRouteImport } from './routes/_guest/signup'
 import { Route as PublicResetPasswordRouteImport } from './routes/_public/reset-password'
 import { Route as PublicVerifyEmailRouteImport } from './routes/_public/verify-email'
 import { Route as AppChatIndexRouteImport } from './routes/_app/chat.index'
+import { Route as AppChatChatIdRouteImport } from './routes/_app/chat.$chatId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -73,6 +74,11 @@ const AppChatIndexRoute = AppChatIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppChatRoute,
 } as any)
+const AppChatChatIdRoute = AppChatChatIdRouteImport.update({
+  id: '/$chatId',
+  path: '/$chatId',
+  getParentRoute: () => AppChatRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -82,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof GuestSignupRoute
   '/reset-password': typeof PublicResetPasswordRoute
   '/verify-email': typeof PublicVerifyEmailRoute
+  '/chat/$chatId': typeof AppChatChatIdRoute
   '/chat/': typeof AppChatIndexRoute
 }
 export interface FileRoutesByTo {
@@ -91,6 +98,7 @@ export interface FileRoutesByTo {
   '/signup': typeof GuestSignupRoute
   '/reset-password': typeof PublicResetPasswordRoute
   '/verify-email': typeof PublicVerifyEmailRoute
+  '/chat/$chatId': typeof AppChatChatIdRoute
   '/chat': typeof AppChatIndexRoute
 }
 export interface FileRoutesById {
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/_guest/signup': typeof GuestSignupRoute
   '/_public/reset-password': typeof PublicResetPasswordRoute
   '/_public/verify-email': typeof PublicVerifyEmailRoute
+  '/_app/chat/$chatId': typeof AppChatChatIdRoute
   '/_app/chat/': typeof AppChatIndexRoute
 }
 export interface FileRouteTypes {
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/reset-password'
     | '/verify-email'
+    | '/chat/$chatId'
     | '/chat/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/reset-password'
     | '/verify-email'
+    | '/chat/$chatId'
     | '/chat'
   id:
     | '__root__'
@@ -139,6 +150,7 @@ export interface FileRouteTypes {
     | '/_guest/signup'
     | '/_public/reset-password'
     | '/_public/verify-email'
+    | '/_app/chat/$chatId'
     | '/_app/chat/'
   fileRoutesById: FileRoutesById
 }
@@ -228,14 +240,23 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppChatIndexRouteImport
       parentRoute: typeof AppChatRoute
     }
+    '/_app/chat/$chatId': {
+      id: '/_app/chat/$chatId'
+      path: '/$chatId'
+      fullPath: '/chat/$chatId'
+      preLoaderRoute: typeof AppChatChatIdRouteImport
+      parentRoute: typeof AppChatRoute
+    }
   }
 }
 
 interface AppChatRouteChildren {
+  AppChatChatIdRoute: typeof AppChatChatIdRoute
   AppChatIndexRoute: typeof AppChatIndexRoute
 }
 
 const AppChatRouteChildren: AppChatRouteChildren = {
+  AppChatChatIdRoute: AppChatChatIdRoute,
   AppChatIndexRoute: AppChatIndexRoute,
 }
 

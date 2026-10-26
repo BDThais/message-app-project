@@ -4,7 +4,7 @@
 // every value is JSON (a timestamp is an ISO 8601 string here, never a Date).
 //
 // Every shape here is checked by the compiler on the server: the controllers answer with them. The
-// frontend checks the account ones (it has no chat or friends code yet).
+// frontend checks the account and chat ones (it has no friends code yet).
 
 export type Role = 'admin' | 'member';
 

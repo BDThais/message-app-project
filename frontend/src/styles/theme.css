@@ -1,10 +1,8 @@
-@import 'tailwindcss';
-
 /*
  * Components use these tokens (bg-surface, text-muted, ...) and never a palette color (bg-white,
  * text-zinc-500), so the dark theme is written once, here, and no component needs a dark: variant.
  * light-dark() picks the first value in the light theme and the second in the dark one; the theme
- * is the system's (color-scheme below).
+ * is the system's (`color-scheme` is set in base.css).
  */
 @theme {
   --color-canvas: light-dark(#f3f4f8, #0e1014);
@@ -24,27 +22,4 @@
   --color-danger-soft: light-dark(#fdeceb, #3a1c1f);
   --color-success: light-dark(#17724a, #74e2a8);
   --color-success-soft: light-dark(#e4f4ec, #14301f);
-}
-
-@layer base {
-  :root {
-    color-scheme: light dark;
-  }
-
-  body {
-    @apply bg-canvas text-fg antialiased;
-  }
-
-  /* Every page has one h1 and none sets its own size. */
-  h1 {
-    @apply text-2xl font-semibold tracking-tight;
-  }
-
-  a {
-    @apply text-link underline underline-offset-2 hover:decoration-2;
-  }
-
-  :focus-visible {
-    @apply outline-2 outline-offset-2 outline-accent;
-  }
 }

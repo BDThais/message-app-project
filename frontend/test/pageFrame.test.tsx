@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 // The `Page` component draws the `<main>` once for each page: in a layout (`_guest`, `_public`), in the
-// page itself where it has no layout (the placeholder at /chat, the not-found page). A page that writes
+// page itself where it has no layout (the chat pages, the not-found page). A page that writes
 // its own `<main>` as well, or none, breaks the landmark that screen readers jump to.
 describe('the page frame', () => {
   it.each([
@@ -26,6 +26,8 @@ describe('the page frame', () => {
     ['/reset-password', false],
     ['/reset-password#token=abc', true],
     ['/chat', true],
+    ['/chat/1', true],
+    ['/chat/not-a-number', true],
     ['/no-such-page', false],
   ])('%s has exactly one main landmark (signed in: %s)', async (path, signedIn) => {
     stubApi({ signedIn });

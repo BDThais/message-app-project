@@ -8,7 +8,7 @@ import { redirectIfSignedIn } from '@/features/account/guards';
 export const Route = createFileRoute('/_guest')({
   beforeLoad: ({ context }) => redirectIfSignedIn(context.queryClient),
   component: () => (
-    <Page narrow>
+    <Page layout="narrow">
       <Outlet />
     </Page>
   ),

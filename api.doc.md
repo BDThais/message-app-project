@@ -28,7 +28,7 @@ The shapes of the JSON this API sends and receives are defined once, as TypeScri
 
 A change to a shape is made in those files, in the same patch as the code that sends it. This document keeps what a compiler cannot say: status codes, error texts, rules and who may call what. The endpoint sections below use the contract's names (`User`, `PublicUser`, ...).
 
-Every endpoint is checked by the compiler on the server: the controllers answer with these types and the validators read their bodies through them. The frontend checks the account endpoints too (`features/account/api.ts`); it has no chat or friends code yet (see "API contract" in `./backend.doc.md`).
+Every endpoint is checked by the compiler on the server: the controllers answer with these types and the validators read their bodies through them. The frontend checks the account and chat endpoints too (`features/account/api.ts`, `features/chats/api.ts`); it has no friends code yet (see "API contract" in `./backend.doc.md`).
 
 ## Permission model
 

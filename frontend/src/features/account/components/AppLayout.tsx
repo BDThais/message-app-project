@@ -15,7 +15,7 @@ export function AppLayout() {
   if (!user) return null;
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex h-dvh flex-col">
       <header className="flex items-center justify-between gap-4 border-b border-line bg-surface px-4 py-2.5 sm:px-6">
         <Logo />
         <div className="flex min-w-0 items-center gap-3">
@@ -26,7 +26,9 @@ export function AppLayout() {
         </div>
       </header>
       {!user.emailVerified && <VerifyEmailBanner email={user.email} />}
-      <Outlet />
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <Outlet />
+      </div>
     </div>
   );
 }

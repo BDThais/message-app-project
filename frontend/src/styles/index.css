@@ -1,0 +1,4 @@
+/* Tailwind first: the two files below use its theme (the tokens) and its @apply. */
+@import 'tailwindcss';
+@import './theme.css';
+@import './base.css';

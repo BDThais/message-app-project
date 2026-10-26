@@ -4,7 +4,7 @@ import { chatEndpoints } from './chats';
 import { json } from './responses';
 import { createState, type Body } from './state';
 
-export { john, NEW_PASSWORD, PASSWORD, type Call, type FakeServer } from './state';
+export { bea, carl, john, NEW_PASSWORD, PASSWORD, type Call, type FakeServer } from './state';
 
 // A fake of the server's endpoints, as a stubbed `fetch`, for the app-level tests. It follows
 // api.doc.md (status codes, error texts, the snake_case request bodies) but not the server's code: it

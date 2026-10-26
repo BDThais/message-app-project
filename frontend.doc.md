@@ -42,11 +42,19 @@ Completed (step 2, "account screens"):
 
 Completed (the structure review after step 2, 2026-10-18): the tests moved to `test/`, and the layout and test setup changed as listed in "Structure review".
 
-Completed (styling, 2026-10-24): Tailwind CSS v4 chosen and every screen built so far styled with it (see "Styling"). The colors are tokens with a light and a dark value in `styles.css`; `components/ui/` got `Button`, `Notice`, `Form`, `FormLinks` and `Logo`, and `Page` and `TextField` were restyled; the header, the verification banner and the not-found page follow. No test changed: the tests find things by role and label, never by class.
+Completed (styling, 2026-10-24): Tailwind CSS v4 chosen and every screen built so far styled with it (see "Styling"). The colors are tokens with a light and a dark value in `styles/theme.css`; `components/ui/` got `Button`, `Notice`, `Form`, `FormLinks` and `Logo`, and `Page` and `TextField` were restyled; the header, the verification banner and the not-found page follow. No test changed: the tests find things by role and label, never by class.
+
+Completed (CSS structure, 2026-10-25): the single `styles.css` became the folder `src/styles/` (`index.css`, `theme.css`, `base.css`, see "Styling"). The compiled CSS is byte for byte the same as before.
+
+Completed (step 3, "chat core", 2026-10-25):
+
+- `src/features/chats/`: `types.ts`, `keys.ts` (`chatKeys`), `api.ts` (the room list, the messages, send, edit, delete, mark as read), `cache.ts` (the functions that change the cached rooms and messages), `queries.ts` (the hooks), two hooks for the screen (`useMessageScroll`, `useMarkRoomRead`) and `components/`
+- The room-list sidebar in the `_app/chat.tsx` layout (`ChatLayout`, `RoomList`) and the conversation at `/chat/$chatId` (`Conversation`, `MessageItem`, `MessageEditor`): older messages by a button or by scrolling up, the position kept when they are added, a read marker that follows what is on screen, and a screen that is polled until step 6 (see "Step 3" under "Implementation steps")
+- `components/ui/`: `Avatar` and `TextArea`, the `ghost` and `danger` variants and the `xs` size of `Button`, and a `layout` prop on `Page` (`narrow`, `column`, `fill`) in place of `narrow`; `AppLayout` is now exactly as high as the window and its page area scrolls
+- Tests: `test/chatScreens.test.tsx` (the screens against the fake chat endpoints, scroll arithmetic included), unit tests for the cache functions and the small helpers, and the chat endpoints of the fake API (see "Testing")
 
 Still planned:
 
-- Room list, conversation, sending/editing/deleting messages (step 3)
 - Friends (step 4)
 - Account settings and room management (step 5)
 - Socket.io (step 6)
@@ -107,15 +115,17 @@ Why this and not plain CSS or CSS Modules (decided 2026-10-24):
 
 Rules:
 
-- **Colors come from tokens,** declared once in `@theme` in `styles.css` with the light value and the dark value side by side (`light-dark(#fff, #171a21)`): `bg-surface`, `text-muted`, `border-edge`, `bg-accent`, `text-danger`. A component never uses a palette color (`bg-white`, `text-zinc-500`) and never needs a `dark:` variant: the dark theme is the second value of the token. A new color is a new token.
+- **Colors come from tokens,** declared once in `@theme` in `styles/theme.css` with the light value and the dark value side by side (`light-dark(#fff, #171a21)`): `bg-surface`, `text-muted`, `border-edge`, `bg-accent`, `text-danger`. A component never uses a palette color (`bg-white`, `text-zinc-500`) and never needs a `dark:` variant: the dark theme is the second value of the token. A new color is a new token.
 - **The theme is the system's** (`color-scheme: light dark`), with no toggle. To see the other one: browser developer tools, Rendering, "Emulate CSS media feature prefers-color-scheme".
-- **A look that is used twice is a component in `components/ui/`,** not a repeated class string and not `@apply`. `Button`, `Notice`, `Form`, `FormLinks`, `TextField`, `Page` and `Logo` have no `className` prop on purpose: the look is the same everywhere, spacing around a component is its parent's job, and a missing look is added to the component as a variant.
-- **`styles.css` holds the tokens and a few base rules** (body colors, `h1`, links, the focus ring) and nothing else; every page has one `h1` and none sets its size.
+- **A look that is used twice is a component in `components/ui/`,** not a repeated class string and not `@apply`. `Button`, `Notice`, `Form`, `FormLinks`, `TextField`, `TextArea`, `Avatar`, `Page` and `Logo` have no `className` prop on purpose: the look is the same everywhere, spacing around a component is its parent's job, and a missing look is added to the component as a variant.
+- **`src/styles/` holds only what a class name cannot say,** one file per concern, all imported by `index.css` (the one file `main.tsx` imports; Tailwind comes first, because the files after it use its theme and its `@apply`). Today that is `theme.css` (the `@theme` tokens) and `base.css` (the `@layer base` rules for bare elements: body colors, `h1`, links, the focus ring). A new concern is a new file and one `@import` line in `index.css` (custom `@utility` and `@custom-variant` definitions, the overrides for a third-party widget), not more lines in an existing file. A component's own look is never here: it is its classes, or a shared component in `components/ui/`. Every page has one `h1` and none sets its size.
+- **Two utilities for the same property are decided by the order of the stylesheet, not by the order in `className`.** A component that varies a property gets it from its lookup object only: the sizes of `Button` carry their own `text-sm` or `text-xs`, and the shared classes carry none, because a `text-xs` next to a shared `text-sm` would win or lose by luck.
 - **A class name is written out in full in the source.** Tailwind finds classes by reading the text of the files, so `bg-${tone}` is never found; a lookup object (`tones` in `Notice`) is how a class varies.
-- **Contrast:** every text and background pair of the tokens is at least 4.5:1, and the border of a control against its card at least 3:1, in both themes (checked on 2026-10-24 on the values in `styles.css`). Check the pairs again when a color changes.
+- **Contrast:** every text and background pair of the tokens is at least 4.5:1, and the border of a control against its card at least 3:1, in both themes (checked on 2026-10-24 on the values in `styles/theme.css`, and on 2026-10-25 for the pairs the chat screens added: the message bubbles, the muted text on the open room, the `ghost` and `danger` buttons). Check the pairs again when a color changes.
 - **`light-dark()` is compiled by `vite build`** into a pair of variables (`--lightningcss-light` and `--lightningcss-dark`) for older browsers, while `npm run dev` keeps it as written. When a color looks wrong, look at both (`npm run build`, then `npm run preview`).
 - **A mistyped class shows nothing.** `npm run build`, then search `dist/assets/*.css` for the class with its `:` and `/` escaped with a backslash (`enabled\:hover\:bg-sunken`); a lint rule would do it for good (see "Open questions").
-- **Layout:** the signed-in shell is a column that is at least as high as the window (`min-h-dvh`), so the page scrolls. The conversation of step 3 needs a shell exactly as high as the window, with a message list that scrolls by itself (`h-dvh`, `min-h-0`): change `AppLayout` and the wide `Page` then.
+- **Layout:** the signed-in shell is exactly as high as the window (`h-dvh`), the header and the banner on top, and the page below them in an area that scrolls (`min-h-0 flex-1 overflow-y-auto`), so a page that is taller than the window (`Page` with `layout="column"`) scrolls there. A page that scrolls inside itself (the chat) uses `layout="fill"`: its `<main>` takes the room that is left and its parts say `min-h-0` and `overflow-y-auto` themselves. A flex child does not shrink below its content unless it says `min-h-0`, which is what makes a message list scroll instead of growing.
+- **The message list has `[overflow-anchor:none]`.** Chrome and Firefox keep the visible messages in place when messages are added above them, Safari does not; `useMessageScroll` does it for every browser, and left alone with the browser's own, the two corrections add up to a jump.
 
 ## Project structure
 
@@ -134,19 +144,27 @@ frontend/
 ├── test/                         // every test and its helpers, mirroring src/ (like the server's test/)
 │   ├── app.test.tsx              // the sign-in loop through the real app against a fake API
 │   ├── accountScreens.test.tsx   // signup, forgot/reset password, the mailed-link pages, the banner (same approach)
+│   ├── chatScreens.test.tsx      // the room list, a conversation, sending, editing, deleting, older messages, the read marker, scrolling (same approach)
 │   ├── pageFrame.test.tsx        // every page has exactly one <main>
 │   ├── structure.test.ts         // the folder rules: no test in src/, who may import whom, the only way into server/ (@contract/, import type)
 │   ├── helpers/
 │   │   ├── fakeApi/              // the fake server (a stubbed fetch), one file per feature
 │   │   │   ├── index.ts          // stubApi: the stubbed fetch, tries each feature's endpoints in turn
-│   │   │   ├── state.ts          // the fake server's state, shared by the features; John, the passwords
+│   │   │   ├── state.ts          // the fake server's state, shared by the features; John, Bea and Carl, the passwords, the rooms and messages
 │   │   │   ├── account.ts        // the account endpoints
-│   │   │   ├── chats.ts          // a stand-in for GET /api/chat for now
+│   │   │   ├── chats.ts          // the chat endpoints: rooms, messages (page, send, edit, delete), the read marker
 │   │   │   └── responses.ts      // json(), noContent()
 │   │   └── renderApp.tsx         // the real <App> in memory, optionally in StrictMode
+│   ├── components/ui/
+│   │   └── Avatar.test.tsx
 │   ├── features/account/
 │   │   ├── guards.test.ts
 │   │   └── fragmentToken.test.ts
+│   ├── features/chats/
+│   │   ├── cache.test.ts         // idempotent by id, the preview and the order of the room list, the merge of the newest page
+│   │   ├── format.test.ts
+│   │   ├── parseChatId.test.ts
+│   │   └── useMessageScroll.test.ts  // the arithmetic of keeping the position
 │   └── lib/
 │       ├── http.test.ts
 │       └── queryClient.test.ts
@@ -156,7 +174,10 @@ frontend/
     ├── createApp.ts              // builds the query client and the router and connects them; also used by tests
     ├── router.tsx                // router settings and the type registration
     ├── routeTree.gen.ts          // GENERATED by the router plugin; committed
-    ├── styles.css                // Tailwind entry: the color tokens (light and dark) and the base rules, nothing else (see "Styling")
+    ├── styles/                   // all CSS; main.tsx imports index.css (see "Styling")
+    │   ├── index.css             // the entry: tailwindcss first, then the two files below
+    │   ├── theme.css             // @theme: the color tokens, the light and the dark value side by side
+    │   └── base.css              // @layer base: the rules for bare elements (body, h1, links, the focus ring)
     ├── routes/                   // thin: URL, guard, and which feature components to show
     │   ├── __root.tsx            // router context type, not-found page
     │   ├── index.tsx             // "/" -> /chat
@@ -168,18 +189,32 @@ frontend/
     │   ├── _public/verify-email.tsx
     │   ├── _public/reset-password.tsx
     │   ├── _app.tsx              // layout route: the requireUser guard, renders AppLayout
-    │   ├── _app/chat.tsx         // layout of the chat pages: the room-list sidebar goes here in step 3
-    │   └── _app/chat.index.tsx   // placeholder
+    │   ├── _app/chat.tsx         // layout of the chat pages: the room-list sidebar (ChatLayout)
+    │   ├── _app/chat.index.tsx   // "select a chat", for wide screens
+    │   └── _app/chat.$chatId.tsx // the conversation; a path that is not a room id is "chat not found"
     ├── components/
     │   └── ui/
-    │       ├── Page.tsx          // the page frame: the <main>, a centered card (narrow) or a column
+    │       ├── Page.tsx          // the page frame: the <main>; layout narrow (a centered card), column, or fill (the room that is left)
+    │       ├── Avatar.tsx        // the picture at a URL, or initials when there is none or it does not load
     │       ├── Logo.tsx          // the mark and the name
-    │       ├── Button.tsx        // variant (primary, secondary), size (md, sm), fullWidth; no className
+    │       ├── Button.tsx        // variant (primary, secondary, ghost, danger), size (md, sm, xs), fullWidth; no className
     │       ├── Notice.tsx        // tone (info, success, error) and the role the caller gives it
     │       ├── Form.tsx          // <form> with the spacing between fields
     │       ├── FormLinks.tsx     // the row of links under a form or a notice
-    │       └── TextField.tsx     // label + input + hint, wired together
+    │       ├── TextField.tsx     // label + input + hint, wired together
+    │       └── TextArea.tsx      // the same for several lines; the label can be hidden for a screen reader only
     ├── features/
+    │   ├── chats/
+    │   │   ├── types.ts          // ChatRoomSummary, Message, MessageListResponse (from the contract)
+    │   │   ├── keys.ts           // chatKeys (apart from queries.ts because cache.ts and queries.ts need each other's imports)
+    │   │   ├── api.ts            // one function per endpoint, no React
+    │   │   ├── cache.ts          // sortRooms, addMessageToCache, replaceMessageInCache, markMessageDeletedInCache, markRoomReadInCache, mergeNewestPageIntoCache
+    │   │   ├── queries.ts        // the room list and messages queries, the mutations, the polling of the newest page (until step 6)
+    │   │   ├── useMessageScroll.ts   // the bottom, the position kept when older messages arrive, "is the newest message in view"
+    │   │   ├── useMarkRoomRead.ts    // PUT .../read when there is something unread and it is in view
+    │   │   ├── format.ts         // roomTitle, formatListTime, formatSentAt
+    │   │   ├── parseChatId.ts    // the id in /chat/:chatId, or null
+    │   │   └── components/       // ChatLayout, RoomList, Conversation, MessageItem, MessageEditor, ChatNotFound
     │   └── account/
     │       ├── types.ts          // User (from the contract), LoginInput and SignupInput (the contract's bodies), ResetPasswordInput
     │       ├── api.ts            // one function per endpoint, no React
@@ -191,10 +226,11 @@ frontend/
     │       └── components/       // AppLayout (header, banner, outlet), LoginForm, SignupForm, ForgotPasswordForm, ResetPasswordPage, VerifyEmailPage, VerifyEmailBanner
     └── lib/
         ├── http.ts               // api, ApiError
-        └── queryClient.ts        // createQueryClient, shouldRetry
+        ├── queryClient.ts        // createQueryClient, shouldRetry
+        └── useDocumentVisible.ts // false while the tab is in the background
 ```
 
-Planned additions: `features/chats/` and `features/friends/` (each with `types.ts`, `api.ts`, `queries.ts`, `components/`), more of `components/ui/` (avatar, dialog), and `lib/socket.ts` (step 6). `features/chats/` holds rooms, members, messages and read markers together, like the server's `chatrooms` module: they share one query-key factory, and the cache functions of a room and of its messages need each other (a new message changes the room's `lastMessage` and `unreadCount`; a removed room drops its messages), which two folders could only do by importing each other. `lib/socket.ts` only creates the connection. The code that applies an event to the cache belongs to the features (`features/chats/`, `features/friends/`), because `lib/` may not import from `features/`.
+Planned additions: `features/friends/` (with `types.ts`, `api.ts`, `queries.ts`, `components/`), more of `components/ui/` (dialog), and `lib/socket.ts` (step 6). `features/chats/` holds rooms, members, messages and read markers together, like the server's `chatrooms` module: they share one query-key factory, and the cache functions of a room and of its messages need each other (a new message changes the room's `lastMessage` and `unreadCount`; a removed room drops its messages), which two folders could only do by importing each other. `lib/socket.ts` only creates the connection. The code that applies an event to the cache belongs to the features (`features/chats/`, `features/friends/`), because `lib/` may not import from `features/`.
 
 ## Conventions
 
@@ -203,11 +239,11 @@ Planned additions: `features/chats/` and `features/friends/` (each with `types.t
 - **Imports go one way:** `routes/` use `features/`, and `features/` use `components/` and `lib/`. `lib/` and `components/` never import from `features/` or `routes/` (`test/structure.test.ts` checks it).
 - **A component starts in the `components/` of the feature that needs it** and moves to `components/ui/` when a second feature needs it. `components/ui/` never imports from `features/` or `routes/`.
 - **`api.ts` has the only mention of a URL path.** Components never call `fetch` or `api` directly: they use hooks from `queries.ts`.
-- **One query-key factory per feature** (`accountKeys.me()`, later `chatKeys.list()`, `chatKeys.messages(chatId)`), so no key is typed by hand in two places.
-- **Cache updates go through functions** (`setSignedInUser`, later `addMessageToCache`, `removeChatFromCache`). Mutations and socket handlers call the same function, and such a function must be idempotent by id, so a message that arrives twice (the sender's own REST response and the socket event) is stored once.
+- **One query-key factory per feature** (`accountKeys.me()`, `chatKeys.list()`, `chatKeys.messages(chatId)`), so no key is typed by hand in two places. `chatKeys` is in `keys.ts`, because `cache.ts` needs the keys and `queries.ts` needs `cache.ts`.
+- **Cache updates go through functions** (`setSignedInUser`, `addMessageToCache`, `markRoomReadInCache`, later `removeChatFromCache`). Mutations and socket handlers call the same function, and such a function must be idempotent by id, so a message that arrives twice (the sender's own REST response and the socket event) is stored once.
 - **Whatever the server decides, the server decides.** Client-side checks (a password hint, a required field) exist to save a round trip, never to replace the server's validation. Show the server's `{ error }` text.
 - **TypeScript:** `strict` and `noUncheckedIndexedAccess`, like the server. `exactOptionalPropertyTypes` is off here because React's and TanStack's own types do not follow it.
-- **The shapes of the API come from the server's contract,** `server/src/contract/` (see "API contract" in `./backend.doc.md`), imported as `@contract/...`: a second `paths` entry in `tsconfig.json`, with the same `resolve.tsconfigPaths` line in the two config files. A feature's `types.ts` re-exports what it needs from there (`User`) and keeps only what is the frontend's own (`ResetPasswordInput` has a camelCase `newPassword`). `api.ts` types each response with the contract (`api.get<MeResponse>(...)`) and each request body with `satisfies` (`{ token, new_password: newPassword } satisfies ResetPasswordBody`), so a key spelled differently on the server stops compiling. The only way into `server/` is `@contract/`, and only with `import type`: `import { type X }` still loads the file, and a value from the contract would need the dev server to serve a file outside `frontend/` (`test/structure.test.ts` checks both). The account feature is on the contract, and so are the success bodies of the fake API in `test/helpers/`; every endpoint of the server is typed with it, so the chats and friends features take their shapes from it when they are written.
+- **The shapes of the API come from the server's contract,** `server/src/contract/` (see "API contract" in `./backend.doc.md`), imported as `@contract/...`: a second `paths` entry in `tsconfig.json`, with the same `resolve.tsconfigPaths` line in the two config files. A feature's `types.ts` re-exports what it needs from there (`User`) and keeps only what is the frontend's own (`ResetPasswordInput` has a camelCase `newPassword`). `api.ts` types each response with the contract (`api.get<MeResponse>(...)`) and each request body with `satisfies` (`{ token, new_password: newPassword } satisfies ResetPasswordBody`), so a key spelled differently on the server stops compiling. The only way into `server/` is `@contract/`, and only with `import type`: `import { type X }` still loads the file, and a value from the contract would need the dev server to serve a file outside `frontend/` (`test/structure.test.ts` checks both). The account and chats features are on the contract, and so are the success bodies of the fake API in `test/helpers/`; every endpoint of the server is typed with it, so the friends feature takes its shapes from it when it is written.
 - **Comments follow the server's rule** ("Comments" in `./backend.doc.md`): only the reason a line has to stay the way it is. What a component or a hook does is in its name and in this document, and a route or a file name is not repeated in a comment.
 - **Files:** components `PascalCase.tsx`, everything else `camelCase.ts`.
 - **Tests live in `test/`, not next to the code**, in the same folders as the file they test (`src/lib/http.ts` is tested by `test/lib/http.test.ts`) and named `<file>.test.ts(x)`. What the app-level tests share (the fake API, the render helper) is in `test/helpers/`. Nothing in `src/` imports from `test/`, and no test file is left in `src/`: `test/structure.test.ts` fails if either happens.
@@ -222,8 +258,8 @@ Planned additions: `features/chats/` and `features/friends/` (each with `types.t
 | `/forgot-password` | `_guest/forgot-password.tsx` | `_guest` | done |
 | `/verify-email` | `_public/verify-email.tsx` | `_public`: no guard, works signed in or out | done |
 | `/reset-password` | `_public/reset-password.tsx` | `_public`: no guard, works signed in or out | done |
-| `/chat` | `_app/chat.index.tsx` | `_app`: a signed-out visitor is sent to `/login`; then `_app/chat.tsx` | placeholder |
-| `/chat/$chatId` | `_app/chat.$chatId.tsx` | `_app`, then `_app/chat.tsx` | step 3 |
+| `/chat` | `_app/chat.index.tsx` | `_app`: a signed-out visitor is sent to `/login`; then `_app/chat.tsx` | done |
+| `/chat/$chatId` | `_app/chat.$chatId.tsx` | `_app`, then `_app/chat.tsx` | done |
 | `/friends` | `_app/friends.tsx` | `_app` | step 4 |
 | `/settings` | `_app/settings.tsx` | `_app` | step 5 |
 
@@ -260,6 +296,7 @@ The API itself (every endpoint's request, response, status codes, error texts, r
 - `GET /api/chat/:chatid/message` is newest first: reverse it for display, and page back with `before` set to the oldest id loaded.
 - Show a placeholder such as "message deleted" for a deleted message, an "edited" label for `editedAt`, and a placeholder name with no actions when `sender` is `null`.
 - Mark a room as read with the id of the newest message loaded (`lastMessage` has no id to use), then set that room's `unreadCount` to 0 in the cache.
+- After an edit or a delete, ask for `GET /api/chat` again: `lastMessage` has no id, so the cache cannot tell whether the message was the room's last one.
 
 ### Friends
 
@@ -285,7 +322,7 @@ See "Current Implementation Status".
 
 Built as described. Where the plan was open: the "verification notice" is the sign-up screen's "check your email" notice (it says that signing in does not wait for verification and that the banner resends the mail) plus a note on the forgot-password confirmation (an unverified address gets a verification mail instead of a reset mail). The forgot-password confirmation says "if an account exists", like the server, and never "a mail was sent". The server stores and matches an email address without regard to case (it lower-cases it), so the forms say nothing about case and the client never changes the address.
 
-### Step 3 — chat core
+### Step 3 — chat core (done)
 
 - Room list in a sidebar from `GET /api/chat` (`lastMessage`, `unreadCount`), the open conversation at `/chat/$chatId`. The sidebar belongs in `_app/chat.tsx` (already there as an empty layout), the parent of both chat pages, so it stays mounted while the person goes from one room to another; the two pages render only the conversation.
 - Messages with `useInfiniteQuery`: pages arrive newest first, `getNextPageParam` is the oldest id when `hasMore`, and the list is reversed for display. Keep the scroll position when older messages are prepended (the fiddly part: budget time for it).
@@ -293,6 +330,15 @@ Built as described. Where the plan was open: the "verification notice" is the si
 - Mark as read: `PUT /api/chat/:chatid/read` while a room is open and its latest message is in view; update `unreadCount` in the room list's cache.
 - Until step 6, give the messages query a `refetchInterval` so the screen feels alive. Step 6 removes it.
 - Stop here for a day and use it: this is where the API's shapes get tested for real.
+
+Built as described, with these changes and choices where the plan was open or turned out wrong:
+
+- **Polling asks for the newest page only,** not the messages query with a `refetchInterval` as planned above. An infinite query refetches every page it holds (one request each) and works out each page's cursor from the page before it, so one new message slides the whole loaded window by one and the oldest message on screen disappears from above the person's eyes (seen in a real browser, and it is the reason `useMessages` has no interval). `useNewestMessagesPolling` in `queries.ts` asks for the newest page every 5 seconds and merges it into the loaded pages with `mergeNewestPageIntoCache`: what is new is added, what is loaded is replaced (an edit or a delete from another device shows), and a page that does not reach back to the newest message loaded (a tab that slept, more than a page of messages at once) is a gap, which is closed by loading the messages again. The room list has the plain `refetchInterval`, being one request. Step 6 removes both. An edit or a delete of an old message on another device is not seen until then.
+- **The title and picture of the open room come from the room list's entry** (the sidebar loads `GET /api/chat` anyway), so there is no `GET /api/chat/:chatid` query yet; a deep link shows "Chat" until the list has arrived. A `404` from the messages (a made-up room, or one the person is not in) and a path that is not a room id both show "Chat not found".
+- **Scrolling** (`useMessageScroll`): a conversation opens at the bottom and stays there while messages arrive, always for the person's own message and otherwise only if they were already at the bottom, so reading older messages is never interrupted. Older messages are loaded by the "Load earlier messages" button or by scrolling near the top; the hook notes the scroll position when the request starts and, when the messages arrive, moves down by the height they added. The geometry is checked in a real browser (see "Testing").
+- **The read marker** (`useMarkRoomRead`) is sent for the newest loaded message when the room has unread messages, the list is scrolled to the bottom and the tab is in front (`useDocumentVisible`), once for each message. A failed request is not shown: nobody asked for it, and the next change tries again.
+- **Editing and deleting** are on the person's own messages only. Delete asks first ("Delete this message for everyone?") because it cannot be undone; the answer is `204` with no message, so the cache makes the deleted message itself (no content, `deletedAt` set), which the next poll replaces with the server's. Enter sends, Shift+Enter starts a new line, and Enter during input-method composition (Telex, VNI) does not send.
+- **Phone width:** the room list is the whole screen at `/chat` and the conversation is the whole screen at `/chat/$chatId`, with a "Chats" link back (`md:` and up shows both). The rest of the phone layout is step 7.
 
 ### Step 4 — friends
 
@@ -338,6 +384,8 @@ Client side:
 - `test/app.test.tsx` runs the real router, guards, query client and screens in jsdom against a fake API, for the loops no unit test sees: signed-out visitor to login and back to the page they wanted, wrong credentials, off-site `redirect` ignored, sign-out clearing the cache, a session ending while a page is open, a sign-out that fails (a session that ends afterwards is still not a sign-out), and a 401 that must not sign anyone out. Each new screen with a flow of that kind gets a test in a file like this one: `test/accountScreens.test.tsx` has signup, forgot and reset password, the mailed-link pages (token posted once in StrictMode, token removed from the URL) and the banner. The fake API (`test/helpers/fakeApi/`) follows `./api.doc.md`; when an endpoint's shape changes there, change the fake in the same patch. It has one file per feature (`account.ts`, `chats.ts`), each a function that answers its own endpoints and returns `undefined` for any other request, and one shared state (`state.ts`). Faking a new feature's endpoints means a new file, one more entry in the list in `index.ts`, and its data in the state.
 - The aim is not full coverage: tests are for behaviour that matters and is easy to break. When a test is written for a new rule, break the code on purpose once and check that the test fails.
 - `test/app.test.tsx` also checks that `/chat` is matched inside the `_app/chat.tsx` layout.
+- `test/chatScreens.test.tsx` runs the chat screens against the fake chat endpoints: the list (order, preview, unread count, the same sidebar element across rooms), a conversation (order, who may act, a group's sender names, deleted and edited messages, a room that is not there), sending (from the answer, no refetch of the messages, Enter and Shift+Enter, a refusal keeps the text), editing and deleting, older messages (the cursor, the order, a failure), the read marker (once, only when something is unread, only at the bottom and in front) and the polling (the newest page only, with fake timers). A mutation check on 2026-10-25 (ten changes to the cache, the cursor, the marker and the scroll code) was caught by a test each. The fake chat endpoints follow `./api.doc.md` with the room's unread count and last message worked out from its messages, as the server does.
+- jsdom has no layout, so the scroll tests give the message list one (`stubScrollLayout`: 50px a message in a window of 400px, a settable `scrollTop`) and check the arithmetic: the bottom on opening, the position kept when older messages are added, new messages followed only from the bottom, a sent message always scrolled to. How a real browser lays it out was looked at in headless Chromium on 2026-10-25 (the setup is in `CLAUDE_SANDBOX_NOTES.md`): the list opens at the bottom, the same message stays under the same pixel after older ones are added (exactly the added height), a new message while reading higher up moves nothing, a sent message scrolls to the bottom, and the phone width has no horizontal overflow.
 - `test/pageFrame.test.tsx` visits every page and checks that it has exactly one `<main>`, the one `Page` draws: a page that writes its own again, or a layout that forgets the frame, fails it.
 - Not tested: how it looks.
 - A runaway navigation loop shows up in the app test as a worker that dies after about half a minute ("JavaScript heap out of memory"), with `Not implemented: Window's scrollTo()` repeated before it.
@@ -383,13 +431,19 @@ Sound from the start, and kept: the direction of the imports (`routes/` use `fea
 - **The API's shapes are code in one folder, `server/src/contract/`,** that the server and the frontend both compile against, rather than a copy in each feature's `types.ts` (with the one in `api.doc.md` and the fake API's, a third and fourth copy that no compiler compares). The folder is inside the server's `src/` because the server's `tsc` runs with `rootDir: ./src`: a `shared/` folder at the repository root would need the server's build changed, and an npm workspace would merge two lockfiles. Zod schemas and an OpenAPI generator were left out: the validators' rule order and error texts are part of the API, and both would mean rewriting them. The price is that the frontend's type check reads files under `server/`, which `test/structure.test.ts` limits to this folder and to `import type`.
 - **The API specification has its own document**, `./api.doc.md`, that this document and `./backend.doc.md` both point to, so an endpoint change is made in one place. The backend doc keeps how the endpoints are built.
 - **Plain CSS in steps 1 and 2, then Tailwind CSS v4** (2026-10-24, before step 3 grows the CSS). The reasons and the rules are in "Styling".
+- **`src/styles/` instead of one `styles.css`** (2026-10-25). Tokens and base rules change for different reasons (a new color, a rule for a bare element), and a folder with an entry file has a place for the next concern that is not "the end of the one file". Component styles stay in the components, so there is no per-component CSS to organise. The compiled CSS was compared byte for byte before and after the split.
 - **The mailed-link pages read the token once into state and strip the fragment** (see "Routing and authentication"), and `recheckSession` resets `me` after a verification or a reset instead of patching the cached user.
+- **The conversation polls the newest page and merges it, not the whole query** (2026-10-25, step 3). See "Step 3" under "Implementation steps" for why.
+- **`AppLayout` is exactly `h-dvh`, and `Page` has a `layout` prop** (`narrow`, `column`, `fill`) instead of `narrow` (2026-10-25, step 3): a chat screen needs a shell that is as high as the window with parts that scroll by themselves, and two booleans (`narrow`, `fill`) would have allowed a combination that means nothing.
 - **Signup shows a notice, not a sign-in.** The server does not sign anyone in at signup; the notice does not promise the mail (a mail that cannot be sent does not fail the request) and points to the banner's resend button.
 
 ## Open questions
 
 - ESLint and Prettier: neither the server nor the frontend has them yet. Tailwind gives two more reasons: `prettier-plugin-tailwindcss` puts the classes of every `className` in one fixed order (they are written by hand now), and a Tailwind-aware lint rule, such as the one in `eslint-plugin-better-tailwindcss` (check its rule list), can report a class that does not exist, which Tailwind itself silently ignores.
 - Optimistic updates for sending a message (show it at once, mark it failed if the request fails): worth it after step 3 has been used for a while.
+- A draft is lost when the person goes to another room (the conversation is remounted for each room), as is an edit in progress.
+- A failed read marker is silent, and the unread badge of the open room stays until the request has answered.
+- The message list is not virtualised and loads pages only as the person scrolls up; the "Load earlier messages" button is the fallback for a window taller than a page.
 - Long conversations: virtualized message list if scrolling gets slow.
 - Pagination for `GET /api/chat` and `GET /api/friend` once the lists can grow (the server notes this already).
 - Browser notifications and an unread count in the tab title.

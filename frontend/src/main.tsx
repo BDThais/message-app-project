@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { App } from './App';
 import { createApp } from './createApp';
-import './styles.css';
+import './styles/index.css';
 
 const { queryClient, router } = createApp();
 
