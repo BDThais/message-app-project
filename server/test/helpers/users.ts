@@ -9,7 +9,8 @@ let userCounter = 0;
 /**
  * Creates a user with a unique email and phone number (only the name is
  * chosen by the test). The password hash is a placeholder: nothing here logs
- * in through /account/login, so no test pays for hashing a password.
+ * in through /account/login, so no test pays for hashing a password. Unlike signup, it does not give
+ * the user a private chat room: `createPrivateRoom` (helpers/chatRooms.ts) does, where a test needs it.
  */
 export async function createUser(name: string) {
   const n = ++userCounter;
@@ -22,6 +23,11 @@ export async function createUser(name: string) {
       passwordHash: 'not-a-real-hash',
     },
   });
+}
+
+/** How many accounts there are: the bot (see privateRoom.service.ts) is always there and is not one. */
+export function countUsers() {
+  return prisma.user.count({ where: { isBot: false } });
 }
 
 /**

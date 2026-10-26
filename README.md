@@ -110,7 +110,7 @@ The endpoints marked public need no session; every other endpoint answers `401` 
 
 The Prisma schema includes the core relational models needed for a messaging app:
 
-- User
+- User (`is_bot` marks the hidden bot that is the other member of every account's private chat room)
 - Session
 - EmailVerificationToken
 - PasswordResetToken

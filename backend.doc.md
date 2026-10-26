@@ -30,7 +30,7 @@ Backend tests are integration tests (Vitest + Supertest) that run against a sepa
 `server/.env.test` once, then run `npm test` from `server/`. The test command
 starts the container, deploys the existing Prisma migrations, and runs Vitest.
 `test/setup.ts` refuses to run unless `NODE_ENV=test` and the database is `chatapp_test`, and it empties every table
-before each test. It also empties the counts of every rate limiter before each test (`resetRateLimiters` in `src/lib/rateLimiter.ts`), so every test starts with full budgets and none of them has to count requests, and it installs the in-memory mail outbox (`test/helpers/mailer.ts`) as the app's mailer and empties it before each test, so no test sends or logs a mail. Every test connection also runs in the `Asia/Ho_Chi_Minh` time zone (UTC+7), set through `PGOPTIONS` in `setup.ts` whatever the database server's own setting is: the `timestamp` columns hold UTC, so code that compares one with the database's `now()` is off by seven hours there and its test fails, instead of the bug showing up only on a server whose time zone is not UTC (`test/lib/testTimeZone.test.ts` guards this). It does not use the development database configured in `server/.env`.
+before each test. It also empties the counts of every rate limiter before each test (`resetRateLimiters` in `src/lib/rateLimiter.ts`), so every test starts with full budgets and none of them has to count requests, and it installs the in-memory mail outbox (`test/helpers/mailer.ts`) as the app's mailer and empties it before each test, so no test sends or logs a mail. It keeps the one bot user (`is_bot`) that the migration `add_private_chat_room` creates, and deletes every other user (see "Private chat room (implemented)"). Every test connection also runs in the `Asia/Ho_Chi_Minh` time zone (UTC+7), set through `PGOPTIONS` in `setup.ts` whatever the database server's own setting is: the `timestamp` columns hold UTC, so code that compares one with the database's `now()` is off by seven hours there and its test fails, instead of the bug showing up only on a server whose time zone is not UTC (`test/lib/testTimeZone.test.ts` guards this). It does not use the development database configured in `server/.env`.
 
 Scripts (run from `server/`):
 
@@ -91,8 +91,10 @@ Completed:
 - Email delivery: the `Mailer` in `src/lib/mailer.ts` with a console transport and a Resend transport, chosen by `MAIL_TRANSPORT` and checked when the server starts (see "Email delivery").
 - Email verification (see "Email verification (implemented)"): a link is mailed at signup and on request, `POST /api/account/email/verify` uses it, and the user shape carries `emailVerified`. It is the first feature that sends mail
 - Password reset (see "Password reset (implemented)"): a signed-out user asks for a link by email (`POST /api/account/password/reset-request`), opens it, and sets a new password (`POST /api/account/password/reset`). Only verified addresses get a link. It is the second feature that sends mail
+- Private chat room (see "Private chat room (implemented)"): every account has a direct room with a hidden bot account, like "My Documents" in Zalo. It is created with the account, and the migration gave the existing accounts theirs
 - Email addresses are not case-sensitive: they are stored lower-cased (`src/lib/emailAddress.ts`, and a CHECK constraint on `users.email`), so signup, login and password reset treat `John@x.com` and `john@x.com` as one account
 - Integration tests for the account endpoints (including profile update, password change, account deletion, email verification and password reset), the chat-room endpoints (including the `lastMessage` and `unreadCount` of the room summaries), the empty-room cleanup, the friend search endpoint, the send-friend-request endpoint, the list-friend-requests endpoint, the accept-friend-request endpoint, the reject/cancel-friend-request endpoint, the list-friends endpoint, the unfriend endpoint and the friendship requirement for creating rooms and adding members
+- Integration tests for the private chat room and for the migration's backfill (`privateRoom.test.ts`, `privateRoom.backfill.test.ts`)
 - Unit tests for the mailer (the startup checks of the mail settings, the console transport, and the Resend transport run through the real Resend SDK with a stubbed `fetch`), and a test that guards the mail outbox wiring of the test setup
 - Unit tests for email verification (the settings checks, the link and the send helper, the body validator), for `hashToken`, and for how `EMAIL_VERIFICATION_TTL_MS` is read
 - Unit tests for the password reset (the settings checks, the two mails and their send helpers, the two body validators), for the key of the per-email limiter, and for how `PASSWORD_RESET_TTL_MS` is read
@@ -136,6 +138,7 @@ POST /api/account/signup
 - Stores `tel` in its canonical E.164 spelling (`+` and digits only), not as typed: `isValidPhoneNumber` accepts spaces, dashes, parentheses, non-ASCII digits and extensions, and the unique constraint compares raw strings, so `+1 (415) 555-2671` and `+14155552671` would otherwise both register, and `GET /api/friend/search/:tel` (an exact match) could never find the first. `normalizeTel` in `signup.validator.ts` validates with `isValidPhoneNumber` (so the set of accepted numbers is unchanged) and then takes `parsePhoneNumberFromString(tel).number`; an extension is dropped. The duplicate check and the insert both use the normalized number, so another spelling of a registered number answers `409`
 - Numbers stored before this change are rewritten by `npm run db:normalize-tels` (`scripts/normalize-tels.mjs`, run from `server/` against the database in `DATABASE_URL`). It is a dry run that lists the changes; add `-- --apply` to write them, in one transaction. It never touches a number that is no longer valid or accounts that would end up with the same number: it lists them, exits with code `1`, and leaves the merge or delete to you
 - Hashes the password before saving
+- Creates the account's private chat room in the same transaction (see "Private chat room (implemented)"): the signup answers `500` and creates nothing if the bot that is the room's other member is missing
 - Mails a verification link to the new address after responding (see "Email verification (implemented)"): the account starts unverified, and a mail that cannot be sent does not fail the signup (it is logged, and the user asks again with `POST /api/account/email/verification`)
 - the duplicate check and the insert are two statements, so two simultaneous signups for the same email or number can both pass the check. The database then refuses the second insert (a unique violation, Prisma `P2002`) and the answer is the same `409`, naming the column that really collided: `Email already exists` or `Phone number already exists`. Where Prisma reports that column depends on its setup: with the `PrismaPg` driver adapter this project uses, `meta.target` is absent and the column is in `meta.driverAdapterError.cause.constraint` (`fields`, or `index` for the constraint's name), so a handler that only reads `meta.target` never finds it (the old one answered `Phone number already exists` whatever the cause). `uniqueViolationMessage` in `signup.validator.ts` reads both places, and says `Email or phone number already exists` when the error names neither
 
@@ -171,7 +174,7 @@ DELETE /api/account/me
 - Validation lives in `deleteAccount.validator.ts`. The password is asked for the same reason `POST /api/account/password` asks for the current one: deleting is irreversible, so a session cookie alone (a stolen one, or a browser left signed in) must not be enough
 - `deleteAccount` (`account.service.ts`) only deletes when the stored hash is still the one that was verified, like `changePassword`, and answers the same `401` otherwise
 - the `409` is the only-admin rule of `DELETE /api/chat/:chatid/member/:userid`, applied to the whole account, so a room with members always keeps an admin. Nothing is deleted, not even the rooms where the requester is only a member
-- everything runs in one transaction. The foreign keys delete the user's sessions (all of them, expired ones too), room memberships, friend-list entries (in both directions) and friend requests (sent and received). The user's messages stay in their rooms with `senderId` and `sender` set to `null`, so the other members keep the conversation; nobody can edit or delete such a message afterwards, because both are sender-only. A direct room stays with its remaining member, who still lists and reads it
+- everything runs in one transaction. The foreign keys delete the user's sessions (all of them, expired ones too), room memberships, friend-list entries (in both directions) and friend requests (sent and received). The user's messages stay in their rooms with `senderId` and `sender` set to `null`, so the other members keep the conversation; nobody can edit or delete such a message afterwards, because both are sender-only. A direct room stays with its remaining member, who still lists and reads it. The account's private room is the exception: it is deleted with its messages (see "Private chat room (implemented)")
 - a room whose only member was the requester gets `emptied_at` in the same transaction, so the retention clock of the cleanup job starts right away (see "Empty chat room cleanup")
 - every room the requester is in is locked (`SELECT ... FOR UPDATE`, in id order so two deletions that share rooms cannot deadlock) before the admin check, for the same reason as on `DELETE /api/chat/:chatid/member/:userid`: two admins of one room deleting their accounts at the same moment could otherwise both pass the check and leave the room with members but no admin
 - the limiter is the one `POST /api/account/password` uses (`passwordCheckLimiter`)
@@ -252,6 +255,7 @@ DELETE /api/chat/:chatid/member/:userid
 
 - `:userid` is validated like the other ids (`400 Invalid user id`)
 - the only-admin rule: the target being the room's only remaining admin while other members are present is a `409`. It does not apply to a direct room, since both of its members are admins
+- nobody can leave their private room (`403 You cannot leave your private chat room`, see "Private chat room (implemented)")
 - this endpoint never deletes the ChatRoom record itself: when the last member leaves, no ChatMember record links to the room any more, and it stamps the room's `emptied_at` in the same transaction; the room (and its messages) is deleted later by the cleanup job (see "Empty chat room cleanup")
 - the room row is locked (`SELECT ... FOR UPDATE`) while the removal runs, so two admins leaving at the same moment cannot both pass the only-admin check and leave a room with members but no admin
 
@@ -468,6 +472,22 @@ Not covered, because it needs a real key and a verified domain: an actual delive
 
 The two frontend pages (a form that asks for the email and shows the `202` message, and a page that reads the fragment, asks for the new password and sends the user to the login) belong to the frontend milestone (step 2 of `./frontend.doc.md`). Out of scope: reset by SMS through `tel`, security questions, locking an account after failed logins.
 
+### Private chat room (implemented)
+
+Every account has a private chat room, like "My Documents" in Zalo: a place to write notes and links to oneself, and a room the chat screens can be tried in before there are any friends. It is an ordinary direct room whose other member is a bot.
+
+- The bot is one `users` row, shared by all accounts: `is_bot = true`, name `My Documents`, email `my-documents@bot.invalid`, tel `bot:my-documents`. The migration `add_private_chat_room` creates it, and `PRIVATE_ROOM_BOT_EMAIL` (`privateRoom.service.ts`) is the one value the code needs to find it. The room's name and avatar are the other member's, as in every direct room, so each user sees a direct room named `My Documents` in their room list. The email cannot receive mail (`.invalid` is reserved for that) and the tel is not a phone number, so no signup collides with either. The password hash is a real argon2 hash of a random secret that was thrown away: checking a password against it answers false, where a made-up string would make argon2 raise
+- "Private" means "the bot is a member" (`isPrivateChatRoom`). Nobody can add a bot to a room (it is nobody's friend, see below), so no other room has one. A user has exactly one such room, and the bot has one for each account
+- the room is made with the account: `createUser` creates the user (and the verification token, as before) and calls `createPrivateChatRoom` in the same transaction, with the user and the bot as admins, as in every direct room. A nested create cannot do it in one statement: Prisma leaves `members` out of a room that is created from a membership. The bot is connected by its email, so if the migration's row is missing, signup answers `500` and creates nothing, rather than an account without its room
+- the migration also gives every account that already exists a room: the `DO` block between its `backfill: start` and `backfill: end` markers adds one for each account that shares no room with the bot, in id order. Running it again changes nothing, and `privateRoom.backfill.test.ts` runs that block on test data
+- the bot is hidden by `isBot: false` (`NOT is_bot` in raw SQL) in each lookup that starts from something a user types or sends: `findUserByEmail` (login), the lock in `issuePasswordReset` (no reset or verification link is stored or mailed for it), `findUserByTel` (the friend search) and `createFriendRequest` (a request to its id answers `400 receiver_id does not refer to an existing user`, as for any id that is not a user). Login would fail without the filter too, since nobody knows the password; the filter is for the day somebody adds a login path or gives the bot a real hash. A room with the bot, or a group with it as a member, is refused as for any stranger (`403`, because the friendship check comes first and the bot has no friends)
+- `GET /api/chat/:chatid/member` leaves the bot out (`getMembersForChatRoom`), so the owner of a private room is its only listed member. The one place the bot shows is the room's `name` and `avatarUrl` in `GET /api/chat` and `GET /api/chat/:chatid`, which is the point of it
+- the room cannot be left: `DELETE /api/chat/:chatid/member/:userid` answers `403 You cannot leave your private chat room` (`removeMemberFromChatRoom` returns `'private_room'`, checked inside its transaction after the not-a-member check). A leave would end with a room that only the bot is in and nobody can reach. Direct rooms cannot be deleted through the API at all (`requireGroupRoom`), so there is no delete to refuse
+- it goes with the account: `deleteAccount` reads the ids of the user's private rooms before deleting the user and deletes those rooms (their messages with them, by cascade) after the user row is gone, in the same transaction, so a refused deletion leaves the room alone. The room would otherwise stay for ever with the bot as its only member, and the cleanup job (see "Empty chat room cleanup") only collects rooms that have no member
+- the bot never writes, so the room never has anything unread (`unreadCount` is `0`), and its `lastMessage` is the last thing the user wrote
+- not done: the contract has no flag that says a room is the private one, so a client shows it as a direct room that sorts by activity like the others, and cannot pin it first or give it an icon. A `private: boolean` on `ChatRoomSummary` would be the smallest change if the screens want it
+- tests: `privateRoom.test.ts` (what signup creates, who sees it, the refused signup and the missing bot, every way the bot is hidden, messages in the room, leaving, deleting the account) and `privateRoom.backfill.test.ts` (the bot row the migration made, the backfill). The test setup keeps the bot between tests (`user.deleteMany({ where: { isBot: false } })`) because the migration, not a test, creates it, and `countUsers()` in `test/helpers/users.ts` counts accounts without it. `createUser` in the helpers does not give a user a room, so existing tests are unchanged; `createPrivateRoom(userId)` does it where a test needs one
+
 ### Real-time events (planned)
 
 The events and the handshake are specified in `./api.doc.md` ("Real-time events"). The server side is meant to stay a notification layer on top of the REST endpoints rather than a second way to write data, so validation, permissions and tests are reused as they are:
@@ -552,6 +572,7 @@ message-app/
     │       │   ├── chatRoomAuth.middleware.ts   // loadChatMembership, requireGroupRoom, requireChatAdmin; ChatRoomRequest and withChatMembership
     │       │   ├── chatRoom.service.ts
     │       │   ├── chatMember.service.ts
+    │       │   ├── privateRoom.service.ts       // the bot's email, createPrivateChatRoom (signup), isPrivateChatRoom, findPrivateChatRoomIds (account deletion)
     │       │   ├── message.service.ts
     │       │   ├── chatRoomCleanup.service.ts
     │       │   └── chatRoomCleanup.job.ts
@@ -565,8 +586,8 @@ message-app/
     └── test/
         ├── setup.ts
         ├── helpers/                          // shared fixtures, not test files
-        │   ├── users.ts                      // createUser, loginAs (session cookie without going through /api/account/login), createSessionRow
-        │   ├── chatRooms.ts                  // createGroupRoom, createDirectRoom, promoteToAdmin, memberIdsOf
+        │   ├── users.ts                      // createUser, countUsers (without the bot), loginAs (session cookie without going through /api/account/login), createSessionRow
+        │   ├── chatRooms.ts                  // createGroupRoom, createDirectRoom, promoteToAdmin, memberIdsOf, findBot, createPrivateRoom
         │   ├── emailVerification.ts          // tokenFromMail (the token in a mailed link), createVerificationLink (stores a link in a chosen state)
         │   ├── friends.ts                    // makeFriends, createFriendRequest (optional createdAt)
         │   ├── passwordReset.ts              // createVerifiedUser (optionally with a real password), createResetLink (stores a link in a chosen state)
@@ -630,6 +651,8 @@ message-app/
         │   ├── chatRoomMessages.edit.test.ts
         │   ├── chatRoomMessages.delete.test.ts
         │   ├── chatRoomRead.test.ts
+        │   ├── privateRoom.test.ts           // the room signup creates, the bot hidden everywhere, leaving, deleting the account
+        │   ├── privateRoom.backfill.test.ts  // the bot row of the migration, and its backfill block run on test data
         │   ├── chatRoomSummary.test.ts       // lastMessage and unreadCount of GET /api/chat and GET /api/chat/:chatid
         │   ├── chatRoom.validator.unit.test.ts
         │   ├── chatRoom.serializer.unit.test.ts  // timestamps become ISO strings, a field that is not named is not sent (no database)

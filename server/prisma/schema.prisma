@@ -28,6 +28,9 @@ model User {
   tel          String   @unique
   avatarUrl    String?  @map("avatar_url")
   emailVerifiedAt DateTime? @map("email_verified_at")
+  // The hidden account that is the other member of every user's private chat room (see "Private chat room" in
+  // backend.doc.md). It cannot log in and is skipped by every lookup of a user by email or phone number.
+  isBot        Boolean  @default(false) @map("is_bot")
 
   sessions               Session[]
   emailVerificationToken EmailVerificationToken?

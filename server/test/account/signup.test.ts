@@ -8,6 +8,7 @@ import { hashToken } from '../../src/lib/randomToken';
 import * as accountService from '../../src/modules/account/account.service';
 import { createVerificationLink, tokenFromMail } from '../helpers/emailVerification';
 import { outbox } from '../helpers/mailer';
+import { countUsers } from '../helpers/users';
 
 const signUpRoute = '/api/account/signup';
 
@@ -79,7 +80,7 @@ describe(`POST ${signUpRoute}`, () => {
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'All fields are required' });
-    expect(await prisma.user.count()).toBe(0);
+    expect(await countUsers()).toBe(0);
   });
 
   it.each([
@@ -99,7 +100,7 @@ describe(`POST ${signUpRoute}`, () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('All fields are required');
-    expect(await prisma.user.count()).toBe(0);
+    expect(await countUsers()).toBe(0);
   });
 
   it('returns 400 for an invalid email', async () => {
@@ -177,7 +178,7 @@ describe(`POST ${signUpRoute}`, () => {
 
     expect(res.status).toBe(409);
     expect(res.body.error).toBe('Phone number already exists');
-    expect(await prisma.user.count()).toBe(1);
+    expect(await countUsers()).toBe(1);
   });
 
   it('returns 409 when the email is registered in another case', async () => {
@@ -191,7 +192,7 @@ describe(`POST ${signUpRoute}`, () => {
 
     expect(res.status).toBe(409);
     expect(res.body).toEqual({ error: 'Email already exists' });
-    expect(await prisma.user.count()).toBe(1);
+    expect(await countUsers()).toBe(1);
   });
 
   // The duplicate check and the insert are two statements, so two signups for
@@ -220,7 +221,7 @@ describe(`POST ${signUpRoute}`, () => {
 
       expect(res.status).toBe(409);
       expect(res.body).toEqual({ error: expectedError });
-      expect(await prisma.user.count()).toBe(1);
+      expect(await countUsers()).toBe(1);
     });
   });
 });

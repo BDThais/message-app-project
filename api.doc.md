@@ -58,6 +58,7 @@ Creates an account. Public. It does not sign the user in.
   - `password`: at least 8 characters with an upper-case letter, a lower-case letter, a digit and a special character (`Password must be at least 8 characters long`, `Password must contain at least one uppercase letter`, `...lowercase letter`, `...number`, `...special character`).
 - There is no `avatar_url` at signup: a new account always has `avatarUrl: null`, and the user sets an avatar later with `PATCH /api/account/me`.
 - The account starts unverified (`emailVerified: false`) and a verification link is mailed to the address (see "Mailed links").
+- The account is created with its private chat room (see "Private chat room" under "GET /api/chat").
 - Response `201`: `{ "message": "Account created successfully" }`.
 - `409` when the email or the phone number is taken: `Email already exists` or `Phone number already exists` (another spelling of a registered number counts, and so does another case of a registered address). When two signups collide at the same instant and the server cannot tell which field it was, the text is `Email or phone number already exists`.
 
@@ -121,7 +122,7 @@ Deletes the requester's own account. Requires a session.
 ```
 
 - `password` is the current password, a non-empty string (`400 Password is required`).
-- Response `204`, and the cookie is cleared. The email and the phone number can be used to sign up again.
+- Response `204`, and the cookie is cleared. The email and the phone number can be used to sign up again. The account's private chat room is deleted with its messages.
 - `401 Password is incorrect`. The session is still valid.
 - `409` when the requester is the only admin of a group room that still has other members. Nothing is deleted. The body lists those rooms so the client can send the user there; they make someone else an admin or delete the room, then try again:
 
@@ -225,6 +226,7 @@ The rooms the requester is a member of, direct and group alike.
 
 - Response `200`: `{ "chatRooms": ChatRoomSummary[] }`, sorted by the time of the last message, newest first; a room without messages sorts by its creation time. No pagination.
 - A direct room's `name` and `avatarUrl` are the other member's name and avatar (`null` when they are gone or have none).
+- Private chat room: every account has one, a direct room that is theirs alone, shown with the `name` `My Documents` and an `avatarUrl` of `null`. It exists from signup, so the list of a new account is never empty. The other member is a hidden bot account that never writes (so its `unreadCount` is `0`); it is not in `GET /api/chat/:chatid/member`, is nobody's friend and cannot be found, logged into or added anywhere. Nothing in the response marks this room: a client recognises it by that name only.
 - `lastMessage` is the newest message that has not been deleted, or `null`. It has no id and no sender, and it never has `content: ""`: a deleted message is skipped and the one before it is shown. So deleting the newest message also moves the room down the list, and editing it changes the preview.
 - `unreadCount` is the number of messages in the room above the requester's own `lastReadMessageId` (every message counts while it is still `null`), not sent by the requester and not deleted. A message whose author deleted their account still counts. It is `0` when nothing is unread, never absent. A member added to a room that already has messages starts at `0`: what was sent before they joined counts as read.
 
@@ -256,7 +258,7 @@ Deletes the room together with its messages and memberships. Admin only, group r
 
 The members of the room. Any member, direct or group.
 
-- Response `200`: `{ "members": Member[] }`: admins first, then by name (case and accents ignored: `bea` comes before `Carl`). Every member is returned; there is no pagination.
+- Response `200`: `{ "members": Member[] }`: admins first, then by name (case and accents ignored: `bea` comes before `Carl`). Every member is returned; there is no pagination. The bot of a private chat room is not listed, so its owner is the only member there.
 
 ### POST /api/chat/:chatid/member
 
@@ -276,10 +278,10 @@ Adds members. Admin only, group rooms only.
 
 Removes a member, or leaves the room when `:userid` is the requester's own id.
 
-- Anyone can remove themself; removing someone else needs an admin, and in a direct room nobody can remove the other member.
+- Anyone can remove themself (except from their private chat room); removing someone else needs an admin, and in a direct room nobody can remove the other member.
 - Response `204`.
 - `400 Invalid user id`.
-- `403 Admin role required for this action` (a non-admin removing someone else), `403 You can only remove yourself from a direct chat room`.
+- `403 Admin role required for this action` (a non-admin removing someone else), `403 You can only remove yourself from a direct chat room`, `403 You cannot leave your private chat room`.
 - `404 Member not found in this chat room` when the target is not a member.
 - `409 The only admin cannot be removed while other members remain; promote another member to admin first`. This also stops a group's only admin from leaving while others remain. Direct rooms are exempt (both members are admins).
 - When the last member leaves, the room is no longer reachable through the API and is deleted later together with its messages.

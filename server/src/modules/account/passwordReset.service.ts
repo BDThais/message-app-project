@@ -59,7 +59,7 @@ export type IssuePasswordResetResult =
  */
 export function issuePasswordReset(email: string, now: Date = new Date()): Promise<IssuePasswordResetResult> {
   return prisma.$transaction(async (tx): Promise<IssuePasswordResetResult> => {
-    const [locked] = await tx.$queryRaw<{ id: number }[]>`SELECT id FROM users WHERE email = ${email} FOR UPDATE`;
+    const [locked] = await tx.$queryRaw<{ id: number }[]>`SELECT id FROM users WHERE email = ${email} AND NOT is_bot FOR UPDATE`;
     if (!locked) return { status: 'unknown_email' };
     const userId = locked.id;
 

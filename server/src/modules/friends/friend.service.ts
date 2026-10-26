@@ -20,7 +20,7 @@ export async function findUserByTel(
   tel: string
 ): Promise<SearchResult | null> {
   const user = await prisma.user.findUnique({
-    where: { tel },
+    where: { tel, isBot: false },
     select: {
       id: true,
       name: true,
@@ -93,7 +93,7 @@ export async function createFriendRequest(
   receiverId: number
 ): Promise<SendFriendRequestResult> {
   const receiver = await prisma.user.findUnique({
-    where: { id: receiverId },
+    where: { id: receiverId, isBot: false },
     select: {
       id: true,
       name: true,

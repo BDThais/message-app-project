@@ -1,6 +1,7 @@
 import { ChatMemberRole, ChatRoomType } from '../../generated/prisma/client';
 import { prisma } from '../../lib/prisma';
 import type { User } from '../../contract/types';
+import { createPrivateChatRoom, findPrivateChatRoomIds } from '../chatrooms/privateRoom.service';
 
 export function findExistingUser(email: string, tel: string) {
 	return prisma.user.findFirst({
@@ -10,13 +11,15 @@ export function findExistingUser(email: string, tel: string) {
 	});
 }
 
+/** The account with this address; the bot's address (a bot cannot log in or reset a password) matches nothing. */
 export function findUserByEmail(email: string) {
-	return prisma.user.findUnique({ where: { email } });
+	return prisma.user.findUnique({ where: { email, isBot: false } });
 }
 
 /**
- * Creates the user. With `emailVerification` the token row for the user's
- * address is created in the same statement (a nested create), so an account
+ * Creates the user together with their private chat room (see privateRoom.service.ts), in one
+ * transaction. With `emailVerification` the token row for the user's
+ * address is created in the same statement as the user (a nested create), so an account
  * never exists without the link that was mailed for it, and a link never
  * exists without its account. Only the hash of the token is stored.
  */
@@ -29,20 +32,25 @@ export function createUser(data: {
 }) {
 	const { emailVerification, ...fields } = data;
 
-	return prisma.user.create({
-		data: {
-			...fields,
-			...(emailVerification && {
-				emailVerificationToken: {
-					create: {
-						email: fields.email,
-						tokenHash: emailVerification.tokenHash,
-						createdAt: emailVerification.createdAt,
-						expiresAt: emailVerification.expiresAt,
+	return prisma.$transaction(async (tx) => {
+		const user = await tx.user.create({
+			data: {
+				...fields,
+				...(emailVerification && {
+					emailVerificationToken: {
+						create: {
+							email: fields.email,
+							tokenHash: emailVerification.tokenHash,
+							createdAt: emailVerification.createdAt,
+							expiresAt: emailVerification.expiresAt,
+						},
 					},
-				},
-			}),
-		},
+				}),
+			},
+		});
+		await createPrivateChatRoom(tx, user.id);
+
+		return user;
 	});
 }
 
@@ -131,6 +139,9 @@ export type DeleteAccountResult =
  * entries and friend requests (sent and received) are deleted with the user,
  * while their messages stay in the room with `senderId` set to null.
  *
+ * The user's private room goes with them: the bot would stay in it for good, and nobody else can
+ * ever be in it. It is deleted after the user, so a refused deletion (below) leaves it alone.
+ *
  * Business rule enforced here: a group room that still has members must
  * always keep at least one admin (see removeMemberFromChatRoom), so the
  * account of a room's only admin cannot be deleted while other members remain.
@@ -184,8 +195,12 @@ export function deleteAccount(userId: number, passwordHash: string): Promise<Del
 			select: { id: true },
 		});
 
+		const privateRoomIds = await findPrivateChatRoomIds(tx, userId);
+
 		const deleted = await tx.user.deleteMany({ where: { id: userId, passwordHash } });
 		if (deleted.count === 0) return { status: 'stale_password' };
+
+		await tx.chatRoom.deleteMany({ where: { id: { in: privateRoomIds } } });
 
 		await tx.chatRoom.updateMany({
 			where: { id: { in: soloRooms.map((room) => room.id) } },

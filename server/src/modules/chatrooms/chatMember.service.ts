@@ -1,6 +1,7 @@
 import { ChatMemberRole, ChatRoomType, Prisma } from '../../generated/prisma/client';
 import { prisma } from '../../lib/prisma';
 import { findNonFriendIds } from '../friends/friend.service';
+import { isPrivateChatRoom } from './privateRoom.service';
 
 /**
  * How a member entry leaves the API: the membership plus the user as `member`, without a separate
@@ -104,7 +105,9 @@ export type RemoveChatMemberResult =
   // The target isn't in this room (or the room itself no longer exists).
   | 'not_a_member'
   // Refused: the target is the room's only admin and other members remain.
-  | 'only_admin';
+  | 'only_admin'
+  // Refused: nobody can leave a private room (the user's side of it would be gone, and the bot stays).
+  | 'private_room';
 
 /**
  * Removes one member: "leave" (the target is the requester) or an admin removing someone else, which
@@ -134,6 +137,10 @@ export async function removeMemberFromChatRoom(
     });
     if (!target) {
       return 'not_a_member';
+    }
+
+    if (roomType === ChatRoomType.direct && (await isPrivateChatRoom(tx, chatId))) {
+      return 'private_room';
     }
 
     if (roomType === ChatRoomType.group && target.role === ChatMemberRole.admin) {
@@ -223,14 +230,15 @@ export async function changeMemberRoleInChatRoom(
 }
 
 /**
- * Lists everyone in a room, admins first, then by name. The sort is done here, not in the query, so
+ * Lists everyone in a room except the bot (see privateRoom.service.ts), admins first, then by name.
+ * The sort is done here, not in the query, so
  * the order does not depend on the database's collation (with a "C" collation a plain `ORDER BY name`
  * puts "Zed" before "alice"). Names that differ only by case compare equal, and the query's order by
  * user id decides between them (Array.prototype.sort is stable).
  */
 export async function getMembersForChatRoom(chatId: number): Promise<ChatMemberWithUser[]> {
   const members = await prisma.chatMember.findMany({
-    where: { chatId },
+    where: { chatId, member: { isBot: false } },
     ...memberResponseArgs,
     orderBy: { memberId: 'asc' },
   });

@@ -198,6 +198,8 @@ export async function removeChatRoomMember(req: ChatRoomRequest, res: Response<A
           error:
             'The only admin cannot be removed while other members remain; promote another member to admin first',
         });
+      case 'private_room':
+        return res.status(403).json({ error: 'You cannot leave your private chat room' });
     }
   } catch (err) {
     next(err);

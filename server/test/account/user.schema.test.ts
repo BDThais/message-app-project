@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { prisma } from '../../src/lib/prisma';
-import { createUser } from '../helpers/users';
+import { createUser, countUsers } from '../helpers/users';
 
 // The rules of the `users` table that the code relies on and the migrations encode.
 
@@ -13,7 +13,7 @@ describe('User.email (schema)', () => {
     await expect(prisma.user.update({ where: { id: alice.id }, data: { email: 'Alice@Example.com' } })).rejects.toThrow(
       /users_email_lowercase_check/,
     );
-    expect(await prisma.user.count()).toBe(1);
+    expect(await countUsers()).toBe(1);
   });
 
   it('keeps an address unique, and still accepts one written in lower case', async () => {

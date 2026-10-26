@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { prisma } from '../../src/lib/prisma';
 import { resetPasswordWithToken } from '../../src/modules/account/passwordReset.service';
 import { createResetLink, createVerifiedUser } from '../helpers/passwordReset';
+import { countUsers } from '../helpers/users';
 
 // resetPasswordWithToken takes the user row before the token row, which is also the order of an
 // account deletion (the user row, then the cascade to its token). In the other order a reset and a
@@ -46,7 +47,7 @@ describe('resetPasswordWithToken (lock order)', () => {
       await deleter.query('COMMIT');
 
       expect(await reset).toEqual({ status: 'invalid' });
-      expect(await prisma.user.count()).toBe(0);
+      expect(await countUsers()).toBe(0);
     } finally {
       await deleter.end();
     }
