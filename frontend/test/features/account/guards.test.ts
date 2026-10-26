@@ -14,7 +14,7 @@ const user: User = {
   emailVerified: false,
 };
 
-// GET /account/me answers 200 with { user } or { user: null }; the guards run against that.
+// GET /api/account/me answers 200 with { user } or { user: null }; the guards run against that.
 function stubMe(me: User | null) {
   const fetchMock = vi.fn(
     async () => new Response(JSON.stringify({ user: me }), { status: 200, headers: { 'Content-Type': 'application/json' } }),

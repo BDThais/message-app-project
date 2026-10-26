@@ -55,7 +55,7 @@ export function createState({ signedIn }: { signedIn: boolean }) {
     verificationTokens: new Map<string, number>(),
     resetTokens: new Map<string, number>(),
     sessionUserId: signedIn ? john.id : (null as number | null),
-    /** Make POST /account/email/verification answer 429, as it does within a minute of the last mail. */
+    /** Make POST /api/account/email/verification answer 429, as it does within a minute of the last mail. */
     resendLimited: false,
     /** Make POST, PATCH and DELETE on a message answer 400 with this text. */
     messageWriteError: null as string | null,
@@ -100,7 +100,7 @@ export function createState({ signedIn }: { signedIn: boolean }) {
       this.messages.push(message);
       return message;
     },
-    /** Make POST /account/logout answer 500, so the sign-out fails and the session stays. */
+    /** Make POST /api/account/logout answer 500, so the sign-out fails and the session stays. */
     logoutFails: false,
     /** While set, every request waits for it before it is answered (to look at a request that is still running). */
     gate: null as Promise<void> | null,

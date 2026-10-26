@@ -78,7 +78,7 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
     }
 
     // A stand-in for the endpoints that answer 401 for a wrong current password while the session is
-    // still fine (this one and DELETE /account/me).
+    // still fine (this one and DELETE /api/account/me).
     case 'POST /api/account/password':
       return json({ error: 'Current password is wrong' }, 401);
 

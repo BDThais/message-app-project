@@ -119,7 +119,7 @@ describe('the app', () => {
     await screen.findByRole('heading', { name: 'Chats' });
 
     // The server forgets the session (it expired). The next request answers 401, the app looks at
-    // GET /account/me again (see createApp), and that now says nobody is signed in.
+    // GET /api/account/me again (see createApp), and that now says nobody is signed in.
     server.session = null;
     await expect(queryClient.query({ queryKey: ['chats'], queryFn: () => api.get('/chat') })).rejects.toThrow();
 

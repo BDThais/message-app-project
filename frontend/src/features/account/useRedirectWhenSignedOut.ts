@@ -4,7 +4,7 @@ import type { User } from './types';
 
 /**
  * The guard (`requireUser`) only runs when navigating. If the session ends while a page is open (a
- * request answered 401 and GET /account/me then came back empty, or this person signed out), the
+ * request answered 401 and GET /api/account/me then came back empty, or this person signed out), the
  * cached user becomes `null` and this sends them to the login page. When `isSigningOut` is true (the
  * person clicked "Sign out", see `useSignOut`) it is a deliberate sign-out: plain /login, no `redirect`.
  *

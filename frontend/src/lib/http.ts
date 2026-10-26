@@ -44,7 +44,7 @@ function errorMessageFrom(body: unknown): string | undefined {
   return undefined;
 }
 
-// Several endpoints (DELETE member, POST /account/password, ...) answer 204 with no body at all;
+// Several endpoints (DELETE member, POST /api/account/password, ...) answer 204 with no body at all;
 // an empty body reads as `undefined`, so those calls resolve to `undefined`.
 async function readBody(response: Response): Promise<unknown> {
   const text = await response.text();

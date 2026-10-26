@@ -15,8 +15,8 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
 interface QueryClientOptions {
   /**
    * Called when any query or mutation fails with a 401. A 401 does not always mean "the session is
-   * gone" (a wrong current password on POST /account/password is a 401 too), so the caller should
-   * re-check the session (refetch GET /account/me) instead of signing the user out blindly.
+   * gone" (a wrong current password on POST /api/account/password is a 401 too), so the caller should
+   * re-check the session (refetch GET /api/account/me) instead of signing the user out blindly.
    */
   onUnauthorized: () => void;
 }

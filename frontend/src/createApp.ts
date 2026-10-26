@@ -9,7 +9,7 @@ import { createAppRouter } from './router';
  */
 export function createApp({ history }: { history?: RouterHistory } = {}) {
   const queryClient = createQueryClient({
-    // A request answered 401: find out whether the session is really gone. GET /account/me answers
+    // A request answered 401: find out whether the session is really gone. GET /api/account/me answers
     // `user: null` if it is, and the _app layout then redirects to /login.
     onUnauthorized: () => void queryClient.invalidateQueries({ queryKey: accountKeys.me() }),
   });
