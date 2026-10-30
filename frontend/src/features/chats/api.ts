@@ -15,13 +15,21 @@ export async function getChatRooms(signal?: AbortSignal): Promise<ChatRoomSummar
   return chatRooms;
 }
 
-/** Newest first. `before` is the id of the oldest message already loaded; without it, the newest page. */
+/**
+ * A page of messages, always newest first. With no cursor it is the newest page; `before` (the id of the
+ * oldest message already loaded) pages back in time; `after` (the id of the newest one loaded) pages
+ * forward, to catch up: the oldest messages above that id, `hasMore` saying that newer ones remain.
+ */
 export function getMessages(
   chatId: number,
-  before: number | undefined,
+  cursor: { before?: number; after?: number },
   signal?: AbortSignal,
 ): Promise<MessageListResponse> {
-  const query = before === undefined ? '' : `?${new URLSearchParams({ before: String(before) } satisfies GetMessagesQuery)}`;
+  const params = {
+    ...(cursor.before !== undefined && { before: String(cursor.before) }),
+    ...(cursor.after !== undefined && { after: String(cursor.after) }),
+  } satisfies GetMessagesQuery;
+  const query = Object.keys(params).length === 0 ? '' : `?${new URLSearchParams(params)}`;
   return api.get<MessageListResponse>(`/chat/${chatId}/message${query}`, { signal });
 }
 

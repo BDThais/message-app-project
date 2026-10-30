@@ -5,6 +5,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  type QueryClient,
 } from '@tanstack/react-query';
 import { deleteMessage, editMessage, getChatRooms, getMessages, markRead, sendMessage } from './api';
 import {
@@ -12,6 +13,7 @@ import {
   markMessageDeletedInCache,
   markRoomReadInCache,
   mergeNewestPageIntoCache,
+  newestLoadedMessageId,
   refreshPreviewAfterChange,
   replaceMessageInCache,
 } from './cache';
@@ -38,7 +40,7 @@ export function useChatRooms() {
 export function messagesQueryOptions(chatId: number) {
   return infiniteQueryOptions({
     queryKey: chatKeys.messages(chatId),
-    queryFn: ({ pageParam, signal }) => getMessages(chatId, pageParam, signal),
+    queryFn: ({ pageParam, signal }) => getMessages(chatId, pageParam === undefined ? {} : { before: pageParam }, signal),
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.messages.at(-1)?.id : undefined),
   });
@@ -48,6 +50,22 @@ export function useMessages(chatId: number) {
   const query = useInfiniteQuery(messagesQueryOptions(chatId));
   useNewestMessagesPolling(chatId, query.isSuccess);
   return query;
+}
+
+/**
+ * Fetches everything newer than the newest message loaded, a page at a time with the `after` cursor
+ * (step 6's reconnect will do the same), and adds it, oldest first. False when it cannot: nothing is
+ * loaded to start from, or a page did not move the newest message on.
+ */
+async function catchUp(queryClient: QueryClient, chatId: number, signal: AbortSignal): Promise<boolean> {
+  for (;;) {
+    const newestLoaded = newestLoadedMessageId(queryClient, chatId);
+    if (newestLoaded === undefined) return false;
+    const page = await getMessages(chatId, { after: newestLoaded }, signal);
+    for (const message of [...page.messages].reverse()) addMessageToCache(queryClient, message);
+    if (!page.hasMore) return true;
+    if ((newestLoadedMessageId(queryClient, chatId) ?? 0) <= newestLoaded) return false;
+  }
 }
 
 /**
@@ -61,9 +79,12 @@ function useNewestMessagesPolling(chatId: number, enabled: boolean): void {
   useQuery({
     queryKey: [...chatKeys.messages(chatId), 'newest'],
     queryFn: async ({ signal }) => {
-      const page = await getMessages(chatId, undefined, signal);
+      const page = await getMessages(chatId, {}, signal);
       if (mergeNewestPageIntoCache(queryClient, chatId, page) === 'gap') {
-        void queryClient.invalidateQueries({ queryKey: chatKeys.messages(chatId), exact: true });
+        // The catch-up fetches every message of the page again (they are all newer than what is loaded).
+        if (!(await catchUp(queryClient, chatId, signal))) {
+          void queryClient.invalidateQueries({ queryKey: chatKeys.messages(chatId), exact: true });
+        }
       }
       return null;
     },

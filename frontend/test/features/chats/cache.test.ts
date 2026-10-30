@@ -251,6 +251,24 @@ describe('mergeNewestPageIntoCache', () => {
     expect(queryClient.getQueryData(chatKeys.messages(1))).toBe(before);
   });
 
+  it('is a gap when nothing is loaded and there is more behind the page: there is nothing to catch up from', () => {
+    queryClient.setQueryData(chatKeys.messages(1), { pages: [{ messages: [], hasMore: false }], pageParams: [undefined] });
+
+    const result = mergeNewestPageIntoCache(queryClient, 1, { messages: [message(60), message(59)], hasMore: true });
+
+    expect(result).toBe('gap');
+    expect(idsOf(queryClient)).toEqual([[]]);
+  });
+
+  it('adds the whole page to a conversation with nothing loaded when nothing is behind it', () => {
+    queryClient.setQueryData(chatKeys.messages(1), { pages: [{ messages: [], hasMore: false }], pageParams: [undefined] });
+
+    const result = mergeNewestPageIntoCache(queryClient, 1, { messages: [message(2), message(1)], hasMore: false });
+
+    expect(result).toBe('merged');
+    expect(idsOf(queryClient)).toEqual([[2, 1]]);
+  });
+
   it('is not a gap when the page holds everything there is, however far its ids are from the loaded ones', () => {
     queryClient.setQueryData(chatKeys.messages(1), twoPages());
 

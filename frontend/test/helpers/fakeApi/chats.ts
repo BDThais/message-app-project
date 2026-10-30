@@ -68,8 +68,16 @@ export function chatEndpoints(request: string, body: Body, state: FakeServer): R
   if (messageIdText === undefined) {
     if (method === 'GET') {
       const params = new URLSearchParams(query);
-      const before = params.has('before') ? Number(params.get('before')) : Infinity;
       const limit = params.has('limit') ? Number(params.get('limit')) : DEFAULT_PAGE_SIZE;
+      if (params.has('before') && params.has('after')) {
+        return json({ error: "'before' and 'after' cannot be used together" }, 400);
+      }
+      if (params.has('after')) {
+        // The oldest messages above the id, still listed newest first, like every page.
+        const newer = inRoom.filter(({ id }) => id > Number(params.get('after')));
+        return json({ messages: newer.slice(0, limit).reverse(), hasMore: newer.length > limit } satisfies MessageListResponse);
+      }
+      const before = params.has('before') ? Number(params.get('before')) : Infinity;
       const older = inRoom.filter(({ id }) => id < before).reverse(); // newest first
       return json({ messages: older.slice(0, limit), hasMore: older.length > limit } satisfies MessageListResponse);
     }

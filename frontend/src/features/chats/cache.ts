@@ -57,6 +57,11 @@ function previewOf({ id, senderId, content, createdAt }: Message): Preview {
   return { id, senderId, content, createdAt };
 }
 
+/** The id of the newest message loaded in the room, or undefined when none is. */
+export function newestLoadedMessageId(queryClient: QueryClient, chatId: number): number | undefined {
+  return queryClient.getQueryData<MessagePages>(chatKeys.messages(chatId))?.pages[0]?.messages[0]?.id;
+}
+
 /** A message the person sent (or, from step 6, one that arrived): into its room's messages and its room's preview. */
 export function addMessageToCache(queryClient: QueryClient, message: Message): void {
   updatePages(queryClient, message.chatId, (pages) => {
@@ -89,8 +94,10 @@ export function replaceMessageInCache(queryClient: QueryClient, message: Message
 /**
  * The newest page, fetched again: what is new is added and what is loaded is replaced (an edit, a
  * delete). Answers 'gap' and changes nothing when the page does not reach back to the newest message
- * loaded (too many arrived at once, or the tab slept): adding them would leave a hole in the
- * conversation, so the caller loads the messages again.
+ * loaded (too many arrived at once, or the tab slept), or when nothing is loaded and there is more
+ * behind the page: adding them would leave a hole in the conversation. The caller then catches up
+ * from the newest loaded message with the `after` cursor, or loads the messages again when there is
+ * none to start from.
  */
 export function mergeNewestPageIntoCache(
   queryClient: QueryClient,
@@ -102,7 +109,7 @@ export function mergeNewestPageIntoCache(
 
   const newestLoaded = data.pages[0]?.messages[0];
   const oldestInPage = page.messages.at(-1);
-  if (newestLoaded && oldestInPage && page.hasMore && oldestInPage.id > newestLoaded.id) return 'gap';
+  if (page.hasMore && oldestInPage && (!newestLoaded || oldestInPage.id > newestLoaded.id)) return 'gap';
 
   const loaded = new Set(data.pages.flatMap((loadedPage) => loadedPage.messages.map(({ id }) => id)));
   for (const message of [...page.messages].reverse()) {

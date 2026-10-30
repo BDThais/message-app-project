@@ -463,6 +463,43 @@ describe('older messages', () => {
     expect(state.requests.filter((request) => request.includes('before='))).toEqual(['GET /api/chat/1/message?before=61']);
   });
 
+  it('catches up with the after cursor when more arrived than a page holds, and does not load the conversation again', async () => {
+    const state = roomWithMessagesFromBea(10);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderApp('/chat/1');
+    await findMessage('message 10');
+
+    for (let number = 11; number <= 90; number += 1) {
+      state.addMessage({ chatId: 1, sender: bea, content: `message ${number}` });
+    }
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS + 100);
+
+    await findMessage('message 90');
+    await vi.advanceTimersByTimeAsync(500);
+    const shown = within(messageList()).getAllByRole('listitem').map((item) => textOf(item).match(/message \d+/)?.[0]);
+    expect(shown).toEqual(Array.from({ length: 90 }, (_, index) => `message ${index + 1}`));
+    expect(state.requests).toContain('GET /api/chat/1/message?after=10');
+    expect(state.requests).toContain('GET /api/chat/1/message?after=60');
+    expect(state.count('GET /api/chat/1/message')).toBe(2); // the first load and the poll, no reload
+  });
+
+  it('loads the conversation again when there is nothing to catch up from', async () => {
+    const state = roomWithMessagesFromBea(0);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderApp('/chat/1');
+    await screen.findByText('No messages yet. Say hello!');
+
+    for (let number = 1; number <= 60; number += 1) {
+      state.addMessage({ chatId: 1, sender: bea, content: `message ${number}` });
+    }
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS + 100);
+
+    await findMessage('message 60');
+    expect(within(messageList()).getAllByRole('listitem')).toHaveLength(50); // the newest page, and the rest on request
+    expect(screen.getByRole('button', { name: 'Load earlier messages' })).toBeTruthy();
+    expect(state.requests.some((request) => request.includes('after='))).toBe(false);
+  });
+
   it('offers nothing to load when the whole conversation fits in one page', async () => {
     roomWithBea({ from: 'bea', content: 'only one' });
     renderApp('/chat/1');
