@@ -51,6 +51,12 @@ function changeMessage(
   return changed ? next : pages;
 }
 
+type Preview = NonNullable<ChatRoomSummary['lastMessage']>;
+
+function previewOf({ id, senderId, content, createdAt }: Message): Preview {
+  return { id, senderId, content, createdAt };
+}
+
 /** A message the person sent (or, from step 6, one that arrived): into its room's messages and its room's preview. */
 export function addMessageToCache(queryClient: QueryClient, message: Message): void {
   updatePages(queryClient, message.chatId, (pages) => {
@@ -62,11 +68,11 @@ export function addMessageToCache(queryClient: QueryClient, message: Message): v
 
   queryClient.setQueryData<ChatRoomSummary[]>(chatKeys.list(), (rooms) => {
     if (!rooms) return undefined;
-    const preview = { content: message.content, createdAt: message.createdAt };
+    // Ids grow with time, so an id that is not above the preview's is not newer than it.
     return sortRooms(
       rooms.map((room) =>
-        room.id === message.chatId && (room.lastMessage?.createdAt ?? '') <= preview.createdAt
-          ? { ...room, lastMessage: preview }
+        room.id === message.chatId && (room.lastMessage?.id ?? 0) < message.id
+          ? { ...room, lastMessage: previewOf(message) }
           : room,
       ),
     );
@@ -116,6 +122,35 @@ export function markMessageDeletedInCache(
   updatePages(queryClient, chatId, (pages) =>
     changeMessage(pages, messageId, (message) => (message.deletedAt ? message : { ...message, content: '', deletedAt })),
   );
+}
+
+/**
+ * Brings the room's preview in line with its loaded messages after one of them was edited or deleted.
+ * The preview is the room's newest message that is not deleted, and it has an id, so the cache can
+ * tell whether the change touched it: when it did, the new preview is the newest loaded message that
+ * is not deleted (the same message with its new text, or the one before a deleted one), and the room
+ * is placed in the list again. Answers 'unknown', and changes nothing, when the loaded messages
+ * cannot say what the preview is now: they are not loaded, or the newest ones are all deleted with
+ * older ones behind them. The caller then asks the server for the room list.
+ */
+export function refreshPreviewAfterChange(
+  queryClient: QueryClient,
+  chatId: number,
+  messageId: number,
+): 'unchanged' | 'updated' | 'unknown' {
+  const room = queryClient.getQueryData<ChatRoomSummary[]>(chatKeys.list())?.find(({ id }) => id === chatId);
+  if (room?.lastMessage?.id !== messageId) return 'unchanged';
+
+  const data = queryClient.getQueryData<MessagePages>(chatKeys.messages(chatId));
+  if (!data) return 'unknown';
+  const newest = data.pages.flatMap((page) => page.messages).find((message) => message.deletedAt === null);
+  const everythingIsLoaded = data.pages.at(-1)?.hasMore === false;
+  if (!newest && !everythingIsLoaded) return 'unknown';
+
+  queryClient.setQueryData<ChatRoomSummary[]>(chatKeys.list(), (rooms) =>
+    rooms && sortRooms(rooms.map((each) => (each.id === chatId ? { ...each, lastMessage: newest ? previewOf(newest) : null } : each))),
+  );
+  return 'updated';
 }
 
 export function markRoomReadInCache(queryClient: QueryClient, chatId: number): void {

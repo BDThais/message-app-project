@@ -5,6 +5,7 @@ import {
   markMessageDeletedInCache,
   markRoomReadInCache,
   mergeNewestPageIntoCache,
+  refreshPreviewAfterChange,
   replaceMessageInCache,
   sortRooms,
 } from '@/features/chats/cache';
@@ -38,6 +39,11 @@ function room(id: number, overrides: Partial<ChatRoomSummary> = {}): ChatRoomSum
   };
 }
 
+/** A room's `lastMessage`, as the server sends it. */
+function preview(id: number, content: string, createdAt: string, senderId: number | null = 2) {
+  return { id, senderId, content, createdAt };
+}
+
 /** Two pages as the server sends them: newest first, so page 0 holds 5, 4 and page 1 holds 3, 2, 1. */
 function twoPages(): InfiniteData<MessageListResponse, number | undefined> {
   return {
@@ -63,9 +69,9 @@ beforeEach(() => {
 describe('sortRooms', () => {
   it('puts the newest last message first, and a room without messages where its creation time puts it', () => {
     const rooms = [
-      room(1, { lastMessage: { content: 'old', createdAt: '2026-10-10T09:00:00.000Z' } }),
+      room(1, { lastMessage: preview(1, 'old', '2026-10-10T09:00:00.000Z') }),
       room(2),
-      room(3, { lastMessage: { content: 'new', createdAt: '2026-10-20T09:00:00.000Z' } }),
+      room(3, { lastMessage: preview(3, 'new', '2026-10-20T09:00:00.000Z') }),
       room(4, { createdAt: '2026-10-15T09:00:00.000Z' }),
     ];
 
@@ -109,24 +115,29 @@ describe('addMessageToCache', () => {
 
   it('updates the room\'s preview and moves it to the top, and leaves its unread count alone', () => {
     queryClient.setQueryData(chatKeys.list(), [
-      room(2, { lastMessage: { content: 'other', createdAt: '2026-10-20T10:00:00.000Z' } }),
-      room(1, { unreadCount: 3, lastMessage: { content: 'before', createdAt: '2026-10-20T09:00:00.000Z' } }),
+      room(2, { lastMessage: preview(20, 'other', '2026-10-20T10:00:00.000Z') }),
+      room(1, { unreadCount: 3, lastMessage: preview(5, 'before', '2026-10-20T09:00:00.000Z') }),
     ]);
 
     addMessageToCache(queryClient, message(6, { content: 'hello', createdAt: '2026-10-20T11:00:00.000Z' }));
 
     const rooms = queryClient.getQueryData<ChatRoomSummary[]>(chatKeys.list());
     expect(rooms?.map(({ id }) => id)).toEqual([1, 2]);
-    expect(rooms?.[0]?.lastMessage).toEqual({ content: 'hello', createdAt: '2026-10-20T11:00:00.000Z' });
+    expect(rooms?.[0]?.lastMessage).toEqual({
+      id: 6,
+      senderId: 2,
+      content: 'hello',
+      createdAt: '2026-10-20T11:00:00.000Z',
+    });
     expect(rooms?.[0]?.unreadCount).toBe(3);
   });
 
   it('does not let an older message replace a newer preview', () => {
     queryClient.setQueryData(chatKeys.list(), [
-      room(1, { lastMessage: { content: 'newest', createdAt: '2026-10-20T12:00:00.000Z' } }),
+      room(1, { lastMessage: preview(9, 'newest', '2026-10-20T12:00:00.000Z') }),
     ]);
 
-    addMessageToCache(queryClient, message(6, { content: 'late arrival', createdAt: '2026-10-20T09:00:00.000Z' }));
+    addMessageToCache(queryClient, message(6, { content: 'late arrival' }));
 
     expect(queryClient.getQueryData<ChatRoomSummary[]>(chatKeys.list())?.[0]?.lastMessage?.content).toBe('newest');
   });
@@ -249,5 +260,82 @@ describe('mergeNewestPageIntoCache', () => {
   it('does nothing for a room whose messages are not loaded', () => {
     expect(mergeNewestPageIntoCache(queryClient, 1, { messages: [message(1)], hasMore: false })).toBe('merged');
     expect(queryClient.getQueryData(chatKeys.messages(1))).toBeUndefined();
+  });
+});
+
+describe('refreshPreviewAfterChange', () => {
+  const previewIn = (rooms: ChatRoomSummary[] | undefined, id = 1) => rooms?.find((each) => each.id === id)?.lastMessage;
+  const list = () => queryClient.getQueryData<ChatRoomSummary[]>(chatKeys.list());
+
+  it('shows the new text when the edited message is the preview', () => {
+    queryClient.setQueryData(chatKeys.messages(1), twoPages());
+    queryClient.setQueryData(chatKeys.list(), [room(1, { lastMessage: preview(5, 'message 5', message(5).createdAt) })]);
+    replaceMessageInCache(queryClient, message(5, { content: 'fixed', editedAt: '2026-10-20T10:00:00.000Z' }));
+
+    expect(refreshPreviewAfterChange(queryClient, 1, 5)).toBe('updated');
+
+    expect(previewIn(list())).toEqual({ id: 5, senderId: 2, content: 'fixed', createdAt: message(5).createdAt });
+  });
+
+  it('falls back to the newest message that is not deleted when the preview was deleted, and moves the room down', () => {
+    queryClient.setQueryData(chatKeys.messages(1), twoPages());
+    queryClient.setQueryData(chatKeys.list(), [
+      room(1, { lastMessage: preview(5, 'message 5', '2026-10-20T09:00:05.000Z') }),
+      room(2, { lastMessage: preview(50, 'elsewhere', '2026-10-20T09:00:03.000Z') }),
+    ]);
+    markMessageDeletedInCache(queryClient, 1, 5, '2026-10-20T10:00:00.000Z');
+    markMessageDeletedInCache(queryClient, 1, 4, '2026-10-20T10:00:00.000Z');
+
+    expect(refreshPreviewAfterChange(queryClient, 1, 5)).toBe('updated');
+
+    expect(previewIn(list())).toMatchObject({ id: 3, content: 'message 3' }); // 09:00:03 ties with room 2: the higher id is first
+    expect(list()?.map(({ id }) => id)).toEqual([2, 1]);
+  });
+
+  it('leaves the cache alone when the changed message is not the preview', () => {
+    queryClient.setQueryData(chatKeys.messages(1), twoPages());
+    queryClient.setQueryData(chatKeys.list(), [room(1, { lastMessage: preview(5, 'message 5', message(5).createdAt) })]);
+    markMessageDeletedInCache(queryClient, 1, 4, '2026-10-20T10:00:00.000Z');
+    const before = list();
+
+    expect(refreshPreviewAfterChange(queryClient, 1, 4)).toBe('unchanged');
+
+    expect(list()).toBe(before);
+  });
+
+  it('is unchanged when the room list was never loaded', () => {
+    expect(refreshPreviewAfterChange(queryClient, 1, 5)).toBe('unchanged');
+  });
+
+  it('has no preview when everything is loaded and everything is deleted', () => {
+    queryClient.setQueryData(chatKeys.messages(1), {
+      pages: [{ messages: [message(2, { content: '', deletedAt: '2026-10-20T10:00:00.000Z' }), message(1, { content: '', deletedAt: '2026-10-20T10:00:00.000Z' })], hasMore: false }],
+      pageParams: [undefined],
+    });
+    queryClient.setQueryData(chatKeys.list(), [room(1, { lastMessage: preview(2, 'two', message(2).createdAt) })]);
+
+    expect(refreshPreviewAfterChange(queryClient, 1, 2)).toBe('updated');
+
+    expect(previewIn(list())).toBeNull();
+  });
+
+  it('cannot say, and changes nothing, when the loaded messages are all deleted and older ones are behind them', () => {
+    const deleted = { content: '', deletedAt: '2026-10-20T10:00:00.000Z' };
+    queryClient.setQueryData(chatKeys.messages(1), {
+      pages: [{ messages: [message(5, deleted), message(4, deleted)], hasMore: true }],
+      pageParams: [undefined],
+    });
+    queryClient.setQueryData(chatKeys.list(), [room(1, { lastMessage: preview(5, 'five', message(5).createdAt) })]);
+    const before = list();
+
+    expect(refreshPreviewAfterChange(queryClient, 1, 5)).toBe('unknown');
+
+    expect(list()).toBe(before);
+  });
+
+  it('cannot say when the room\'s messages were never loaded', () => {
+    queryClient.setQueryData(chatKeys.list(), [room(1, { lastMessage: preview(5, 'five', message(5).createdAt) })]);
+
+    expect(refreshPreviewAfterChange(queryClient, 1, 5)).toBe('unknown');
   });
 });

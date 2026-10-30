@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
+import { useMe } from '@/features/account/queries';
 import { formatListTime, roomTitle } from '../format';
 import { useChatRooms } from '../queries';
 import type { ChatRoomSummary } from '../types';
@@ -12,6 +13,7 @@ import type { ChatRoomSummary } from '../types';
  */
 export function RoomList({ roomOpen }: { roomOpen: boolean }) {
   const rooms = useChatRooms();
+  const { data: user } = useMe();
   const Heading = roomOpen ? 'h2' : 'h1';
 
   return (
@@ -43,7 +45,7 @@ export function RoomList({ roomOpen }: { roomOpen: boolean }) {
           <ul>
             {rooms.data.map((room) => (
               <li key={room.id}>
-                <RoomLink room={room} />
+                <RoomLink room={room} userId={user?.id} />
               </li>
             ))}
           </ul>
@@ -53,7 +55,7 @@ export function RoomList({ roomOpen }: { roomOpen: boolean }) {
   );
 }
 
-function RoomLink({ room }: { room: ChatRoomSummary }) {
+function RoomLink({ room, userId }: { room: ChatRoomSummary; userId: number | undefined }) {
   const title = roomTitle(room);
   const unread = room.unreadCount > 0;
 
@@ -74,7 +76,9 @@ function RoomLink({ room }: { room: ChatRoomSummary }) {
           )}
         </span>
         <span className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm text-muted">{room.lastMessage?.content ?? 'No messages yet'}</span>
+          <span className="truncate text-sm text-muted">
+            {room.lastMessage ? `${room.lastMessage.senderId === userId ? 'You: ' : ''}${room.lastMessage.content}` : 'No messages yet'}
+          </span>
           {unread && (
             <span className="min-w-5 shrink-0 rounded-full bg-accent px-1.5 text-center text-xs font-semibold leading-5 text-on-accent">
               <span aria-hidden="true">{room.unreadCount > 99 ? '99+' : room.unreadCount}</span>

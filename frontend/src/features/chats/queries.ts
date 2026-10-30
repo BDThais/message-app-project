@@ -12,6 +12,7 @@ import {
   markMessageDeletedInCache,
   markRoomReadInCache,
   mergeNewestPageIntoCache,
+  refreshPreviewAfterChange,
   replaceMessageInCache,
 } from './cache';
 import { chatKeys } from './keys';
@@ -93,8 +94,9 @@ export function useEditMessage(chatId: number) {
       editMessage(chatId, messageId, content),
     onSuccess: (message) => {
       replaceMessageInCache(queryClient, message);
-      // The room's `lastMessage` has no id, so the cache cannot tell whether this was it: one GET settles it.
-      void queryClient.invalidateQueries({ queryKey: chatKeys.list() });
+      if (refreshPreviewAfterChange(queryClient, message.chatId, message.id) === 'unknown') {
+        void queryClient.invalidateQueries({ queryKey: chatKeys.list() });
+      }
     },
   });
 }
@@ -105,8 +107,10 @@ export function useDeleteMessage(chatId: number) {
     mutationFn: (messageId: number) => deleteMessage(chatId, messageId),
     onSuccess: (_result, messageId) => {
       markMessageDeletedInCache(queryClient, chatId, messageId, new Date().toISOString());
-      // If it was the newest message, the preview falls back to the one before it, which only the server knows.
-      void queryClient.invalidateQueries({ queryKey: chatKeys.list() });
+      // If it was the preview, the room falls back to the message before it: the loaded ones say which, unless there are none to say.
+      if (refreshPreviewAfterChange(queryClient, chatId, messageId) === 'unknown') {
+        void queryClient.invalidateQueries({ queryKey: chatKeys.list() });
+      }
     },
   });
 }

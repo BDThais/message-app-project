@@ -24,7 +24,9 @@ function summaryOf(room: FakeRoom, state: FakeServer): ChatRoomSummary {
     name: room.name,
     avatarUrl: room.avatarUrl,
     createdAt: room.createdAt,
-    lastMessage: last ? { content: last.content, createdAt: last.createdAt } : null,
+    lastMessage: last
+      ? { id: last.id, senderId: last.senderId, content: last.content, createdAt: last.createdAt }
+      : null,
     // Like the server: above the read marker, not the requester's own, not deleted (a deleted account's still counts).
     unreadCount: inRoom.filter(
       (message) => message.id > (room.lastReadMessageId ?? 0) && message.senderId !== mine && message.deletedAt === null,

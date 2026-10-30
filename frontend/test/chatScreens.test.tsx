@@ -59,6 +59,23 @@ describe('the room list', () => {
     expect(textOf(links[1]!)).toContain('1 unread');
   });
 
+  it('marks a preview that the person wrote with "You:", and one that somebody else wrote not', async () => {
+    const state = stubApi({ signedIn: true });
+    state.addRoom({ id: 1, name: 'Bea' });
+    state.addRoom({ id: 2, name: 'Carl' });
+    state.addMessage({ chatId: 1, sender: john, content: 'on my way', createdAt: '2026-10-20T09:00:00.000Z' });
+    state.addMessage({ chatId: 2, sender: carl, content: 'see you', createdAt: '2026-10-21T09:00:00.000Z' });
+    state.addMessage({ chatId: 2, sender: null, content: 'from nobody', createdAt: '2026-10-21T09:05:00.000Z' });
+    renderApp('/chat');
+
+    const withBea = await screen.findByRole('link', { name: /Bea/ });
+    const withCarl = await screen.findByRole('link', { name: /Carl/ });
+
+    expect(textOf(withBea)).toContain('You: on my way');
+    expect(textOf(withCarl)).toContain('from nobody');
+    expect(textOf(withCarl)).not.toContain('You:');
+  });
+
   it('says so when there are no rooms, and when a room has no messages', async () => {
     const state = stubApi({ signedIn: true });
     renderApp('/chat');
@@ -262,7 +279,7 @@ describe('sending', () => {
 });
 
 describe('editing and deleting', () => {
-  it('puts the edited message from the answer into the list, marks it edited, and asks again only for the room list', async () => {
+  it('puts the edited message from the answer into the list, marks it edited, and changes the room preview without asking for anything', async () => {
     const state = roomWithBea({ from: 'bea', content: 'hi' }, { from: 'john', content: 'helo' });
     const user = userEvent.setup();
     renderApp('/chat/1');
@@ -279,7 +296,25 @@ describe('editing and deleting', () => {
     expect(textOf(messageNamed('hello'))).toContain('edited');
     expect(screen.queryByRole('textbox', { name: 'Edit message' })).toBeNull();
     expect(state.count('GET /api/chat/1/message')).toBe(1);
-    await waitFor(() => expect(state.count('GET /api/chat')).toBe(2)); // the preview may have changed
+    const link = screen.getByRole('link', { name: /Bea/ });
+    expect(textOf(link)).toContain('You: hello'); // the edited message is the room's last one, and its id says so
+    expect(state.count('GET /api/chat')).toBe(1);
+  });
+
+  it('leaves the room preview alone when the edited message is not the last one', async () => {
+    const state = roomWithBea({ from: 'john', content: 'first' }, { from: 'bea', content: 'second' });
+    const user = userEvent.setup();
+    renderApp('/chat/1');
+    await findMessage('first');
+
+    await user.click(within(messageNamed('first')).getByRole('button', { name: 'Edit' }));
+    await user.type(screen.getByRole('textbox', { name: 'Edit message' }), ' (fixed){Enter}');
+
+    expect(await findMessage('first (fixed)')).toBeTruthy();
+    const link = screen.getByRole('link', { name: /Bea/ });
+    expect(textOf(link)).toContain('second');
+    expect(textOf(link)).not.toContain('fixed');
+    expect(state.count('GET /api/chat')).toBe(1);
   });
 
   it('leaves an edit with Escape or Cancel, without a request', async () => {
@@ -328,7 +363,44 @@ describe('editing and deleting', () => {
     expect(await findMessage('Message deleted')).toBeTruthy();
     expect(within(messageList()).queryByText('Oops')).toBeNull();
     expect(state.count('GET /api/chat/1/message')).toBe(1);
-    await waitFor(() => expect(textOf(within(nav).getByRole('link', { name: /Bea/ }))).toContain('Earlier'));
+    // The preview falls back to the message before it, which the conversation already holds.
+    const link = within(nav).getByRole('link', { name: /Bea/ });
+    expect(textOf(link)).toContain('Earlier');
+    expect(textOf(link)).not.toContain('You:');
+    expect(state.count('GET /api/chat')).toBe(1);
+  });
+
+  it('leaves the room preview alone, and asks for nothing, when a message that is not the last one is deleted', async () => {
+    const state = roomWithBea({ from: 'john', content: 'mine' }, { from: 'bea', content: 'last word' });
+    const user = userEvent.setup();
+    renderApp('/chat/1');
+    await findMessage('mine');
+
+    await user.click(within(messageNamed('mine')).getByRole('button', { name: 'Delete' }));
+    await user.click(within(screen.getByRole('group', { name: 'Confirm delete' })).getByRole('button', { name: 'Delete' }));
+
+    expect(await findMessage('Message deleted')).toBeTruthy();
+    expect(textOf(screen.getByRole('link', { name: /Bea/ }))).toContain('last word');
+    expect(state.count('GET /api/chat')).toBe(1);
+  });
+
+  it('asks for the room list when the conversation cannot tell what the preview falls back to', async () => {
+    const state = stubApi({ signedIn: true });
+    state.addRoom({ id: 1, name: 'Bea' });
+    for (let number = 1; number <= 60; number += 1) {
+      state.addMessage({ chatId: 1, sender: number === 60 ? john : bea, content: `message ${number}` });
+    }
+    // The newest page (11 to 60) is all deleted but the last message, and ten older ones are not loaded.
+    for (const message of state.messages.slice(10, 59)) message.deletedAt = '2026-10-20T10:00:00.000Z';
+    const user = userEvent.setup();
+    renderApp('/chat/1');
+    await findMessage('message 60');
+
+    await user.click(within(messageNamed('message 60')).getByRole('button', { name: 'Delete' }));
+    await user.click(within(screen.getByRole('group', { name: 'Confirm delete' })).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(state.count('GET /api/chat')).toBe(2));
+    await waitFor(() => expect(textOf(screen.getByRole('link', { name: /Bea/ }))).toContain('message 10'));
   });
 
   it('does not delete when the person cancels', async () => {
