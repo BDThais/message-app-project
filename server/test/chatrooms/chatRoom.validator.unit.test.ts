@@ -222,6 +222,18 @@ describe('validateGetMessagesQuery', () => {
     });
   });
 
+  it('accepts an after cursor, with the default or a custom limit', () => {
+    expect(validateGetMessagesQuery({ after: '10' })).toEqual({ valid: true, data: { limit: 50, after: 10 } });
+    expect(validateGetMessagesQuery({ after: '10', limit: '5' })).toEqual({ valid: true, data: { limit: 5, after: 10 } });
+  });
+
+  it('refuses before and after together: one pages back and the other forward', () => {
+    expect(validateGetMessagesQuery({ before: '10', after: '5' })).toEqual({
+      valid: false,
+      message: "'before' and 'after' cannot be used together",
+    });
+  });
+
   it.each([
     ['a non-numeric before', { before: 'abc' }, "'before' must be a positive integer message id"],
     ['a decimal before', { before: '1.5' }, "'before' must be a positive integer message id"],
@@ -231,6 +243,15 @@ describe('validateGetMessagesQuery', () => {
       'a before larger than a Postgres integer',
       { before: '2147483648' },
       "'before' must be a positive integer message id",
+    ],
+    ['a non-numeric after', { after: 'abc' }, "'after' must be a positive integer message id"],
+    ['a decimal after', { after: '1.5' }, "'after' must be a positive integer message id"],
+    ['a zero after', { after: '0' }, "'after' must be a positive integer message id"],
+    ['a negative after', { after: '-3' }, "'after' must be a positive integer message id"],
+    [
+      'an after larger than a Postgres integer',
+      { after: '2147483648' },
+      "'after' must be a positive integer message id",
     ],
     ['a non-numeric limit', { limit: 'abc' }, "'limit' must be an integer between 1 and 100"],
     ['a decimal limit', { limit: '1.5' }, "'limit' must be an integer between 1 and 100"],

@@ -315,8 +315,9 @@ Sends a message. Any member, direct or group.
 
 The messages of the room, newest first. Any member, direct or group.
 
-- Query: `before` (optional, a message id: only messages with a smaller id are returned, so for the next page pass the id of the oldest message already loaded) and `limit` (optional, 1 to 100, default 50). `400` when either is invalid.
-- Response `200`: `{ "messages": Message[], "hasMore": boolean }`; `hasMore` is `true` when older messages remain beyond the page.
+- Query: `before` (optional, a message id: only messages with a smaller id are returned, so for the next page back in time pass the id of the oldest message already loaded), `after` (optional, a message id: the other direction, see below) and `limit` (optional, 1 to 100, default 50). `400` when one is invalid, and when `before` and `after` are both given.
+- Response `200`: `{ "messages": Message[], "hasMore": boolean }`, always newest first. Without `after`, `hasMore` is `true` when older messages remain beyond the page.
+- With `after`, the page is the `limit` OLDEST messages with a larger id (still listed newest first), so a client that holds everything up to a message can catch up in order: `hasMore` is then `true` when NEWER messages remain, and the next request passes `after` = the id of the newest message of this page (the first one). An empty page with `hasMore: false` means there is nothing newer. Deleted messages are included, as in every page.
 - A deleted message keeps its place in the list with `content: ""` and a non-null `deletedAt`. An edited one has `editedAt`. A message whose author deleted their account has `senderId` and `sender` set to `null`.
 
 ### PATCH /api/chat/:chatid/message/:message_id

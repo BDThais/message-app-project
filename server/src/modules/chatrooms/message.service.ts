@@ -28,24 +28,34 @@ export type MessagesPage = {
 };
 
 /**
- * A page of messages, newest first. It fetches one row more than asked for, to know `hasMore`
- * without a separate count query.
+ * A page of messages, always listed newest first. Without a cursor it is the newest page; with
+ * `before` it is the page of messages older than that id, and `hasMore` says there are still older ones.
+ * With `after` it is the other direction: the `limit` OLDEST messages newer than that id, so that
+ * a client that holds everything up to a message can fetch the rest in order, and `hasMore` says
+ * there are still newer ones (ask again with `after` set to the newest id of this page). It fetches
+ * one row more than asked for, to know `hasMore` without a separate count query.
  */
 export async function getMessagesForChatRoom(
   chatId: number,
   limit: number,
-  before?: number
+  cursor: { before?: number; after?: number } = {}
 ): Promise<MessagesPage> {
+  const { before, after } = cursor;
+  const forward = after !== undefined;
   const rows = await prisma.message.findMany({
-    where: { chatId, ...(before !== undefined ? { id: { lt: before } } : {}) },
-    orderBy: { id: 'desc' },
+    where: {
+      chatId,
+      ...(forward ? { id: { gt: after } } : before !== undefined ? { id: { lt: before } } : {}),
+    },
+    orderBy: { id: forward ? 'asc' : 'desc' },
     take: limit + 1,
     include: { sender: { select: senderSelect } },
   });
 
   const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
 
-  return { messages: hasMore ? rows.slice(0, limit) : rows, hasMore };
+  return { messages: forward ? page.reverse() : page, hasMore };
 }
 
 export type DeleteMessageResult =

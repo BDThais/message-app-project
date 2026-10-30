@@ -52,6 +52,56 @@ describe('GET /chat/:chatid/message', () => {
     expect(secondPage.body.hasMore).toBe(false);
   });
 
+  it('pages forward with after: the oldest messages above it, listed newest first, hasMore meaning newer ones remain', async () => {
+    const user = await createUser('Alice');
+    const room = await createGroupRoom(user.id);
+    const agent = await loginAs(user);
+    const ids: number[] = [];
+    for (const content of ['One', 'Two', 'Three', 'Four', 'Five']) {
+      ids.push((await agent.post(`/api/chat/${room.id}/message`).send({ content })).body.message.id);
+    }
+    const contents = (res: { body: { messages: { content: string }[] } }) => res.body.messages.map((m) => m.content);
+
+    const first = await agent.get(`/api/chat/${room.id}/message?after=${ids[0]}&limit=2`);
+    expect(first.status).toBe(200);
+    expect(contents(first)).toEqual(['Three', 'Two']);
+    expect(first.body.hasMore).toBe(true);
+
+    const second = await agent.get(`/api/chat/${room.id}/message?after=${first.body.messages[0].id}&limit=2`);
+    expect(contents(second)).toEqual(['Five', 'Four']);
+    expect(second.body.hasMore).toBe(false);
+
+    const none = await agent.get(`/api/chat/${room.id}/message?after=${ids[4]}`);
+    expect(none.body).toEqual({ messages: [], hasMore: false });
+  });
+
+  it('includes deleted messages when paging forward, as in every page', async () => {
+    const user = await createUser('Alice');
+    const room = await createGroupRoom(user.id);
+    const agent = await loginAs(user);
+    const first = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'One' });
+    const second = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Two' });
+    await agent.delete(`/api/chat/${room.id}/message/${second.body.message.id}`);
+
+    const res = await agent.get(`/api/chat/${room.id}/message?after=${first.body.message.id}`);
+
+    expect(res.body.messages).toHaveLength(1);
+    expect(res.body.messages[0]).toMatchObject({ id: second.body.message.id, content: '', deletedAt: expect.any(String) });
+  });
+
+  it('only returns the messages of this room, whatever id after names', async () => {
+    const user = await createUser('Alice');
+    const room = await createGroupRoom(user.id);
+    const other = await createGroupRoom(user.id);
+    const agent = await loginAs(user);
+    await agent.post(`/api/chat/${other.id}/message`).send({ content: 'Elsewhere' });
+    await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Here' });
+
+    const res = await agent.get(`/api/chat/${room.id}/message?after=1`);
+
+    expect(res.body.messages.map((m: { content: string }) => m.content)).toEqual(['Here']);
+  });
+
   it('lets either member of a direct room read messages', async () => {
     const alice = await createUser('Alice');
     const bob = await createUser('Bob');
@@ -77,5 +127,19 @@ describe('GET /chat/:chatid/message', () => {
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "'before' must be a positive integer message id" });
+  });
+
+  it('rejects an invalid after cursor, and before together with after, with 400', async () => {
+    const user = await createUser('Alice');
+    const room = await createGroupRoom(user.id);
+    const agent = await loginAs(user);
+
+    const invalid = await agent.get(`/api/chat/${room.id}/message?after=abc`);
+    const both = await agent.get(`/api/chat/${room.id}/message?before=5&after=3`);
+
+    expect(invalid.status).toBe(400);
+    expect(invalid.body).toEqual({ error: "'after' must be a positive integer message id" });
+    expect(both.status).toBe(400);
+    expect(both.body).toEqual({ error: "'before' and 'after' cannot be used together" });
   });
 });

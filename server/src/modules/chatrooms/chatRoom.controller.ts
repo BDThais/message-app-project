@@ -264,11 +264,8 @@ export async function getChatRoomMessages(req: ChatRoomRequest, res: Response<Me
   }
 
   try {
-    const { messages, hasMore } = await getMessagesForChatRoom(
-      req.chatMembership.chatId,
-      validation.data.limit,
-      validation.data.before
-    );
+    const { limit, ...cursor } = validation.data;
+    const { messages, hasMore } = await getMessagesForChatRoom(req.chatMembership.chatId, limit, cursor);
 
     return res.status(200).json({ messages: messages.map(toMessage), hasMore });
   } catch (err) {

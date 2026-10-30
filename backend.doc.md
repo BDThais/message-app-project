@@ -269,7 +269,8 @@ POST /api/chat/:chatid/message
 
 GET /api/chat/:chatid/message
 
-- no group-only or admin-only guard, same as sending. `before` and `limit` are validated the same way `:chatid` and `:userid` are (positive integer, within the Postgres integer range)
+- no group-only or admin-only guard, same as sending. `before`, `after` and `limit` are validated the same way `:chatid` and `:userid` are (positive integer, within the Postgres integer range); `before` and `after` together are a `400`
+- `after` pages forward (`getMessagesForChatRoom`: `id > after`, oldest first, `limit + 1` rows, then reversed) so that a client can catch up from the newest message it holds, in order and without a hole, a page at a time. The result is still newest first, as every page is, and `hasMore` points the way the paging goes: older messages for `before`, newer for `after`. The polling of the frontend uses it to close a gap, and the socket reconnect of step 6 will need the same thing
 
 PATCH /api/chat/:chatid/message/:message_id
 

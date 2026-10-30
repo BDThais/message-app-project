@@ -201,14 +201,18 @@ export function validateEditMessageBody(body: unknown): EditMessageValidation {
 }
 
 type GetMessagesQueryValidation =
-  | { valid: true; data: { limit: number; before?: number } }
+  | { valid: true; data: { limit: number; before?: number; after?: number } }
   | { valid: false; message: string };
 
 const DEFAULT_MESSAGE_PAGE_SIZE = 50;
 const MAX_MESSAGE_PAGE_SIZE = 100;
 
 export function validateGetMessagesQuery(query: unknown): GetMessagesQueryValidation {
-  const { before, limit } = bodyFields<GetMessagesQuery>(query);
+  const { before, after, limit } = bodyFields<GetMessagesQuery>(query);
+
+  if (before !== undefined && after !== undefined) {
+    return { valid: false, message: "'before' and 'after' cannot be used together" };
+  }
 
   let parsedBefore: number | undefined;
   if (before !== undefined) {
@@ -217,6 +221,15 @@ export function validateGetMessagesQuery(query: unknown): GetMessagesQueryValida
       return { valid: false, message: "'before' must be a positive integer message id" };
     }
     parsedBefore = beforeId;
+  }
+
+  let parsedAfter: number | undefined;
+  if (after !== undefined) {
+    const afterId = parseIdParam(after);
+    if (afterId === null) {
+      return { valid: false, message: "'after' must be a positive integer message id" };
+    }
+    parsedAfter = afterId;
   }
 
   let parsedLimit = DEFAULT_MESSAGE_PAGE_SIZE;
@@ -233,7 +246,11 @@ export function validateGetMessagesQuery(query: unknown): GetMessagesQueryValida
 
   return {
     valid: true,
-    data: { limit: parsedLimit, ...(parsedBefore !== undefined ? { before: parsedBefore } : {}) },
+    data: {
+      limit: parsedLimit,
+      ...(parsedBefore !== undefined ? { before: parsedBefore } : {}),
+      ...(parsedAfter !== undefined ? { after: parsedAfter } : {}),
+    },
   };
 }
 

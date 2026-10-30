@@ -83,9 +83,13 @@ export interface MarkReadBody {
   message_id: number;
 }
 
-/** The query string of GET /api/chat/:chatid/message: a query's values are strings. */
+/**
+ * The query string of GET /api/chat/:chatid/message: a query's values are strings. `before` pages back
+ * in time and `after` pages forward from a message already held (to catch up); they cannot be combined.
+ */
 export interface GetMessagesQuery {
   before?: string;
+  after?: string;
   limit?: string;
 }
 
