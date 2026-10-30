@@ -43,6 +43,44 @@ describe('the bot the migration made', () => {
   });
 });
 
+describe('the bot the migration protected', () => {
+  // If the trigger were missing these tests would delete the bot, and every later test would fail for
+  // want of it: the row is put back, so the one broken guard is the one failure that is reported.
+  async function keepingTheBot(run: (bot: Awaited<ReturnType<typeof findBot>>) => Promise<void>) {
+    const bot = await findBot();
+    try {
+      await run(bot);
+    } finally {
+      if ((await prisma.user.count({ where: { id: bot.id } })) === 0) await prisma.user.create({ data: bot });
+    }
+  }
+
+  it('cannot be deleted, however the delete gets to the database, and its rooms stay whole', () =>
+    keepingTheBot(async (bot) => {
+      const alice = await createUser('Alice');
+      const room = await createPrivateRoom(alice.id);
+
+      await expect(prisma.user.delete({ where: { id: bot.id } })).rejects.toThrow(/cannot be deleted/);
+      await expect(prisma.user.deleteMany({ where: { isBot: true } })).rejects.toThrow(/cannot be deleted/);
+      await expect(prisma.$executeRaw`DELETE FROM users WHERE id = ${bot.id}`).rejects.toThrow(/cannot be deleted/);
+
+      expect(await prisma.user.count({ where: { id: bot.id } })).toBe(1);
+      expect(await prisma.chatMember.count({ where: { chatId: room.id } })).toBe(2);
+    }));
+
+  it('does not stop the deletion of any other user, and a statement that includes the bot deletes nobody', () =>
+    keepingTheBot(async (bot) => {
+      const alice = await createUser('Alice');
+      const bea = await createUser('Bea');
+
+      await prisma.user.delete({ where: { id: alice.id } });
+      await expect(prisma.user.deleteMany({ where: { id: { in: [bea.id, bot.id] } } })).rejects.toThrow(/cannot be deleted/);
+
+      expect(await prisma.user.count({ where: { id: alice.id } })).toBe(0);
+      expect(await prisma.user.count({ where: { id: bea.id } })).toBe(1); // the statement was refused as a whole
+    }));
+});
+
 describe('the backfill', () => {
   it('gives every account without one a private room, and leaves the rest alone', async () => {
     const bot = await findBot();

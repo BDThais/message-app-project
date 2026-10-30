@@ -100,7 +100,8 @@ describe('a new account', () => {
   it('is not created at all when the bot is missing: no account without its room', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const bot = await findBot();
-    await prisma.user.delete({ where: { id: bot.id } });
+    // The row cannot be deleted (see the backfill test), so it is made not to be found by its email.
+    await prisma.user.update({ where: { id: bot.id }, data: { email: 'moved@bot.invalid' } });
 
     try {
       const res = await request(app)
@@ -112,7 +113,7 @@ describe('a new account', () => {
       expect(await prisma.emailVerificationToken.count()).toBe(0);
       expect(await prisma.chatRoom.count()).toBe(0);
     } finally {
-      await prisma.user.create({ data: bot });
+      await prisma.user.update({ where: { id: bot.id }, data: { email: bot.email } });
     }
   });
 });
