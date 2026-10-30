@@ -21,7 +21,12 @@ export function toChatRoomSummary(room: ChatRoomSummaryData): ChatRoomSummary {
     lastMessage:
       room.lastMessage === null
         ? null
-        : { content: room.lastMessage.content, createdAt: iso(room.lastMessage.createdAt) },
+        : {
+            id: room.lastMessage.id,
+            senderId: room.lastMessage.senderId,
+            content: room.lastMessage.content,
+            createdAt: iso(room.lastMessage.createdAt),
+          },
     unreadCount: room.unreadCount,
   };
 }

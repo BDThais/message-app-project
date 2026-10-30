@@ -45,14 +45,41 @@ describe('lastMessage in the room summaries', () => {
     const bob = await createUser('Bob');
     const room = await createRoom(alice.id, bob.id);
     const agent = await loginAs(alice);
-    await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Earlier' });
+    const earlier = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Earlier' });
     const latest = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Oops' });
     await agent.delete(`/api/chat/${room.id}/message/${latest.body.message.id}`);
 
     const { inList, single } = await summariesOf(await loginAs(bob), room.id);
 
     for (const summary of [inList, single]) {
-      expect(summary.lastMessage).toMatchObject({ content: 'Earlier' });
+      expect(summary.lastMessage).toMatchObject({ id: earlier.body.message.id, content: 'Earlier' });
+    }
+  });
+
+  it.each([
+    ['group', (aliceId: number, bobId: number) => createGroupRoom(aliceId, [bobId])],
+    ['direct', (aliceId: number, bobId: number) => createDirectRoom(aliceId, bobId)],
+  ])('names the message and its sender in a %s room: the id, and null once the sender\'s account is gone', async (_type, createRoom) => {
+    const alice = await createUser('Alice');
+    const bob = await createUser('Bob');
+    const room = await createRoom(alice.id, bob.id);
+    const fromAlice = await addMessage(room.id, alice.id, 'From Alice');
+    const agent = await loginAs(bob);
+
+    const before = await summariesOf(agent, room.id);
+    const orphan = await addMessage(room.id, null, 'From nobody');
+    const after = await summariesOf(agent, room.id);
+
+    for (const summary of [before.inList, before.single]) {
+      expect(summary.lastMessage).toEqual({
+        id: fromAlice.id,
+        senderId: alice.id,
+        content: 'From Alice',
+        createdAt: expect.any(String),
+      });
+    }
+    for (const summary of [after.inList, after.single]) {
+      expect(summary.lastMessage).toMatchObject({ id: orphan.id, senderId: null, content: 'From nobody' });
     }
   });
 

@@ -221,7 +221,7 @@ POST /api/chat
 GET /api/chat
 
 - there are separate functions for retrieving direct and group rooms; both return the rooms that have `req.user` as a member, and the one for direct rooms uses the other user's name as the room's name and their avatar url (when it is not null) as the room's avatar url
-- the `lastMessage` lookup skips deleted messages: a deleted message has no content left, so showing it would give the room list a blank preview. The order follows the message that is shown, which is why deleting the newest message moves the room down the list
+- the `lastMessage` lookup skips deleted messages: a deleted message has no content left, so showing it would give the room list a blank preview. The order follows the message that is shown, which is why deleting the newest message moves the room down the list. It carries the message's `id` and `senderId` (both selected in `getDirectChatRoomsForUser` and `getGroupChatRoomsForUser`, named in `toChatRoomSummary`): without the id a client that edits or deletes a message cannot tell whether it was the room's last, and has to ask for the whole list again; without the sender it cannot show who wrote it
 - the rooms' unread counts come from one query for the whole list (`countUnreadMessages`, raw SQL because the threshold is a column of each room's own membership row; the `(chat_id, id)` index serves it), not one per room. Only the requester's own marker matters
 - a member added to a room that already has messages starts with a marker at the newest message, so the rule that their `unreadCount` is `0` is stored data, not a special case in the count (see `POST /api/chat/:chatid/member`)
 - the rooms are sorted by how recent the last message is, and the rooms with no message by the time they were created

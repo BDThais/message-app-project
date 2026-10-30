@@ -124,7 +124,7 @@ export async function createGroupChatRoom(
 export type ChatRoomSummaryData = Omit<ChatRoomSummary, 'createdAt' | 'lastMessage'> & {
   createdAt: Date;
   // The newest message that has not been deleted; null when the room has none.
-  lastMessage: { content: string; createdAt: Date } | null;
+  lastMessage: { id: number; senderId: number | null; content: string; createdAt: Date } | null;
 };
 
 /**
@@ -185,7 +185,7 @@ export async function getDirectChatRoomsForUser(
         where: { deletedAt: null },
         orderBy: { id: 'desc' },
         take: 1,
-        select: { content: true, createdAt: true },
+        select: { id: true, senderId: true, content: true, createdAt: true },
       },
     },
   });
@@ -226,7 +226,7 @@ export async function getGroupChatRoomsForUser(
         where: { deletedAt: null },
         orderBy: { id: 'desc' },
         take: 1,
-        select: { content: true, createdAt: true },
+        select: { id: true, senderId: true, content: true, createdAt: true },
       },
     },
   });

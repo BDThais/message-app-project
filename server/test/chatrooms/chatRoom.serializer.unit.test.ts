@@ -14,7 +14,7 @@ describe('toChatRoomSummary', () => {
     name: 'Project chat',
     avatarUrl: null,
     createdAt: created,
-    lastMessage: { content: 'See you', createdAt: later },
+    lastMessage: { id: 42, senderId: 5, content: 'See you', createdAt: later },
     unreadCount: 3,
   };
 
@@ -22,8 +22,14 @@ describe('toChatRoomSummary', () => {
     expect(toChatRoomSummary(room)).toEqual({
       ...room,
       createdAt: '2026-09-13T12:00:00.000Z',
-      lastMessage: { content: 'See you', createdAt: '2026-09-14T08:30:15.123Z' },
+      lastMessage: { id: 42, senderId: 5, content: 'See you', createdAt: '2026-09-14T08:30:15.123Z' },
     });
+  });
+
+  it('keeps the id and a null senderId (the sender\'s account is gone) of the last message', () => {
+    const { lastMessage } = toChatRoomSummary({ ...room, lastMessage: { id: 43, senderId: null, content: 'Bye', createdAt: later } });
+
+    expect(lastMessage).toEqual({ id: 43, senderId: null, content: 'Bye', createdAt: '2026-09-14T08:30:15.123Z' });
   });
 
   it('keeps a room without messages as lastMessage: null', () => {
@@ -50,7 +56,7 @@ describe('toChatRoomDetail and toCreatedChatRoom', () => {
     name: 'Bob',
     avatarUrl: null,
     createdAt: created,
-    lastMessage: { content: 'Hi', createdAt: later },
+    lastMessage: { id: 8, senderId: 2, content: 'Hi', createdAt: later },
     unreadCount: 1,
   };
   const member = { chatId: 7, role: 'admin' as const, lastReadMessageId: null, member: { id: 1, name: 'Alice', avatarUrl: null } };

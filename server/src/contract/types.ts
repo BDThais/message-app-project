@@ -36,8 +36,11 @@ export interface ChatRoomSummary {
   /** Direct room: the other member's avatar. */
   avatarUrl: string | null;
   createdAt: string;
-  /** The newest message that is not deleted; no id, no sender. */
-  lastMessage: { content: string; createdAt: string } | null;
+  /**
+   * The newest message that is not deleted. `senderId` is null once its sender's account is gone, as on a
+   * `Message`. The id lets a client tell whether a message it just edited or deleted was this one.
+   */
+  lastMessage: { id: number; senderId: number | null; content: string; createdAt: string } | null;
   unreadCount: number;
 }
 
