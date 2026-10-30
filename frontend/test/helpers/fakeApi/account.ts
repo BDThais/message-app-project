@@ -1,5 +1,6 @@
 import type { LogoutResponse, MeResponse, MessageResponse, UserResponse } from '@contract/responses';
 import { json, noContent } from './responses';
+import { textField } from './body';
 import type { Body, FakeServer } from './state';
 
 // Like the server (see the signup section of api.doc.md): an address is stored lower-cased and
@@ -19,8 +20,8 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
       return json({ user: state.session } satisfies MeResponse);
 
     case 'POST /api/account/login': {
-      const account = accounts.find(({ user }) => user.email === canonicalEmail(String(body?.email)));
-      if (!account || account.password !== body?.password) return json({ error: 'Invalid email or password' }, 401);
+      const account = accounts.find(({ user }) => user.email === canonicalEmail(textField(body, 'email')));
+      if (!account || account.password !== textField(body, 'password')) return json({ error: 'Invalid email or password' }, 401);
       state.session = account.user;
       return json({ user: account.user } satisfies UserResponse);
     }
@@ -31,15 +32,16 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
       return json({ user: null } satisfies LogoutResponse);
 
     case 'POST /api/account/signup': {
-      if (!body?.name || !body.email || !body.tel || !body.password) return json({ error: 'All fields are required' }, 400);
-      const problem = passwordProblem(body.password);
+      const [name, tel, password] = [textField(body, 'name'), textField(body, 'tel'), textField(body, 'password')];
+      if (!name || !textField(body, 'email') || !tel || !password) return json({ error: 'All fields are required' }, 400);
+      const problem = passwordProblem(password);
       if (problem) return json({ error: problem }, 400);
-      const email = canonicalEmail(body.email);
+      const email = canonicalEmail(textField(body, 'email'));
       if (accounts.some(({ user }) => user.email === email)) return json({ error: 'Email already exists' }, 409);
       const id = Math.max(...accounts.map(({ user }) => user.id)) + 1;
       accounts.push({
-        user: { id, name: body.name, email, tel: body.tel, avatarUrl: null, emailVerified: false },
-        password: body.password,
+        user: { id, name, email, tel, avatarUrl: null, emailVerified: false },
+        password,
       });
       return json({ message: 'Account created successfully' } satisfies MessageResponse, 201);
     }
@@ -53,10 +55,10 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
     }
 
     case 'POST /api/account/email/verify': {
-      const id = state.verificationTokens.get(String(body?.token));
+      const id = state.verificationTokens.get(textField(body, 'token'));
       const account = accounts.find(({ user }) => user.id === id);
       if (!account) return json({ error: 'This verification link is invalid or has expired' }, 400);
-      state.verificationTokens.delete(String(body?.token)); // a link works once
+      state.verificationTokens.delete(textField(body, 'token')); // a link works once
       account.user.emailVerified = true;
       return noContent();
     }
@@ -66,13 +68,13 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
       return json({ message: 'If an account exists for that email, a reset link is on its way' } satisfies MessageResponse, 202);
 
     case 'POST /api/account/password/reset': {
-      const problem = passwordProblem(String(body?.new_password));
+      const problem = passwordProblem(textField(body, 'new_password'));
       if (problem) return json({ error: problem }, 400);
-      const id = state.resetTokens.get(String(body?.token));
+      const id = state.resetTokens.get(textField(body, 'token'));
       const account = accounts.find(({ user }) => user.id === id);
       if (!account) return json({ error: 'This reset link is invalid or has expired' }, 400);
-      state.resetTokens.delete(String(body?.token));
-      account.password = String(body?.new_password);
+      state.resetTokens.delete(textField(body, 'token'));
+      account.password = textField(body, 'new_password');
       if (state.sessionUserId === account.user.id) state.sessionUserId = null; // every session of the account goes
       return noContent();
     }

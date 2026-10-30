@@ -153,6 +153,7 @@ frontend/
 │   │   │   ├── state.ts          // the fake server's state, shared by the features; John, Bea and Carl, the passwords, the rooms and messages
 │   │   │   ├── account.ts        // the account endpoints
 │   │   │   ├── chats.ts          // the chat endpoints: rooms, messages (page, send, edit, delete), the read marker
+│   │   │   ├── body.ts           // textField, numberField: read the request body (its values are `unknown`, as on the wire)
 │   │   │   └── responses.ts      // json(), noContent()
 │   │   └── renderApp.tsx         // the real <App> in memory, optionally in StrictMode
 │   ├── components/ui/

@@ -5,6 +5,7 @@ import type {
   MessageListResponse,
 } from '@contract/responses';
 import type { ChatRoomSummary } from '@contract/types';
+import { numberField, textField } from './body';
 import { json, noContent } from './responses';
 import type { Body, FakeRoom, FakeServer } from './state';
 
@@ -56,7 +57,7 @@ export function chatEndpoints(request: string, body: Body, state: FakeServer): R
   const inRoom = state.messages.filter((message) => message.chatId === chatId);
 
   if (part === 'read' && method === 'PUT') {
-    const target = inRoom.find(({ id }) => id === Number(body?.message_id));
+    const target = inRoom.find(({ id }) => id === numberField(body, 'message_id'));
     if (!target) return json({ error: 'Message not found in this chat room' }, 404);
     room.lastReadMessageId = Math.max(room.lastReadMessageId ?? 0, target.id); // the marker only moves forward
     return json({ lastReadMessageId: room.lastReadMessageId } satisfies MarkReadResponse);
@@ -82,7 +83,7 @@ export function chatEndpoints(request: string, body: Body, state: FakeServer): R
       return json({ messages: older.slice(0, limit), hasMore: older.length > limit } satisfies MessageListResponse);
     }
     if (method === 'POST') {
-      const content = String(body?.content ?? '').trim();
+      const content = textField(body, 'content').trim();
       if (content === '') return json({ error: 'content must be a non-empty string' }, 400);
       const { id, name, avatarUrl } = state.session;
       const message = state.addMessage({ chatId, sender: { id, name, avatarUrl }, content });
@@ -95,7 +96,7 @@ export function chatEndpoints(request: string, body: Body, state: FakeServer): R
   if (!message || message.deletedAt !== null) return json({ error: 'Message not found in this chat room' }, 404);
   if (method === 'PATCH') {
     if (message.senderId !== state.session.id) return json({ error: 'You can only edit your own messages' }, 403);
-    const content = String(body?.content ?? '').trim();
+    const content = textField(body, 'content').trim();
     if (content === '') return json({ error: 'content must be a non-empty string' }, 400);
     if (content !== message.content) {
       message.content = content;

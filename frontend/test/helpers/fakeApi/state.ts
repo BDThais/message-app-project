@@ -33,7 +33,7 @@ export interface Account {
 }
 
 /** The JSON body of a request, as the fake reads it (`undefined` when the request had none). */
-export type Body = Record<string, string> | undefined;
+export type Body = Record<string, unknown> | undefined;
 
 /** One request the fake saw: `"POST /api/account/login"` and its parsed JSON body (`undefined` when it had none). */
 export interface Call {
