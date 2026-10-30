@@ -56,6 +56,16 @@ export function isForeignKeyConstraintError(err: unknown): boolean {
 }
 
 /**
+ * The key of the advisory lock that serializes the creation of a direct room between two users. The
+ * lower id goes in the high half, so (a, b) and (b, a) are one key, and two ids of up to 31 bits
+ * fit a bigint without sharing a key with any other pair.
+ */
+export function directRoomLockKey(userA: number, userB: number): bigint {
+  const [low, high] = userA < userB ? [userA, userB] : [userB, userA];
+  return (BigInt(low) << 32n) | BigInt(high);
+}
+
+/**
  * Both members of a direct room are admins: it has no name or avatar to protect, and no
  * add/remove-member action applies to a 1:1 room.
  */
@@ -64,6 +74,14 @@ export async function createDirectChatRoom(
   requesterId: number,
   otherUserId: number
 ): Promise<{ room: ChatRoomWithMembers; created: boolean }> {
+  // Nothing in the schema says that a pair of users has one direct room, so the look-up below and the
+  // insert after it have to be one step: two simultaneous requests for the same pair would both find
+  // nothing and both create a room. The lock lasts until this transaction ends; the second request
+  // waits here, then finds the first one's room. An advisory lock rather than one on the user rows:
+  // those are taken by account deletion and the mailed-link flows, and a lock on the pair cannot
+  // take part in a cycle with them.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${directRoomLockKey(requesterId, otherUserId)})`;
+
   // Reuse an existing direct room between these two users instead of
   // creating a duplicate every time someone hits "message" on a friend's
   // profile.
