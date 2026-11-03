@@ -97,6 +97,18 @@ describe('the room list', () => {
     expect(screen.getByText('Group chat')).toBeTruthy();
   });
 
+  it('titles the private room itself, in the list and above the conversation', async () => {
+    const state = stubApi({ signedIn: true });
+    state.addRoom({ id: 1, name: null, type: 'private' });
+    state.addMessage({ chatId: 1, sender: john, content: 'Buy milk' });
+    renderApp('/chat/1');
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'My Documents' })).toBeTruthy();
+    const link = await within(await screen.findByRole('navigation', { name: 'Chats' })).findByRole('link');
+    expect(textOf(link)).toContain('My Documents');
+    expect(textOf(link)).toContain('You: Buy milk');
+  });
+
   it('stays mounted when the person goes from one room to another', async () => {
     const state = stubApi({ signedIn: true });
     state.addRoom({ id: 1, name: 'Bea' });

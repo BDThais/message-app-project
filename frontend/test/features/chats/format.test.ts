@@ -13,6 +13,10 @@ describe('roomTitle', () => {
     expect(roomTitle({ type: 'group', name: 'Project chat' })).toBe('Project chat');
     expect(roomTitle({ type: 'group', name: null })).toBe('Group chat');
   });
+
+  it('is "My Documents" for the private room, which the server sends with no name', () => {
+    expect(roomTitle({ type: 'private', name: null })).toBe('My Documents');
+  });
 });
 
 describe('formatListTime', () => {

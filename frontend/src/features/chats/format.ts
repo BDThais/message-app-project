@@ -1,7 +1,13 @@
 import type { ChatRoomSummary } from './types';
 
-/** A direct room's name is the other member's; it is null once that account is gone. A group's may be null too. */
+/**
+ * A direct room's name is the other member's; it is null once that account is gone. A group's may be null too.
+ * The private room has no name at all: its title is this app's own.
+ */
 export function roomTitle(room: Pick<ChatRoomSummary, 'type' | 'name'>): string {
+  if (room.type === 'private') {
+    return 'My Documents';
+  }
   return room.name ?? (room.type === 'direct' ? 'Deleted user' : 'Group chat');
 }
 
