@@ -2,7 +2,7 @@ import { addChatRoomMembers, memberResponseArgs } from './chatMember.service';
 import { findNonFriendIds } from '../friends/friend.service';
 import { prisma } from '../../lib/prisma';
 import { Prisma, ChatRoomType, ChatMemberRole } from '../../generated/prisma/client';
-import type { ChatRoomSummary, RoomType } from '../../contract/types';
+import type { ChatRoomSummary, CreatableRoomType, RoomType } from '../../contract/types';
 
 // The room's own columns and its members. `emptiedAt` belongs to the cleanup job and stays out of the response.
 const roomWithMembersArgs = {
@@ -24,7 +24,7 @@ export type CreateChatRoomResult =
  * of an existing room, so a room between two former friends is not handed out again.
  */
 export async function createChatRoom(
-  type: ChatRoomType,
+  type: CreatableRoomType,
   requesterId: number,
   memberIds: number[],
   name: string | undefined,
@@ -228,14 +228,17 @@ export async function getDirectChatRoomsForUser(
   });
 }
  
-/** Group rooms of a user, or just one with `chatId`, with the room's own name and avatarUrl. */
-export async function getGroupChatRoomsForUser(
+/**
+ * Group and private rooms of a user, or just one with `chatId`, with the room's own name and avatarUrl
+ * (a private room has neither: both are null, and the client shows its own title).
+ */
+export async function getGroupAndPrivateChatRoomsForUser(
   userId: number,
   chatId?: number
 ): Promise<ChatRoomSummaryData[]> {
   const rooms = await prisma.chatRoom.findMany({
     where: {
-      type: 'group',
+      type: { in: [ChatRoomType.group, ChatRoomType.private] },
       ...(chatId !== undefined ? { id: chatId } : {}),
       members: { some: { memberId: userId } },
     },
@@ -252,7 +255,7 @@ export async function getGroupChatRoomsForUser(
  
   return rooms.map((room) => ({
     id: room.id,
-    type: 'group',
+    type: room.type,
     name: room.name,
     avatarUrl: room.avatarUrl,
     createdAt: room.createdAt,
@@ -295,6 +298,6 @@ export async function getChatRoomSummaryForUser(
   const [room] =
     roomType === 'direct'
       ? await getDirectChatRoomsForUser(userId, chatId)
-      : await getGroupChatRoomsForUser(userId, chatId);
+      : await getGroupAndPrivateChatRoomsForUser(userId, chatId);
   return room;
 }

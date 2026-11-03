@@ -5,7 +5,7 @@
 // Every body and query the API reads is here, and its validator reads it through these types (see
 // `bodyFields` in lib/validation.ts).
 
-import type { Role, RoomType } from './types';
+import type { CreatableRoomType, Role } from './types';
 
 export interface SignupBody {
   name: string;
@@ -52,7 +52,7 @@ export interface ResetPasswordBody {
  * `name` and `avatar_url` are for group rooms only.
  */
 export interface CreateChatRoomBody {
-  type: RoomType;
+  type: CreatableRoomType;
   member_ids?: number[];
   name?: string;
   avatar_url?: string;

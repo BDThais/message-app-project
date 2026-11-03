@@ -25,9 +25,9 @@ export async function createUser(name: string) {
   });
 }
 
-/** How many accounts there are: the bot (see privateRoom.service.ts) is always there and is not one. */
+/** How many accounts there are. */
 export function countUsers() {
-  return prisma.user.count({ where: { isBot: false } });
+  return prisma.user.count();
 }
 
 /**

@@ -41,8 +41,7 @@ beforeEach(async () => {
     prisma.emailVerificationToken.deleteMany(),
     prisma.passwordResetToken.deleteMany(),
     prisma.chatRoom.deleteMany(),
-    // The bot (see privateRoom.service.ts) is reference data that the migration created: it stays.
-    prisma.user.deleteMany({ where: { isBot: false } }),
+    prisma.user.deleteMany(),
   ]);
 });
 

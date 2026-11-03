@@ -8,7 +8,11 @@
 
 export type Role = 'admin' | 'member';
 
-export type RoomType = 'direct' | 'group';
+/** `private` is an account's own room: its owner is the only member, and it has no name or avatar. */
+export type RoomType = 'direct' | 'group' | 'private';
+
+/** The types POST /api/chat can make. The private room is made with the account, never on request. */
+export type CreatableRoomType = Exclude<RoomType, 'private'>;
 
 /** Your own account: login, GET /api/account/me, PATCH /api/account/me. */
 export interface User {
@@ -31,9 +35,12 @@ export interface PublicUser {
 export interface ChatRoomSummary {
   id: number;
   type: RoomType;
-  /** Direct room: the other member's name (null once they are gone). Group room: its own name, may be null. */
+  /**
+   * Direct room: the other member's name (null once they are gone). Group room: its own name, may be null.
+   * Private room: always null; the client shows its own title.
+   */
   name: string | null;
-  /** Direct room: the other member's avatar. */
+  /** Direct room: the other member's avatar. Private room: always null. */
   avatarUrl: string | null;
   createdAt: string;
   /**

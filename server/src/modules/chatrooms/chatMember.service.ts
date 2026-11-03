@@ -1,7 +1,6 @@
 import { ChatMemberRole, ChatRoomType, Prisma } from '../../generated/prisma/client';
 import { prisma } from '../../lib/prisma';
 import { findNonFriendIds } from '../friends/friend.service';
-import { isPrivateChatRoom } from './privateRoom.service';
 
 /**
  * How a member entry leaves the API: the membership plus the user as `member`, without a separate
@@ -106,7 +105,7 @@ export type RemoveChatMemberResult =
   | 'not_a_member'
   // Refused: the target is the room's only admin and other members remain.
   | 'only_admin'
-  // Refused: nobody can leave a private room (the user's side of it would be gone, and the bot stays).
+  // Refused: nobody can leave their private room (it would be a room that nobody can reach).
   | 'private_room';
 
 /**
@@ -139,7 +138,7 @@ export async function removeMemberFromChatRoom(
       return 'not_a_member';
     }
 
-    if (roomType === ChatRoomType.direct && (await isPrivateChatRoom(tx, chatId))) {
+    if (roomType === ChatRoomType.private) {
       return 'private_room';
     }
 
@@ -230,15 +229,14 @@ export async function changeMemberRoleInChatRoom(
 }
 
 /**
- * Lists everyone in a room except the bot (see privateRoom.service.ts), admins first, then by name.
- * The sort is done here, not in the query, so
+ * Lists everyone in a room, admins first, then by name. The sort is done here, not in the query, so
  * the order does not depend on the database's collation (with a "C" collation a plain `ORDER BY name`
  * puts "Zed" before "alice"). Names that differ only by case compare equal, and the query's order by
  * user id decides between them (Array.prototype.sort is stable).
  */
 export async function getMembersForChatRoom(chatId: number): Promise<ChatMemberWithUser[]> {
   const members = await prisma.chatMember.findMany({
-    where: { chatId, member: { isBot: false } },
+    where: { chatId },
     ...memberResponseArgs,
     orderBy: { memberId: 'asc' },
   });

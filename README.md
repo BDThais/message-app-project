@@ -14,7 +14,7 @@ The server's REST API is in place and the frontend is the current milestone. Imp
 - Password reset by email: a signed-out user asks for a link and sets a new password with it; only verified addresses get a link
 - Email addresses are not case-sensitive: they are stored lower-cased, so `John@x.com` and `john@x.com` are one account at signup, login and password reset
 - Protected route middleware for chat access
-- Direct and group chat room creation, listing, update, and deletion
+- Direct and group chat room creation, listing, update, and deletion; every account also has a private chat room ("My Documents") with only its owner in it
 - Chat membership and role checks with admin-only protections
 - Room summaries with the latest message and the unread count
 - Messages: send, list with pagination, edit, delete, and a read marker per member
@@ -110,7 +110,7 @@ The endpoints marked public need no session; every other endpoint answers `401` 
 
 The Prisma schema includes the core relational models needed for a messaging app:
 
-- User (`is_bot` marks the hidden bot that is the other member of every account's private chat room)
+- User
 - Session
 - EmailVerificationToken
 - PasswordResetToken

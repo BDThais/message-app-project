@@ -40,6 +40,7 @@ Every endpoint is checked by the compiler on the server: the controllers answer 
 
 - Nobody edits or deletes another member's message, admins included: there is no moderation override.
 - A direct room has exactly two members, both admins, and no name or avatar of its own. Its members cannot add or remove anyone, rename it or delete it; each can only leave it. Anything else answers `403`.
+- A private room (every account has one, see "Private chat room" under `GET /api/chat`) has exactly one member, its owner, who is its admin, and no name or avatar of its own. The actions for group rooms only (rename, delete, add, remove, promote or demote) answer `403 Not available for your private chat room`, and its owner cannot leave it.
 
 ## Account endpoints
 
@@ -213,7 +214,7 @@ Creates a room, or reuses the existing direct room between the two users.
 { "type": "group", "member_ids": [2, 3], "name": "Project chat", "avatar_url": "https://example.com/project-chat.png" }
 ```
 
-- `type` is `"direct"` or `"group"` (`400 type must be "direct" or "group"`).
+- `type` is `"direct"` or `"group"` (`400 type must be "direct" or "group"`). A private room is made with the account, never on request, so `"private"` is a `400` too.
 - `member_ids` is an array of user ids (`400 member_ids must be an array of user IDs`); duplicates and the requester's own id are dropped.
 - A direct room needs exactly one other id (`400 a direct chat room requires exactly one other member`) and cannot have a name or an avatar (`400 direct chat rooms cannot have a name or avatar`).
 - A group room may omit `member_ids` or send an empty array (the creator is its only member). The requester is always added as an admin, everyone else as a member. `name` and `avatar_url` are optional: `name` is a non-empty string of at most 100 characters after trimming (it is stored trimmed; `400 name must be a non-empty string if provided`, `400 name must be 100 characters or fewer`), `avatar_url` an `http:` or `https:` URL (`400 avatar_url must be a string if provided`, `400 avatar_url must be a valid URL`). These are the same rules as `PATCH /api/chat/:chatid`.
@@ -222,11 +223,11 @@ Creates a room, or reuses the existing direct room between the two users.
 
 ### GET /api/chat
 
-The rooms the requester is a member of, direct and group alike.
+The rooms the requester is a member of: direct, group and private.
 
 - Response `200`: `{ "chatRooms": ChatRoomSummary[] }`, sorted by the time of the last message, newest first; a room without messages sorts by its creation time. No pagination.
 - A direct room's `name` and `avatarUrl` are the other member's name and avatar (`null` when they are gone or have none).
-- Private chat room: every account has one, a direct room that is theirs alone, shown with the `name` `My Documents` and an `avatarUrl` of `null`. It exists from signup, so the list of a new account is never empty. The other member is a hidden bot account that never writes (so its `unreadCount` is `0`); it is not in `GET /api/chat/:chatid/member`, is nobody's friend and cannot be found, logged into or added anywhere. Nothing in the response marks this room: a client recognises it by that name only.
+- Private chat room: every account has one, a room of `type` `"private"` that is theirs alone: its owner is its only member, and its `name` and `avatarUrl` are `null`, so a client shows a title of its own (this app's frontend shows "My Documents"). It exists from signup, so the list of a new account is never empty. Nobody else writes in it, so its `unreadCount` is `0` and its `lastMessage` is the owner's last message. Its `type` is how a client tells it from the other rooms: no other room has that type, and `POST /api/chat` cannot make one.
 - `lastMessage` is the newest message that has not been deleted, or `null`: `{ id, senderId, content, createdAt }`. `id` and `senderId` are the message's own (`senderId` is `null` once its sender's account is gone, as on a `Message`), so a client can tell whether a message it edited or deleted was the room's last one, and whose it was (for a "You:" prefix). It never has `content: ""`: a deleted message is skipped and the one before it is shown. So deleting the newest message also moves the room down the list, and editing it changes the preview.
 - `unreadCount` is the number of messages in the room above the requester's own `lastReadMessageId` (every message counts while it is still `null`), not sent by the requester and not deleted. A message whose author deleted their account still counts. It is `0` when nothing is unread, never absent. A member added to a room that already has messages starts at `0`: what was sent before they joined counts as read.
 
@@ -245,7 +246,7 @@ Renames a group room and/or changes its avatar. Admin only, group rooms only.
 - At least one of `name` and `avatar_url` (`400 At least either Name or Avatar must be provided`).
 - `name` is a non-empty string of at most 100 characters after trimming (`400 'name' must be a non-empty string`, `400 'name' must be 100 characters or fewer`); `avatar_url` an `http:` or `https:` URL, or `null` to clear it (`400 'avatar_url' must be a string or null`, `400 'avatar_url' must be a valid URL`).
 - Response `200`: `{ "chatRoom": ChatRoomDetail }`, the room as `GET /api/chat/:chatid` shows it, so it replaces the cached room. `404 Chat room not found` if the room was deleted while the request ran.
-- `403 Admin role required for this action`, `403 Not available for direct chat rooms`.
+- `403 Admin role required for this action`, `403 Not available for direct chat rooms`, `403 Not available for your private chat room`.
 
 ### DELETE /api/chat/:chatid
 
@@ -256,9 +257,9 @@ Deletes the room together with its messages and memberships. Admin only, group r
 
 ### GET /api/chat/:chatid/member
 
-The members of the room. Any member, direct or group.
+The members of the room. Any member, in any kind of room.
 
-- Response `200`: `{ "members": Member[] }`: admins first, then by name (case and accents ignored: `bea` comes before `Carl`). Every member is returned; there is no pagination. The bot of a private chat room is not listed, so its owner is the only member there.
+- Response `200`: `{ "members": Member[] }`: admins first, then by name (case and accents ignored: `bea` comes before `Carl`). Every member is returned; there is no pagination. In a private room its owner is the only member.
 
 ### POST /api/chat/:chatid/member
 
@@ -272,7 +273,7 @@ Adds members. Admin only, group rooms only.
 - New members get the role `member`. Users who are already members (the requester included) are skipped and left unchanged, so an existing admin is never demoted; their ids are returned in `alreadyMemberIds`.
 - A new member starts with everything already in the room counted as read: `lastReadMessageId` is the room's newest message that is not deleted (`null` when it has none), so `unreadCount` is `0`. A user who left and is added again starts fresh.
 - Response `201` when at least one member was added, `200` when everyone was already a member: `{ "addedMembers": Member[], "alreadyMemberIds": number[] }`.
-- `403 Admin role required for this action`, `403 Not available for direct chat rooms`, `403 Only your friends can be added to a chat room` (nobody from that request is added).
+- `403 Admin role required for this action`, `403 Not available for direct chat rooms`, `403 Not available for your private chat room`, `403 Only your friends can be added to a chat room` (nobody from that request is added).
 
 ### DELETE /api/chat/:chatid/member/:userid
 
@@ -282,7 +283,7 @@ Removes a member, or leaves the room when `:userid` is the requester's own id.
 - Response `204`.
 - `400 Invalid user id`.
 - `403 Admin role required for this action` (a non-admin removing someone else), `403 You can only remove yourself from a direct chat room`, `403 You cannot leave your private chat room`.
-- `404 Member not found in this chat room` when the target is not a member.
+- `404 Member not found in this chat room` when the target is not a member (in a private room, anyone but its owner).
 - `409 The only admin cannot be removed while other members remain; promote another member to admin first`. This also stops a group's only admin from leaving while others remain. Direct rooms are exempt (both members are admins).
 - When the last member leaves, the room is no longer reachable through the API and is deleted later together with its messages.
 
@@ -296,12 +297,12 @@ Changes a member's role. Admin only, group rooms only.
 
 - `role` is `"admin"` or `"member"`; setting the role a member already holds is allowed and confirms it.
 - Response `200`: `{ "member": Member }`.
-- `400` for a bad `:userid` or `role`; `403 Admin role required for this action`, `403 Not available for direct chat rooms`; `404 Member not found in this chat room`.
+- `400` for a bad `:userid` or `role`; `403 Admin role required for this action`, `403 Not available for direct chat rooms`, `403 Not available for your private chat room`; `404 Member not found in this chat room`.
 - `409 The only admin cannot be demoted while other members remain; promote another member to admin first`.
 
 ### POST /api/chat/:chatid/message
 
-Sends a message. Any member, direct or group.
+Sends a message. Any member, in any kind of room.
 
 ```json
 { "content": "Hello!" }
@@ -313,7 +314,7 @@ Sends a message. Any member, direct or group.
 
 ### GET /api/chat/:chatid/message
 
-The messages of the room, newest first. Any member, direct or group.
+The messages of the room, newest first. Any member, in any kind of room.
 
 - Query: `before` (optional, a message id: only messages with a smaller id are returned, so for the next page back in time pass the id of the oldest message already loaded), `after` (optional, a message id: the other direction, see below) and `limit` (optional, 1 to 100, default 50). `400` when one is invalid, and when `before` and `after` are both given.
 - Response `200`: `{ "messages": Message[], "hasMore": boolean }`, always newest first. Without `after`, `hasMore` is `true` when older messages remain beyond the page.
@@ -322,7 +323,7 @@ The messages of the room, newest first. Any member, direct or group.
 
 ### PATCH /api/chat/:chatid/message/:message_id
 
-Edits a message. Only its sender can, in direct and group rooms alike.
+Edits a message. Only its sender can, in every kind of room.
 
 ```json
 { "content": "Hello, world!" }

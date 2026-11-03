@@ -17,7 +17,7 @@ import {
 } from './chatMember.service';
 import {
   createChatRoom as createChatRoomService, updateChatRoomById,
-  getDirectChatRoomsForUser, getGroupChatRoomsForUser, getChatRoomSummaryForUser, activityTimestamp,
+  getDirectChatRoomsForUser, getGroupAndPrivateChatRoomsForUser, getChatRoomSummaryForUser, activityTimestamp,
   deleteChatRoomById, isForeignKeyConstraintError
 } from './chatRoom.service';
 import { createMessage, getMessagesForChatRoom, deleteMessage, editMessage } from './message.service';
@@ -68,12 +68,12 @@ export async function getChatRooms(req: AuthenticatedRequest, res: Response<Chat
   try {
     const userId = req.user.id;
 
-    const [directRooms, groupRooms] = await Promise.all([
+    const [directRooms, groupAndPrivateRooms] = await Promise.all([
       getDirectChatRoomsForUser(userId),
-      getGroupChatRoomsForUser(userId),
+      getGroupAndPrivateChatRoomsForUser(userId),
     ]);
 
-    const chatRooms = [...directRooms, ...groupRooms].sort(
+    const chatRooms = [...directRooms, ...groupAndPrivateRooms].sort(
       (a, b) => activityTimestamp(b) - activityTimestamp(a)
     );
 

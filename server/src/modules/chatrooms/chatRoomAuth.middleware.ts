@@ -87,11 +87,15 @@ export function requireChatAdmin(req: Request, res: Response<ApiErrorBody>, next
 }
 
 /**
- * Direct rooms make both members admins by design, so requireChatAdmin alone does not keep them out
- * of an action that is for group rooms only: this does.
+ * Direct rooms make both members admins by design, and so does the private room for its only member,
+ * so requireChatAdmin alone does not keep them out of an action that is for group rooms only: this does.
  */
 export function requireGroupRoom(req: Request, res: Response<ApiErrorBody>, next: NextFunction) {
-  if (req.chatMembership?.roomType !== 'group') {
+  const roomType = req.chatMembership?.roomType;
+  if (roomType === 'private') {
+    return res.status(403).json({ error: 'Not available for your private chat room' });
+  }
+  if (roomType !== 'group') {
     return res.status(403).json({ error: 'Not available for direct chat rooms' });
   }
   next();

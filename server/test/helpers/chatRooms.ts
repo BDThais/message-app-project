@@ -1,5 +1,4 @@
 import { prisma } from '../../src/lib/prisma';
-import { PRIVATE_ROOM_BOT_EMAIL } from '../../src/modules/chatrooms/privateRoom.service';
 
 /** A group room with `adminId` as its admin and `memberIds` as regular members. */
 export async function createGroupRoom(adminId: number, memberIds: number[] = [], name = 'Project chat') {
@@ -49,12 +48,9 @@ export async function memberIdsOf(chatId: number) {
   return rows.map((row) => row.memberId);
 }
 
-/** The bot that is the other member of every private room. The migration made it, and the test setup keeps it. */
-export function findBot() {
-  return prisma.user.findUniqueOrThrow({ where: { email: PRIVATE_ROOM_BOT_EMAIL } });
-}
-
 /** What signup gives a new account: its private room. For users made with createUser, which skips it. */
 export async function createPrivateRoom(userId: number) {
-  return createDirectRoom(userId, (await findBot()).id);
+  return prisma.chatRoom.create({
+    data: { type: 'private', members: { create: [{ memberId: userId, role: 'admin' }] } },
+  });
 }

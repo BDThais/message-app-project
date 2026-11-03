@@ -11,9 +11,9 @@ export function findExistingUser(email: string, tel: string) {
 	});
 }
 
-/** The account with this address; the bot's address (a bot cannot log in or reset a password) matches nothing. */
+/** The account with this address, or null. */
 export function findUserByEmail(email: string) {
-	return prisma.user.findUnique({ where: { email, isBot: false } });
+	return prisma.user.findUnique({ where: { email } });
 }
 
 /**
@@ -139,8 +139,9 @@ export type DeleteAccountResult =
  * entries and friend requests (sent and received) are deleted with the user,
  * while their messages stay in the room with `senderId` set to null.
  *
- * The user's private room goes with them: the bot would stay in it for good, and nobody else can
- * ever be in it. It is deleted after the user, so a refused deletion (below) leaves it alone.
+ * The user's private room goes with them, at once and not after the retention period of the cleanup
+ * job: nobody else can ever be in it, and what is in it is the user's own. It is deleted after the
+ * user, so a refused deletion (below) leaves it alone.
  *
  * Business rule enforced here: a group room that still has members must
  * always keep at least one admin (see removeMemberFromChatRoom), so the

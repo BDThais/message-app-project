@@ -5,7 +5,7 @@ import type {
   AddMembersBody, ChangeMemberRoleBody, CreateChatRoomBody, GetMessagesQuery, MarkReadBody,
   SendMessageBody, UpdateChatRoomBody
 } from '../../contract/requests';
-import type { RoomType } from '../../contract/types';
+import type { CreatableRoomType } from '../../contract/types';
 
 // Longest group name, counted after trimming: the same limit when a room is created and when it is renamed.
 const MAX_CHAT_NAME_LENGTH = 100;
@@ -13,7 +13,7 @@ const MAX_CHAT_NAME_LENGTH = 100;
 type ValidationResult =
     | {
         valid: true;
-        type: RoomType;
+        type: CreatableRoomType;
         memberIds: number[];
         name?: string;
         avatarUrl?: string;

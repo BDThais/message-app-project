@@ -11,6 +11,9 @@ datasource db {
 enum ChatRoomType {
   direct
   group
+  // An account's own room (see "Private chat room" in backend.doc.md): its owner is the only member, and
+  // it has no name or avatar. Made with the account, never through POST /api/chat.
+  private
 }
 
 enum ChatMemberRole {
@@ -28,9 +31,6 @@ model User {
   tel          String   @unique
   avatarUrl    String?  @map("avatar_url")
   emailVerifiedAt DateTime? @map("email_verified_at")
-  // The hidden account that is the other member of every user's private chat room (see "Private chat room" in
-  // backend.doc.md). It cannot log in and is skipped by every lookup of a user by email or phone number.
-  isBot        Boolean  @default(false) @map("is_bot")
 
   sessions               Session[]
   emailVerificationToken EmailVerificationToken?
