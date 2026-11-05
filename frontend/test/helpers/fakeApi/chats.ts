@@ -1,16 +1,17 @@
 import type {
   ChatMessageResponse,
   ChatRoomListResponse,
+  CreatedChatRoomResponse,
   MarkReadResponse,
   MessageListResponse,
 } from '@contract/responses';
-import type { ChatRoomSummary } from '@contract/types';
+import type { ChatRoomSummary, CreatedChatRoom } from '@contract/types';
 import { numberField, textField } from './body';
 import { json, noContent } from './responses';
-import type { Body, FakeRoom, FakeServer } from './state';
+import { personById, type Body, type FakeRoom, type FakeServer } from './state';
 
 // /api/chat, /api/chat/:id/message, /api/chat/:id/message/:messageId and /api/chat/:id/read, with the
-// query string kept apart.
+// query string kept apart. Only a direct room can be created.
 const ROUTE = /^(GET|POST|PATCH|PUT|DELETE) \/api\/chat(?:\/(\d+)(?:\/(message|read)(?:\/(\d+))?)?)?(?:\?(.*))?$/;
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -35,6 +36,28 @@ function summaryOf(room: FakeRoom, state: FakeServer): ChatRoomSummary {
   };
 }
 
+/** POST /api/chat for a direct room: the other user has to be a friend, and the room between the two is reused. */
+function createDirectRoom(body: Body, state: FakeServer): Response {
+  const memberIds = body?.member_ids;
+  const other = Array.isArray(memberIds) && memberIds.length === 1 ? personById(Number(memberIds[0])) : undefined;
+  if (body?.type !== 'direct' || !other) return json({ error: 'a direct chat room requires exactly one other member' }, 400);
+  // Before the lookup of an existing room, as the server does: two people who are no longer friends get no room back.
+  if (!state.friendIds.includes(other.id)) return json({ error: 'Only your friends can be added to a chat room' }, 403);
+
+  const existing = state.rooms.find((room) => room.type === 'direct' && room.memberId === other.id);
+  const room = existing ?? state.addRoom({ id: Math.max(0, ...state.rooms.map(({ id }) => id)) + 1, name: other.name, memberId: other.id });
+  const me = state.session!;
+  const created: CreatedChatRoom = {
+    ...summaryOf(room, state),
+    role: 'admin',
+    members: [
+      { chatId: room.id, role: 'admin', lastReadMessageId: room.lastReadMessageId, member: { id: me.id, name: me.name, avatarUrl: me.avatarUrl } },
+      { chatId: room.id, role: 'admin', lastReadMessageId: null, member: { id: other.id, name: other.name, avatarUrl: other.avatarUrl } },
+    ],
+  };
+  return json({ chatRoom: created } satisfies CreatedChatRoomResponse, existing ? 200 : 201);
+}
+
 /** The chat endpoints; the rules follow api.doc.md. Returns `undefined` for a request that is not one of them. */
 export function chatEndpoints(request: string, body: Body, state: FakeServer): Response | undefined {
   const match = ROUTE.exec(request);
@@ -43,6 +66,7 @@ export function chatEndpoints(request: string, body: Body, state: FakeServer): R
   if (!state.session) return json({ error: 'Unauthorized Access' }, 401);
 
   if (chatIdText === undefined) {
+    if (method === 'POST') return createDirectRoom(body, state);
     if (method !== 'GET') return undefined;
     const time = (summary: ChatRoomSummary) => summary.lastMessage?.createdAt ?? summary.createdAt;
     const chatRooms = state.rooms

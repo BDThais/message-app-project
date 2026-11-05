@@ -28,6 +28,8 @@ describe('the page frame', () => {
     ['/chat', true],
     ['/chat/1', true],
     ['/chat/not-a-number', true],
+    ['/friends', true],
+    ['/friends', false],
     ['/no-such-page', false],
   ])('%s has exactly one main landmark (signed in: %s)', async (path, signedIn) => {
     stubApi({ signedIn });

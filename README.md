@@ -1,6 +1,6 @@
 ﻿# Message App
 
-A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a React frontend (account and chat screens done, friends and settings next). The REST API is in place (accounts with email verification and password reset, chat rooms, messages and the friend flows), while real-time messaging and the remaining frontend screens remain next on the roadmap.
+A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a React frontend (account, chat and friends screens done, settings next). The REST API is in place (accounts with email verification and password reset, chat rooms, messages and the friend flows), while real-time messaging and the remaining frontend screens remain next on the roadmap.
 
 ## Project Status
 
@@ -24,11 +24,12 @@ The server's REST API is in place and the frontend is the current milestone. Imp
 - Vitest integration tests for the account, chat-room, message and friend endpoints
 - React frontend scaffold in `frontend/`: Vite dev server that proxies `/api` to the server, route guards for signed-in and signed-out pages, and the account screens: sign up, sign in and out, forgot and reset password, email verification (the plan and the next steps are in `frontend.doc.md`)
 - Chat screens in the frontend: the room list, the conversation with sending, editing and deleting messages, older messages and a read marker, refreshed by polling until Socket.io arrives
+- Friends screen in the frontend: search by phone number, send, accept, reject and cancel requests, the friend list, unfriend, and a button that opens the direct chat with a friend
 
 Next priorities:
 
 - Real-time communication with Socket.io, built together with the frontend
-- Frontend screens for friends and settings (the steps are in `frontend.doc.md`)
+- Frontend screens for account settings and room management (the steps are in `frontend.doc.md`)
 - Production deployment and environment hardening
 
 ## Tech Stack
@@ -158,7 +159,7 @@ Open `http://localhost:5173`. The dev server forwards requests that start with `
 ## Roadmap
 
 - Add Socket.io for realtime messaging (server and client together)
-- Build the React frontend step by step (scaffold, route guards, account and chat screens done; friends and room management next)
+- Build the React frontend step by step (scaffold, route guards, account, chat and friends screens done; settings and room management next)
 - Add deployment and environment configuration for production
 
 ## License

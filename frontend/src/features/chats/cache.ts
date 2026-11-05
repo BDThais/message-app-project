@@ -1,6 +1,6 @@
 import { replaceEqualDeep, type InfiniteData, type QueryClient } from '@tanstack/react-query';
 import { chatKeys } from './keys';
-import type { ChatRoomSummary, Message, MessageListResponse } from './types';
+import type { ChatRoomSummary, CreatedChatRoom, Message, MessageListResponse } from './types';
 
 // Every change to what the server told us goes through one of these functions: the mutations call
 // them with what the API answered, and the socket handlers of step 6 will call the same ones. So each
@@ -55,6 +55,28 @@ type Preview = NonNullable<ChatRoomSummary['lastMessage']>;
 
 function previewOf({ id, senderId, content, createdAt }: Message): Preview {
   return { id, senderId, content, createdAt };
+}
+
+/**
+ * A room that POST /api/chat answered with, whether it made it (201) or found it (200): into the room
+ * list, or over its entry there. The answer carries the room's own `name`, `lastMessage` and
+ * `unreadCount` (a direct room's name is the other member's), so it is a summary with two keys more.
+ */
+export function addRoomToCache(queryClient: QueryClient, room: CreatedChatRoom): void {
+  const summary: ChatRoomSummary = {
+    id: room.id,
+    type: room.type,
+    name: room.name,
+    avatarUrl: room.avatarUrl,
+    createdAt: room.createdAt,
+    lastMessage: room.lastMessage,
+    unreadCount: room.unreadCount,
+  };
+  // A list that is not loaded yet is left alone: it will ask the server, which has the room.
+  queryClient.setQueryData<ChatRoomSummary[]>(
+    chatKeys.list(),
+    (rooms) => rooms && sortRooms([...rooms.filter(({ id }) => id !== summary.id), summary]),
+  );
 }
 
 /** The id of the newest message loaded in the room, or undefined when none is. */

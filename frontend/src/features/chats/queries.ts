@@ -7,9 +7,10 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
-import { deleteMessage, editMessage, getChatRooms, getMessages, markRead, sendMessage } from './api';
+import { createDirectChatRoom, deleteMessage, editMessage, getChatRooms, getMessages, markRead, sendMessage } from './api';
 import {
   addMessageToCache,
+  addRoomToCache,
   markMessageDeletedInCache,
   markRoomReadInCache,
   mergeNewestPageIntoCache,
@@ -97,6 +98,15 @@ function useNewestMessagesPolling(chatId: number, enabled: boolean): void {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     gcTime: 0,
+  });
+}
+
+/** Makes the direct room with a friend, or finds the one that exists; the caller goes to `room.id`. */
+export function useStartDirectChat() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createDirectChatRoom,
+    onSuccess: (room) => addRoomToCache(queryClient, room),
   });
 }
 

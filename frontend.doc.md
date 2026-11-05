@@ -53,9 +53,16 @@ Completed (step 3, "chat core", 2026-10-25):
 - `components/ui/`: `Avatar` and `TextArea`, the `ghost` and `danger` variants and the `xs` size of `Button`, and a `layout` prop on `Page` (`narrow`, `column`, `fill`) in place of `narrow`; `AppLayout` is now exactly as high as the window and its page area scrolls
 - Tests: `test/chatScreens.test.tsx` (the screens against the fake chat endpoints, scroll arithmetic included), unit tests for the cache functions and the small helpers, and the chat endpoints of the fake API (see "Testing")
 
+Completed (step 4, "friends", 2026-11-04):
+
+- `src/features/friends/`: `types.ts`, `keys.ts` (`friendKeys`), `tel.ts` (`normalizeTel`), `api.ts` (the friend list, the requests in both directions, search, send, accept, reject or cancel, unfriend), `cache.ts` (the functions that change the cached friends, requests and searches), `queries.ts` (the hooks), `useMessageFriend.ts` and `components/`
+- `/friends` (`FriendsPage`): search by phone number with the button that fits the person's relationship, the requests that came in (accept, reject), the requests that were sent (cancel) and the friends ("Message", and unfriend after a question); see "Step 4" under "Implementation steps"
+- A main navigation (Chats, Friends) in the `_app` header, which had no way to reach a second page
+- In `features/chats/`: `createDirectChatRoom` (`api.ts`), `addRoomToCache` (`cache.ts`) and `useStartDirectChat` (`queries.ts`), which "Message" uses
+- Tests: `test/friendsScreens.test.tsx` (the page against the fake friend endpoints), unit tests for `normalizeTel` and the friend cache functions and for `addRoomToCache`, and the friend endpoints and `POST /api/chat` of the fake API (see "Testing")
+
 Still planned:
 
-- Friends (step 4)
 - Account settings and room management (step 5)
 - Socket.io (step 6)
 - Deployment configuration, polish and phone layout of the chat screens (step 7); each new screen is styled when it is written
@@ -145,14 +152,16 @@ frontend/
 │   ├── app.test.tsx              // the sign-in loop through the real app against a fake API
 │   ├── accountScreens.test.tsx   // signup, forgot/reset password, the mailed-link pages, the banner (same approach)
 │   ├── chatScreens.test.tsx      // the room list, a conversation, sending, editing, deleting, older messages, the read marker, scrolling (same approach)
+│   ├── friendsScreens.test.tsx   // searching, the requests, the friend list, "Message", the main navigation (same approach)
 │   ├── pageFrame.test.tsx        // every page has exactly one <main>
 │   ├── structure.test.ts         // the folder rules: no test in src/, who may import whom, the only way into server/ (@contract/, import type)
 │   ├── helpers/
 │   │   ├── fakeApi/              // the fake server (a stubbed fetch), one file per feature
 │   │   │   ├── index.ts          // stubApi: the stubbed fetch, tries each feature's endpoints in turn
-│   │   │   ├── state.ts          // the fake server's state, shared by the features; John, Bea and Carl, the passwords, the rooms and messages
+│   │   │   ├── state.ts          // the fake server's state, shared by the features; John, Bea, Carl and Dana, the passwords, the rooms and messages, the friends and their requests
 │   │   │   ├── account.ts        // the account endpoints
-│   │   │   ├── chats.ts          // the chat endpoints: rooms, messages (page, send, edit, delete), the read marker
+│   │   │   ├── chats.ts          // the chat endpoints: rooms (the list, a direct room made or found), messages (page, send, edit, delete), the read marker
+│   │   │   ├── friends.ts        // the friend endpoints: search, the requests (list, send, accept, delete), the friend list, unfriend
 │   │   │   ├── body.ts           // textField, numberField: read the request body (its values are `unknown`, as on the wire)
 │   │   │   └── responses.ts      // json(), noContent()
 │   │   └── renderApp.tsx         // the real <App> in memory, optionally in StrictMode
@@ -161,8 +170,11 @@ frontend/
 │   ├── features/account/
 │   │   ├── guards.test.ts
 │   │   └── fragmentToken.test.ts
+│   ├── features/friends/
+│   │   ├── cache.test.ts         // idempotent by id, the order of the friends, one request in one list, a person changed in every cached search
+│   │   └── tel.test.ts           // what a typed number becomes before the search
 │   ├── features/chats/
-│   │   ├── cache.test.ts         // idempotent by id, the preview and the order of the room list, the merge of the newest page
+│   │   ├── cache.test.ts         // idempotent by id, the preview and the order of the room list, the merge of the newest page, a room from POST /api/chat
 │   │   ├── format.test.ts
 │   │   ├── parseChatId.test.ts
 │   │   └── useMessageScroll.test.ts  // the arithmetic of keeping the position
@@ -192,7 +204,8 @@ frontend/
     │   ├── _app.tsx              // layout route: the requireUser guard, renders AppLayout
     │   ├── _app/chat.tsx         // layout of the chat pages: the room-list sidebar (ChatLayout)
     │   ├── _app/chat.index.tsx   // "select a chat", for wide screens
-    │   └── _app/chat.$chatId.tsx // the conversation; a path that is not a room id is "chat not found"
+    │   ├── _app/chat.$chatId.tsx // the conversation; a path that is not a room id is "chat not found"
+    │   └── _app/friends.tsx      // the friends page
     ├── components/
     │   └── ui/
     │       ├── Page.tsx          // the page frame: the <main>; layout narrow (a centered card), column, or fill (the room that is left)
@@ -209,13 +222,22 @@ frontend/
     │   │   ├── types.ts          // ChatRoomSummary, Message, MessageListResponse (from the contract)
     │   │   ├── keys.ts           // chatKeys (apart from queries.ts because cache.ts and queries.ts need each other's imports)
     │   │   ├── api.ts            // one function per endpoint, no React
-    │   │   ├── cache.ts          // sortRooms, addMessageToCache, replaceMessageInCache, markMessageDeletedInCache, refreshPreviewAfterChange, markRoomReadInCache, mergeNewestPageIntoCache
-    │   │   ├── queries.ts        // the room list and messages queries, the mutations, the polling of the newest page (until step 6)
+    │   │   ├── cache.ts          // sortRooms, addRoomToCache, addMessageToCache, replaceMessageInCache, markMessageDeletedInCache, refreshPreviewAfterChange, markRoomReadInCache, mergeNewestPageIntoCache
+    │   │   ├── queries.ts        // the room list and messages queries, the mutations (also the direct room "Message" makes), the polling of the newest page (until step 6)
     │   │   ├── useMessageScroll.ts   // the bottom, the position kept when older messages arrive, "is the newest message in view"
     │   │   ├── useMarkRoomRead.ts    // PUT .../read when there is something unread and it is in view
     │   │   ├── format.ts         // roomTitle, formatListTime, formatSentAt
     │   │   ├── parseChatId.ts    // the id in /chat/:chatId, or null
     │   │   └── components/       // ChatLayout, RoomList, Conversation, MessageItem, MessageEditor, ChatNotFound
+    │   ├── friends/
+    │   │   ├── types.ts          // FriendRequest, PublicUser, SearchResult, Relationship, FriendRequestDirection (from the contract)
+    │   │   ├── keys.ts           // friendKeys (apart from queries.ts for the reason chatKeys is)
+    │   │   ├── tel.ts            // normalizeTel: the typed number as the server wants it
+    │   │   ├── api.ts            // one function per endpoint, no React
+    │   │   ├── cache.ts          // sortFriends, addFriendToCache, removeFriendFromCache, addRequestToCache, removeRequestFromCache, setRelationshipInSearches
+    │   │   ├── queries.ts        // the friend list, the two request lists and the search, the mutations
+    │   │   ├── useMessageFriend.ts  // makes or finds the direct room with a friend and opens it
+    │   │   └── components/       // FriendsPage, FindFriend, IncomingRequests, OutgoingRequests, FriendList, Section, PersonRow, ListState
     │   └── account/
     │       ├── types.ts          // User (from the contract), LoginInput and SignupInput (the contract's bodies), ResetPasswordInput
     │       ├── api.ts            // one function per endpoint, no React
@@ -224,14 +246,14 @@ frontend/
     │       ├── useRedirectWhenSignedOut.ts  // sends the person to /login when the session ends while a page is open
     │       ├── fragmentToken.ts  // parseFragmentToken, useFragmentToken
     │       ├── hints.ts          // texts that hint the server's rules (password)
-    │       └── components/       // AppLayout (header, banner, outlet), LoginForm, SignupForm, ForgotPasswordForm, ResetPasswordPage, VerifyEmailPage, VerifyEmailBanner
+    │       └── components/       // AppLayout (header with the main navigation, banner, outlet), LoginForm, SignupForm, ForgotPasswordForm, ResetPasswordPage, VerifyEmailPage, VerifyEmailBanner
     └── lib/
         ├── http.ts               // api, ApiError
         ├── queryClient.ts        // createQueryClient, shouldRetry
         └── useDocumentVisible.ts // false while the tab is in the background
 ```
 
-Planned additions: `features/friends/` (with `types.ts`, `api.ts`, `queries.ts`, `components/`), more of `components/ui/` (dialog), and `lib/socket.ts` (step 6). `features/chats/` holds rooms, members, messages and read markers together, like the server's `chatrooms` module: they share one query-key factory, and the cache functions of a room and of its messages need each other (a new message changes the room's `lastMessage` and `unreadCount`; a removed room drops its messages), which two folders could only do by importing each other. `lib/socket.ts` only creates the connection. The code that applies an event to the cache belongs to the features (`features/chats/`, `features/friends/`), because `lib/` may not import from `features/`.
+Planned additions: more of `components/ui/` (dialog), and `lib/socket.ts` (step 6). `features/chats/` holds rooms, members, messages and read markers together, like the server's `chatrooms` module: they share one query-key factory, and the cache functions of a room and of its messages need each other (a new message changes the room's `lastMessage` and `unreadCount`; a removed room drops its messages), which two folders could only do by importing each other. `lib/socket.ts` only creates the connection. The code that applies an event to the cache belongs to the features (`features/chats/`, `features/friends/`), because `lib/` may not import from `features/`.
 
 ## Conventions
 
@@ -244,7 +266,7 @@ Planned additions: `features/friends/` (with `types.ts`, `api.ts`, `queries.ts`,
 - **Cache updates go through functions** (`setSignedInUser`, `addMessageToCache`, `markRoomReadInCache`, later `removeChatFromCache`). Mutations and socket handlers call the same function, and such a function must be idempotent by id, so a message that arrives twice (the sender's own REST response and the socket event) is stored once.
 - **Whatever the server decides, the server decides.** Client-side checks (a password hint, a required field) exist to save a round trip, never to replace the server's validation. Show the server's `{ error }` text.
 - **TypeScript:** `strict` and `noUncheckedIndexedAccess`, like the server. `exactOptionalPropertyTypes` is off here because React's and TanStack's own types do not follow it.
-- **The shapes of the API come from the server's contract,** `server/src/contract/` (see "API contract" in `./backend.doc.md`), imported as `@contract/...`: a second `paths` entry in `tsconfig.json`, with the same `resolve.tsconfigPaths` line in the two config files. A feature's `types.ts` re-exports what it needs from there (`User`) and keeps only what is the frontend's own (`ResetPasswordInput` has a camelCase `newPassword`). `api.ts` types each response with the contract (`api.get<MeResponse>(...)`) and each request body with `satisfies` (`{ token, new_password: newPassword } satisfies ResetPasswordBody`), so a key spelled differently on the server stops compiling. The only way into `server/` is `@contract/`, and only with `import type`: `import { type X }` still loads the file, and a value from the contract would need the dev server to serve a file outside `frontend/` (`test/structure.test.ts` checks both). The account and chats features are on the contract, and so are the success bodies of the fake API in `test/helpers/`; every endpoint of the server is typed with it, so the friends feature takes its shapes from it when it is written.
+- **The shapes of the API come from the server's contract,** `server/src/contract/` (see "API contract" in `./backend.doc.md`), imported as `@contract/...`: a second `paths` entry in `tsconfig.json`, with the same `resolve.tsconfigPaths` line in the two config files. A feature's `types.ts` re-exports what it needs from there (`User`) and keeps only what is the frontend's own (`ResetPasswordInput` has a camelCase `newPassword`). `api.ts` types each response with the contract (`api.get<MeResponse>(...)`) and each request body with `satisfies` (`{ token, new_password: newPassword } satisfies ResetPasswordBody`), so a key spelled differently on the server stops compiling. The only way into `server/` is `@contract/`, and only with `import type`: `import { type X }` still loads the file, and a value from the contract would need the dev server to serve a file outside `frontend/` (`test/structure.test.ts` checks both). The account, chats and friends features are on the contract, and so are the success bodies of the fake API in `test/helpers/`; every endpoint of the server is typed with it.
 - **Comments follow the server's rule** ("Comments" in `./backend.doc.md`): only the reason a line has to stay the way it is. What a component or a hook does is in its name and in this document, and a route or a file name is not repeated in a comment.
 - **Files:** components `PascalCase.tsx`, everything else `camelCase.ts`.
 - **Tests live in `test/`, not next to the code**, in the same folders as the file they test (`src/lib/http.ts` is tested by `test/lib/http.test.ts`) and named `<file>.test.ts(x)`. What the app-level tests share (the fake API, the render helper) is in `test/helpers/`. Nothing in `src/` imports from `test/`, and no test file is left in `src/`: `test/structure.test.ts` fails if either happens.
@@ -261,7 +283,7 @@ Planned additions: `features/friends/` (with `types.ts`, `api.ts`, `queries.ts`,
 | `/reset-password` | `_public/reset-password.tsx` | `_public`: no guard, works signed in or out | done |
 | `/chat` | `_app/chat.index.tsx` | `_app`: a signed-out visitor is sent to `/login`; then `_app/chat.tsx` | done |
 | `/chat/$chatId` | `_app/chat.$chatId.tsx` | `_app`, then `_app/chat.tsx` | done |
-| `/friends` | `_app/friends.tsx` | `_app` | step 4 |
+| `/friends` | `_app/friends.tsx` | `_app` | done |
 | `/settings` | `_app/settings.tsx` | `_app` | step 5 |
 
 How the guards work:
@@ -289,7 +311,7 @@ The API itself (every endpoint's request, response, status codes, error texts, r
 ### Rooms and members
 
 - Start a direct chat from the friends list with `POST /api/chat` and use the returned `id`, whether it answered `200` or `201`. Two people who are no longer friends get a `403` there, but their old room keeps working from the room list.
-- `POST /api/chat` and `PATCH /api/chat/:chatid` return the room as stored, not a summary: merge them into the cached room list or invalidate `GET /api/chat`, and for a direct room show the other member from `members`.
+- `POST /api/chat` and `PATCH /api/chat/:chatid` answer with the room as `GET /api/chat/:chatid` shows it (the summary and the person's `role`; `POST` adds `members`), so a direct room's `name` and `avatarUrl` are already the other member's and a reused room has its real `lastMessage` and `unreadCount`: merge it into the cached room list (`addRoomToCache` does it for `POST`) or invalidate `GET /api/chat`.
 - Show room actions according to the permission table in `./api.doc.md`, and rely on the server's answers for the rest. A group's only admin cannot leave while others remain (`409`): offer to promote someone first.
 
 ### Messages
@@ -305,6 +327,9 @@ The API itself (every endpoint's request, response, status codes, error texts, r
 - Strip spaces, dashes and parentheses from the typed phone number before `GET /api/friend/search/:tel`, and encode the segment with `encodeURIComponent`: the server accepts only the canonical form.
 - `relationship` decides the button: `none` shows "Add friend", `request_sent` shows "Cancel" (`requestId`), `request_received` shows "Accept" (`requestId`), `friend` shows "Message", `self` shows nothing.
 - `/api/friend/requests/:id...` takes a request id, `DELETE /api/friend/:id` a user id.
+- After an action the cache changes from the server's answer, the cached searches included (`setRelationshipInSearches`): a search is limited to 30 per 15 minutes per user and every request counts, so nothing asks for one on its own (no retry of a failure, no refetch when the tab comes back), and only pressing Search sends one. The lists are the opposite: they are asked for again each time the page opens or the tab comes back to the front, because nothing pushes a new request before step 6.
+- A `404` or a `409` from an action (accept, reject, cancel, send, unfriend) means the screen was out of date, so every friend query is invalidated and the server's text is shown where the thing is still on screen (a row that the refreshed list no longer has takes its text with it, see "Open questions"); that also covers `409 This user has already sent you a friend request`, after which the refreshed search card offers "Accept" and keeps the text.
+- Unfriending changes nothing in the room list: the direct room stays and works (see "Friendship requirement" in `./api.doc.md`).
 
 ### Forms that hit a rate limit
 
@@ -343,9 +368,21 @@ Built as described, with these changes and choices where the plan was open or tu
 - **Editing and deleting** are on the person's own messages only. Delete asks first ("Delete this message for everyone?") because it cannot be undone; the answer is `204` with no message, so the cache makes the deleted message itself (no content, `deletedAt` set), which the next poll replaces with the server's. Enter sends, Shift+Enter starts a new line, and Enter during input-method composition (Telex, VNI) does not send.
 - **Phone width:** the room list is the whole screen at `/chat` and the conversation is the whole screen at `/chat/$chatId`, with a "Chats" link back (`md:` and up shows both). The rest of the phone layout is step 7.
 
-### Step 4 — friends
+### Step 4 — friends (done)
 
 - Search by phone number (`GET /api/friend/search/:tel`), send a request, the lists of incoming and outgoing requests, accept, reject, cancel, the friend list, unfriend, and "message" from a friend (creates or reuses the direct room).
+
+Built as described, with these choices where the plan was open:
+
+- **One page, `/friends`, of four cards:** "Add a friend" (the search and its result), "Friend requests" (incoming: Accept, Reject), "Requests you sent" (Cancel) and "Your friends" (Message, Unfriend). The result of a search is one person with the button of their `relationship`: "Add friend", "Request sent" with "Cancel", "Accept", "Message", and for the person themselves only the words "This is you". A search that finds no one says so; the server's text is shown for a number it refuses and for the limit.
+- **A main navigation in the header** (Chats, Friends; the router marks the open page with `aria-current`). On a phone it takes a row of its own under the logo, so the header does not overflow. The step had no way to reach `/friends` otherwise.
+- **The typed number is cleaned (`normalizeTel`: spaces, dashes and brackets go) and the segment encoded;** everything else that is wrong is left for the server's `400`. A number without a country code (`0912...`) is refused by the server, and the hint under the field says to start with `+`.
+- **Search is disabled while it runs and when there is nothing to search for,** and pressing it again for the same number asks again (a person may be waiting for an answer). Enter does the same as the button, because a form is not submitted by Enter while its button is disabled.
+- **Unfriending asks first,** in the row, like deleting a message ("Remove Bea from your friends? Your chats with them stay.").
+- **"Message" makes or finds the direct room and opens it.** `useStartDirectChat` (in `features/chats/`) puts the answer into the room list's cache (`addRoomToCache`, so a list loaded before shows the room without a request), and `useMessageFriend` navigates to the room's id whether the server answered `201` or `200`. A `403` (the two are not friends any more) is shown in the row, and the person stays on the page.
+- **Row actions have the person's name in their accessible name** ("Accept Bea", "Message Bea"), so a screen reader hears which of several identical buttons it is on; the visible text starts the name.
+- **A person can be in the search card and a list at once,** and what one does changes the other through the cache (`setRelationshipInSearches`): accepting from the list turns the card into "Message", cancelling from the card removes the row.
+- **No polling and no badge:** see "Open questions". The lists are asked for again when the page opens and when the tab comes back to the front.
 
 ### Step 5 — account settings and room management
 
@@ -370,7 +407,7 @@ Client side:
 | `chat:removed` | remove the room from the caches; leave the page if it is open |
 | `member:added`, `member:removed`, `member:role_changed` | invalidate that room's members query |
 | `read:updated` | update the read markers if they are shown |
-| `friend:request`, `friend:accepted` | invalidate the friend and request queries |
+| `friend:request`, `friend:accepted` | invalidate the friend list and the two request lists (`friendKeys.list()`, `friendKeys.requests(...)`), not the searches: `friendKeys.all()` would also search again, which spends the search limit |
 
 - On every reconnect, invalidate the active queries: events sent while the socket was down are gone.
 - Typing indicators are socket-only: held in UI state with a timeout, never cached or stored.
@@ -384,11 +421,13 @@ Client side:
 
 - `npm test` runs Vitest on `test/**/*.test.ts(x)`. No database and no server are needed. A test file put anywhere else is not run, because `vitest.config.ts` only looks in `test/`; `test/structure.test.ts` fails when one is left in `src/`, and also when `lib/` or `components/` import from `features/` or `routes/`, or anything in `src/` imports from `test/`. `tsconfig.json` includes `test/`, so `npm run typecheck` checks the tests too.
 - Unit tests cover the logic that can be wrong without anything looking wrong: the fetch wrapper (the request it really builds, `204`, error bodies, a lost connection, cancellation), the query client's retry and 401 rules, the guards and `safeRedirectPath`. They run the real code against a stubbed `fetch`.
-- `test/app.test.tsx` runs the real router, guards, query client and screens in jsdom against a fake API, for the loops no unit test sees: signed-out visitor to login and back to the page they wanted, wrong credentials, off-site `redirect` ignored, sign-out clearing the cache, a session ending while a page is open, a sign-out that fails (a session that ends afterwards is still not a sign-out), and a 401 that must not sign anyone out. Each new screen with a flow of that kind gets a test in a file like this one: `test/accountScreens.test.tsx` has signup, forgot and reset password, the mailed-link pages (token posted once in StrictMode, token removed from the URL) and the banner. The fake API (`test/helpers/fakeApi/`) follows `./api.doc.md`; when an endpoint's shape changes there, change the fake in the same patch. It has one file per feature (`account.ts`, `chats.ts`), each a function that answers its own endpoints and returns `undefined` for any other request, and one shared state (`state.ts`). Faking a new feature's endpoints means a new file, one more entry in the list in `index.ts`, and its data in the state.
+- `test/app.test.tsx` runs the real router, guards, query client and screens in jsdom against a fake API, for the loops no unit test sees: signed-out visitor to login and back to the page they wanted, wrong credentials, off-site `redirect` ignored, sign-out clearing the cache, a session ending while a page is open, a sign-out that fails (a session that ends afterwards is still not a sign-out), and a 401 that must not sign anyone out. Each new screen with a flow of that kind gets a test in a file like this one: `test/accountScreens.test.tsx` has signup, forgot and reset password, the mailed-link pages (token posted once in StrictMode, token removed from the URL) and the banner. The fake API (`test/helpers/fakeApi/`) follows `./api.doc.md`; when an endpoint's shape changes there, change the fake in the same patch. It has one file per feature (`account.ts`, `chats.ts`, `friends.ts`), each a function that answers its own endpoints and returns `undefined` for any other request, and one shared state (`state.ts`). Faking a new feature's endpoints means a new file, one more entry in the list in `index.ts`, and its data in the state.
 - The aim is not full coverage: tests are for behaviour that matters and is easy to break. When a test is written for a new rule, break the code on purpose once and check that the test fails.
 - `test/app.test.tsx` also checks that `/chat` is matched inside the `_app/chat.tsx` layout.
 - `test/chatScreens.test.tsx` runs the chat screens against the fake chat endpoints: the list (order, preview, unread count, the same sidebar element across rooms), a conversation (order, who may act, a group's sender names, deleted and edited messages, a room that is not there), sending (from the answer, no refetch of the messages, Enter and Shift+Enter, a refusal keeps the text), editing and deleting (the room preview follows from the loaded messages without a request, and the room list is asked for only when they cannot say), the "You:" prefix, older messages (the cursor, the order, a failure), the read marker (once, only when something is unread, only at the bottom and in front) and the polling (the newest page only, with fake timers). A mutation check on 2026-10-25 (ten changes to the cache, the cursor, the marker and the scroll code) was caught by a test each. The fake chat endpoints follow `./api.doc.md` with the room's unread count and last message worked out from its messages, as the server does.
-- jsdom has no layout, so the scroll tests give the message list one (`stubScrollLayout`: 50px a message in a window of 400px, a settable `scrollTop`) and check the arithmetic: the bottom on opening, the position kept when older messages are added, new messages followed only from the bottom, a sent message always scrolled to. How a real browser lays it out was looked at in headless Chromium on 2026-10-25 (the setup is in `CLAUDE_SANDBOX_NOTES.md`): the list opens at the bottom, the same message stays under the same pixel after older ones are added (exactly the added height), a new message while reading higher up moves nothing, a sent message scrolls to the bottom, and the phone width has no horizontal overflow.
+- `test/friendsScreens.test.tsx` runs the friends page against the fake friend endpoints: the lists (the friends in name order, the newest request first, empty states, a list that fails with a retry), the search (the number cleaned and encoded, "Add friend" and "Request sent", no one found, the server's texts for a refused number and the limit, Search disabled when empty and while it runs, the same number searched again, the button for each relationship, no button for oneself, a screen that was out of date), accepting, rejecting and cancelling from the lists and from the card (what the other one then shows, and that no list is asked for again), unfriending after a question, "Message" (a new room, the room that exists, from the card, into a room list loaded before, a `403`), the main navigation, and that a signed-out visitor is sent to the login page. A mutation check on 2026-11-04 (27 changes to the cache, the hooks, the search rules and the components) was caught by a test each; one survived, a second empty-number guard behind the disabled button, which was removed. The fake friend endpoints follow `./api.doc.md`, and `POST /api/chat` of the fake chat endpoints makes only direct rooms, after the friend check.
+- The friend functions of `features/friends/api.ts` and `createDirectChatRoom` were run against the real server on 2026-11-04, with two accounts (search with a typed number, no one found, a refused number, send, both lists, the `409` texts and the `requestId` of the crossed request, accept, reject and cancel, unfriend, the direct room made and found again, the `403` once unfriended, the old room still listed): every shape, status code and text was the one `./api.doc.md` says and the fake API has.
+- jsdom has no layout, so the scroll tests give the message list one (`stubScrollLayout`: 50px a message in a window of 400px, a settable `scrollTop`) and check the arithmetic: the bottom on opening, the position kept when older messages are added, new messages followed only from the bottom, a sent message always scrolled to. How a real browser lays it out was looked at in headless Chromium on 2026-10-25 (the setup is in `CLAUDE_SANDBOX_NOTES.md`): the list opens at the bottom, the same message stays under the same pixel after older ones are added (exactly the added height), a new message while reading higher up moves nothing, a sent message scrolls to the bottom, and the phone width has no horizontal overflow. The friends page and the new header were looked at there on 2026-11-04 (390px and 1100px wide, light and dark, a long name, a search result): no horizontal overflow, the navigation on a row of its own on a phone, the name truncated before the buttons.
 - `test/pageFrame.test.tsx` visits every page and checks that it has exactly one `<main>`, the one `Page` draws: a page that writes its own again, or a layout that forgets the frame, fails it.
 - Not tested: how it looks.
 - A runaway navigation loop shows up in the app test as a worker that dies after about half a minute ("JavaScript heap out of memory"), with `Not implemented: Window's scrollTo()` repeated before it.
@@ -438,6 +477,9 @@ Sound from the start, and kept: the direction of the imports (`routes/` use `fea
 - **The mailed-link pages read the token once into state and strip the fragment** (see "Routing and authentication"), and `recheckSession` resets `me` after a verification or a reset instead of patching the cached user.
 - **The conversation polls the newest page and merges it, not the whole query** (2026-10-25, step 3). See "Step 3" under "Implementation steps" for why.
 - **`AppLayout` is exactly `h-dvh`, and `Page` has a `layout` prop** (`narrow`, `column`, `fill`) instead of `narrow` (2026-10-25, step 3): a chat screen needs a shell that is as high as the window with parts that scroll by themselves, and two booleans (`narrow`, `fill`) would have allowed a combination that means nothing.
+- **The friend lists are asked for again on every visit and refocus (`staleTime: 0`), a search never is** (2026-11-04, step 4). A request can arrive while nobody looks and nothing pushes it before step 6, while a search is limited and counts every request. See "Using the API from the screens".
+- **The cache is patched from each friend action's answer, searches included,** instead of invalidating after it (step 4): invalidating would search again (the limit) and ask for three lists for one click. A `404` or `409` is the exception and invalidates everything, because it says the screen is out of date.
+- **"Message" is in `features/chats/` as `useStartDirectChat`,** with `useMessageFriend` in `features/friends/` to navigate: the room list's cache belongs to the chats feature, and the friends feature only imports its hook.
 - **Signup shows a notice, not a sign-in.** The server does not sign anyone in at signup; the notice does not promise the mail (a mail that cannot be sent does not fail the request) and points to the banner's resend button.
 
 ## Open questions
@@ -449,4 +491,7 @@ Sound from the start, and kept: the direction of the imports (`routes/` use `fea
 - The message list is not virtualised and loads pages only as the person scrolls up; the "Load earlier messages" button is the fallback for a window taller than a page.
 - Long conversations: virtualized message list if scrolling gets slow.
 - Pagination for `GET /api/chat` and `GET /api/friend` once the lists can grow (the server notes this already).
+- A request that comes in is only seen when the friends page is opened or the tab comes back to the front. A count on the "Friends" link waits for step 6's `friend:request`: polling for it on every page would be a request every few seconds for one number.
+- A row that the refresh removes (a request the other person took back, a friend unfriended elsewhere) takes the server's text with it: the person sees it go and is not told why. A `role="status"` line in the page for such news would say it.
+- A friend who was unfriended on another device stays in the list until it is asked for again; "Message" on them shows the server's `403` text and does not ask again.
 - Browser notifications and an unread count in the tab title.

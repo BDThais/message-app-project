@@ -1,18 +1,34 @@
 import { api } from '@/lib/http';
-import type { EditMessageBody, GetMessagesQuery, MarkReadBody, SendMessageBody } from '@contract/requests';
+import type {
+  CreateChatRoomBody,
+  EditMessageBody,
+  GetMessagesQuery,
+  MarkReadBody,
+  SendMessageBody,
+} from '@contract/requests';
 import type {
   ChatMessageResponse,
   ChatRoomListResponse,
+  CreatedChatRoomResponse,
   MarkReadResponse,
   MessageListResponse,
 } from '@contract/responses';
-import type { ChatRoomSummary, Message } from './types';
+import type { ChatRoomSummary, CreatedChatRoom, Message } from './types';
 
 // One function per endpoint; no React and no caching in here (see queries.ts and cache.ts for that).
 
 export async function getChatRooms(signal?: AbortSignal): Promise<ChatRoomSummary[]> {
   const { chatRooms } = await api.get<ChatRoomListResponse>('/chat', { signal });
   return chatRooms;
+}
+
+/** The direct room with a friend: a new one (201) or the one that already exists (200). Two people who are not friends (any more) get a 403. */
+export async function createDirectChatRoom(userId: number): Promise<CreatedChatRoom> {
+  const { chatRoom } = await api.post<CreatedChatRoomResponse>(
+    '/chat',
+    { type: 'direct', member_ids: [userId] } satisfies CreateChatRoomBody,
+  );
+  return chatRoom;
 }
 
 /**

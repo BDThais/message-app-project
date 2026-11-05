@@ -2,6 +2,7 @@ import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   addMessageToCache,
+  addRoomToCache,
   markMessageDeletedInCache,
   markRoomReadInCache,
   mergeNewestPageIntoCache,
@@ -10,7 +11,7 @@ import {
   sortRooms,
 } from '@/features/chats/cache';
 import { chatKeys } from '@/features/chats/keys';
-import type { ChatRoomSummary, Message, MessageListResponse } from '@/features/chats/types';
+import type { ChatRoomSummary, CreatedChatRoom, Message, MessageListResponse } from '@/features/chats/types';
 
 function message(id: number, overrides: Partial<Message> = {}): Message {
   return {
@@ -355,5 +356,44 @@ describe('refreshPreviewAfterChange', () => {
     queryClient.setQueryData(chatKeys.list(), [room(1, { lastMessage: preview(5, 'five', message(5).createdAt) })]);
 
     expect(refreshPreviewAfterChange(queryClient, 1, 5)).toBe('unknown');
+  });
+});
+
+describe('addRoomToCache', () => {
+  /** What POST /api/chat answers: the summary, the person's own role, and the members. */
+  function created(id: number, overrides: Partial<CreatedChatRoom> = {}): CreatedChatRoom {
+    return { ...room(id), role: 'admin', members: [], ...overrides };
+  }
+  const listOf = (queryClient: QueryClient) => queryClient.getQueryData<ChatRoomSummary[]>(chatKeys.list());
+
+  it('puts a new room into the list in its place, and keeps neither `role` nor `members` there', () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(chatKeys.list(), [
+      room(1, { lastMessage: preview(9, 'later', '2026-10-21T09:00:00.000Z') }),
+      room(2, { lastMessage: preview(8, 'earlier', '2026-10-19T09:00:00.000Z') }),
+    ]);
+
+    addRoomToCache(queryClient, created(3, { createdAt: '2026-10-20T09:00:00.000Z' }));
+
+    expect(listOf(queryClient)?.map(({ id }) => id)).toEqual([1, 3, 2]);
+    expect(listOf(queryClient)?.find(({ id }) => id === 3)).toEqual(room(3, { createdAt: '2026-10-20T09:00:00.000Z' }));
+  });
+
+  it('replaces the entry of a room that is there already, so that asking twice stores it once', () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(chatKeys.list(), [room(1, { unreadCount: 4 })]);
+
+    addRoomToCache(queryClient, created(1, { unreadCount: 2 }));
+    addRoomToCache(queryClient, created(1, { unreadCount: 2 }));
+
+    expect(listOf(queryClient)).toEqual([room(1, { unreadCount: 2 })]);
+  });
+
+  it('leaves a list that was never loaded alone: the server has the room', () => {
+    const queryClient = new QueryClient();
+
+    addRoomToCache(queryClient, created(1));
+
+    expect(listOf(queryClient)).toBeUndefined();
   });
 });

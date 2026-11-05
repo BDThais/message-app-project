@@ -15,6 +15,29 @@ export const john: User = {
 
 export const bea: PublicUser = { id: 2, name: 'Bea', avatarUrl: null };
 export const carl: PublicUser = { id: 3, name: 'Carl', avatarUrl: null };
+export const dana: PublicUser = { id: 4, name: 'Dana', avatarUrl: null };
+
+/** The phone numbers the fake server knows besides John's (`john.tel`), in the canonical spelling the search wants. */
+export const tels = { bea: '+84900000002', carl: '+84900000003', dana: '+84900000004' } as const;
+
+/** Everyone the fake server has an account for, with the number a search finds them by. */
+const people: Array<PublicUser & { tel: string }> = [
+  { id: john.id, name: john.name, avatarUrl: john.avatarUrl, tel: john.tel },
+  { ...bea, tel: tels.bea },
+  { ...carl, tel: tels.carl },
+  { ...dana, tel: tels.dana },
+];
+
+export const personById = (id: number) => people.find((person) => person.id === id);
+export const personByTel = (tel: string) => people.find((person) => person.tel === tel);
+
+/** A pending friend request: `fromId` sent it to `toId`. */
+export interface FakeFriendRequest {
+  id: number;
+  fromId: number;
+  toId: number;
+  createdAt: string;
+}
 
 /** A room of John's, as his list shows it: `name` is the other member's for a direct room, like the server's list. */
 export interface FakeRoom {
@@ -25,6 +48,8 @@ export interface FakeRoom {
   createdAt: string;
   /** John's own read marker. */
   lastReadMessageId: number | null;
+  /** The other member of a direct room, for the room POST /api/chat finds again. */
+  memberId?: number;
 }
 
 export interface Account {
@@ -42,9 +67,8 @@ export interface Call {
 }
 
 /**
- * The fake server's state, shared by the endpoint files of every feature (accounts and chat rooms
- * today, friends when their endpoints are faked). `signedIn` says whether the cookie in this browser
- * belongs to John.
+ * The fake server's state, shared by the endpoint files of every feature (accounts, chat rooms and
+ * friends). `signedIn` says whether the cookie in this browser belongs to John.
  */
 export function createState({ signedIn }: { signedIn: boolean }) {
   const accounts: Account[] = [{ user: { ...john }, password: PASSWORD }]; // a copy: tests change it
@@ -59,6 +83,24 @@ export function createState({ signedIn }: { signedIn: boolean }) {
     resendLimited: false,
     /** Make POST, PATCH and DELETE on a message answer 400 with this text. */
     messageWriteError: null as string | null,
+    /** Make GET /api/friend/search/:tel and POST /api/friend/requests answer 429. */
+    searchLimited: false,
+    friendRequestLimited: false,
+    /** The ids of John's friends, and the requests he sent or was sent that nobody has answered. */
+    friendIds: [] as number[],
+    friendRequests: [] as FakeFriendRequest[],
+    /** A request that `from` sent to `to`; its id is its place, and a later one is newer. Returns it. */
+    addFriendRequest({ from, to }: { from: PublicUser; to: PublicUser }): FakeFriendRequest {
+      const id = this.friendRequests.length + 1;
+      const request: FakeFriendRequest = {
+        id,
+        fromId: from.id,
+        toId: to.id,
+        createdAt: new Date(Date.UTC(2026, 9, 20, 9, 0, id)).toISOString(),
+      };
+      this.friendRequests.push(request);
+      return request;
+    },
     /** John's rooms and their messages, oldest first (a message's id is its place). */
     rooms: [] as FakeRoom[],
     messages: [] as Message[],
