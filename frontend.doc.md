@@ -18,55 +18,6 @@ The frontend is built as a series of small steps (see "Implementation steps"). E
 
 Node `^20.19.0 || >=22.12.0` is required (Vite 8).
 
-## Current Implementation Status
-
-Completed (step 1, "scaffold"):
-
-- Vite + React + TypeScript project in `frontend/`, strict TypeScript settings
-- Dev server on port 5173 with a proxy that forwards `/api/...` to the Express server (see "How the frontend talks to the server")
-- `src/lib/http.ts`: the `api` fetch wrapper and the `ApiError` class
-- `src/lib/queryClient.ts`: the query client (retry policy, one place that reacts to a 401)
-- `src/features/account/`: `types.ts`, `api.ts` (`getMe`, `login`, `logout`), `queries.ts` (`meQueryOptions`, `useMe`, `useLogin`, `useSignOut`), `guards.ts` (`requireUser`, `redirectIfSignedIn`, `safeRedirectPath`)
-- TanStack Router with the `me` guard: `_app` layout (signed-in users only), `_guest` layout (signed-out visitors only), `/` redirecting to `/chat`, a not-found page
-- A deliberately thin login page and a placeholder `/chat` page with a sign-out button, so the whole loop (guard, cookie, cache, sign-out) can be tried end to end
-- Tests: the fetch wrapper, the query client's rules, the guards, and one app-level test file that runs the sign-in loop through the real router and screens against a fake API (see "Testing")
-
-Completed (step 2, "account screens"):
-
-- Sign-up (`/signup`: hints, the server's error text, then a "check your email" notice; signup does not sign in), forgot-password (`/forgot-password`), and the two pages behind the mailed links (`/verify-email`, `/reset-password`)
-- The login page now links to sign-up and forgot-password; it is `features/account/components/LoginForm.tsx` and the route file only passes it the `redirect` parameter
-- A "verify your email" banner in the `_app` layout while `emailVerified` is `false`, with the resend button (`POST /api/account/email/verification`; the `409` and `429` texts are shown, and a `409` makes the app ask for `me` again)
-- `src/components/ui/TextField.tsx`: a labelled input with a hint wired to it (the first shared component)
-- `src/features/account/fragmentToken.ts`: reads the token from the URL fragment once and takes the fragment out of the address bar (see "Routing and authentication")
-- `test/helpers/`: the fake API and the render helper that the app-level tests share; the screens' tests are in `test/accountScreens.test.tsx`
-
-Completed (the structure review after step 2, 2026-10-18): the tests moved to `test/`, and the layout and test setup changed as listed in "Structure review".
-
-Completed (styling, 2026-10-24): Tailwind CSS v4 chosen and every screen built so far styled with it (see "Styling"). The colors are tokens with a light and a dark value in `styles/theme.css`; `components/ui/` got `Button`, `Notice`, `Form`, `FormLinks` and `Logo`, and `Page` and `TextField` were restyled; the header, the verification banner and the not-found page follow. No test changed: the tests find things by role and label, never by class.
-
-Completed (CSS structure, 2026-10-25): the single `styles.css` became the folder `src/styles/` (`index.css`, `theme.css`, `base.css`, see "Styling"). The compiled CSS is byte for byte the same as before.
-
-Completed (step 3, "chat core", 2026-10-25):
-
-- `src/features/chats/`: `types.ts`, `keys.ts` (`chatKeys`), `api.ts` (the room list, the messages, send, edit, delete, mark as read), `cache.ts` (the functions that change the cached rooms and messages), `queries.ts` (the hooks), two hooks for the screen (`useMessageScroll`, `useMarkRoomRead`) and `components/`
-- The room-list sidebar in the `_app/chat.tsx` layout (`ChatLayout`, `RoomList`) and the conversation at `/chat/$chatId` (`Conversation`, `MessageItem`, `MessageEditor`): older messages by a button or by scrolling up, the position kept when they are added, a read marker that follows what is on screen, and a screen that is polled until step 6 (see "Step 3" under "Implementation steps")
-- `components/ui/`: `Avatar` and `TextArea`, the `ghost` and `danger` variants and the `xs` size of `Button`, and a `layout` prop on `Page` (`narrow`, `column`, `fill`) in place of `narrow`; `AppLayout` is now exactly as high as the window and its page area scrolls
-- Tests: `test/chatScreens.test.tsx` (the screens against the fake chat endpoints, scroll arithmetic included), unit tests for the cache functions and the small helpers, and the chat endpoints of the fake API (see "Testing")
-
-Completed (step 4, "friends", 2026-11-04):
-
-- `src/features/friends/`: `types.ts`, `keys.ts` (`friendKeys`), `tel.ts` (`normalizeTel`), `api.ts` (the friend list, the requests in both directions, search, send, accept, reject or cancel, unfriend), `cache.ts` (the functions that change the cached friends, requests and searches), `queries.ts` (the hooks), `useMessageFriend.ts` and `components/`
-- `/friends` (`FriendsPage`): search by phone number with the button that fits the person's relationship, the requests that came in (accept, reject), the requests that were sent (cancel) and the friends ("Message", and unfriend after a question); see "Step 4" under "Implementation steps"
-- A main navigation (Chats, Friends) in the `_app` header, which had no way to reach a second page
-- In `features/chats/`: `createDirectChatRoom` (`api.ts`), `addRoomToCache` (`cache.ts`) and `useStartDirectChat` (`queries.ts`), which "Message" uses
-- Tests: `test/friendsScreens.test.tsx` (the page against the fake friend endpoints), unit tests for `normalizeTel` and the friend cache functions and for `addRoomToCache`, and the friend endpoints and `POST /api/chat` of the fake API (see "Testing")
-
-Still planned:
-
-- Account settings and room management (step 5)
-- Socket.io (step 6)
-- Deployment configuration, polish and phone layout of the chat screens (step 7); each new screen is styled when it is written
-
 ## Running the frontend
 
 The server must be running on port 3000 (`npm run dev` in `server/`, with its database and `.env` set up as described in the root README). Then, from `frontend/`:
@@ -270,6 +221,7 @@ Planned additions: more of `components/ui/` (dialog), and `lib/socket.ts` (step 
 - **TypeScript:** `strict` and `noUncheckedIndexedAccess`, like the server. `exactOptionalPropertyTypes` is off here because React's and TanStack's own types do not follow it.
 - **The shapes of the API come from the server's contract,** `server/src/contract/` (see "API contract" in `./backend.doc.md`), imported as `@contract/...`: a second `paths` entry in `tsconfig.json`, with the same `resolve.tsconfigPaths` line in the two config files. A feature's `types.ts` re-exports what it needs from there (`User`) and keeps only what is the frontend's own (`ResetPasswordInput` has a camelCase `newPassword`). `api.ts` types each response with the contract (`api.get<MeResponse>(...)`) and each request body with `satisfies` (`{ token, new_password: newPassword } satisfies ResetPasswordBody`), so a key spelled differently on the server stops compiling. The only way into `server/` is `@contract/`, and only with `import type`: `import { type X }` still loads the file, and a value from the contract would need the dev server to serve a file outside `frontend/` (`test/structure.test.ts` checks both). The account, chats and friends features are on the contract, and so are the success bodies of the fake API in `test/helpers/`; every endpoint of the server is typed with it.
 - **Comments follow the server's rule** ("Comments" in `./backend.doc.md`): only the reason a line has to stay the way it is. What a component or a hook does is in its name and in this document, and a route or a file name is not repeated in a comment.
+- **A new screen is styled when it is written,** with the tokens and the shared components of `components/ui/` (see "Styling"); step 7 polishes, it does not start the styling.
 - **Files:** components `PascalCase.tsx`, everything else `camelCase.ts`.
 - **Tests live in `test/`, not next to the code**, in the same folders as the file they test (`src/lib/http.ts` is tested by `test/lib/http.test.ts`) and named `<file>.test.ts(x)`. What the app-level tests share (the fake API, the render helper) is in `test/helpers/`. Nothing in `src/` imports from `test/`, and no test file is left in `src/`: `test/structure.test.ts` fails if either happens.
 
@@ -341,7 +293,7 @@ The API itself (every endpoint's request, response, status codes, error texts, r
 
 ### Step 1 — scaffold (done)
 
-See "Current Implementation Status".
+The project, the dev proxy, the `api` wrapper, the query client, the `me` guards and the layouts, with a deliberately thin login page and a placeholder `/chat` page with a sign-out button, so the whole loop (guard, cookie, cache, sign-out) could be tried end to end. How these work is in "How the frontend talks to the server", "Foundation: server state and UI state" and "Routing and authentication"; what tests them is in "Testing". What each later step added is in its own section below, and when, in the git history.
 
 ### Step 2 — account screens (done)
 
@@ -432,7 +384,7 @@ Client side:
 - The friend functions of `features/friends/api.ts` and `createDirectChatRoom` were run against the real server on 2026-11-04, with two accounts (search with a typed number, no one found, a refused number, send, both lists, the `409` texts and the `requestId` of the crossed request, accept, reject and cancel, unfriend, the direct room made and found again, the `403` once unfriended, the old room still listed): every shape, status code and text was the one `./api.doc.md` says and the fake API has.
 - jsdom has no layout, so the scroll tests give the message list one (`stubScrollLayout`: 50px a message in a window of 400px, a settable `scrollTop`) and check the arithmetic: the bottom on opening, the position kept when older messages are added, new messages followed only from the bottom, a sent message always scrolled to. How a real browser lays it out was looked at in headless Chromium on 2026-10-25 (the setup is in `CLAUDE_SANDBOX_NOTES.md`): the list opens at the bottom, the same message stays under the same pixel after older ones are added (exactly the added height), a new message while reading higher up moves nothing, a sent message scrolls to the bottom, and the phone width has no horizontal overflow. The friends page and the new header were looked at there on 2026-11-04 (390px and 1100px wide, light and dark, a long name, a search result): no horizontal overflow, the navigation on a row of its own on a phone, the name truncated before the buttons.
 - `test/pageFrame.test.tsx` visits every page and checks that it has exactly one `<main>`, the one `Page` draws: a page that writes its own again, or a layout that forgets the frame, fails it.
-- Not tested: how it looks.
+- Tests find things by role and label, never by class, so a restyle changes no test (the styling of 2026-10-24 changed none). Not tested: how it looks.
 - A runaway navigation loop shows up in the app test as a worker that dies after about half a minute ("JavaScript heap out of memory"), with `Not implemented: Window's scrollTo()` repeated before it.
 
 ## Structure review
