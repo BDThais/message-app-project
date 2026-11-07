@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from 'react';
+import type { ComponentProps } from 'react';
 
 const variants = {
   primary: 'bg-accent text-on-accent enabled:hover:bg-accent-strong',
@@ -13,9 +13,10 @@ const sizes = {
   md: 'h-11 px-5 text-sm',
   sm: 'h-9 px-3.5 text-sm',
   xs: 'h-7 px-2.5 text-xs',
+  icon: 'size-8',
 } as const;
 
-interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className'> {
+interface ButtonProps extends Omit<ComponentProps<'button'>, 'className'> {
   variant?: keyof typeof variants;
   size?: keyof typeof sizes;
   fullWidth?: boolean;

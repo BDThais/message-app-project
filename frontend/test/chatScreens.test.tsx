@@ -27,6 +27,11 @@ async function findMessage(text: Parameters<typeof screen.findByText>[0]) {
 }
 const messageNamed = (text: string) => within(messageList()).getByText(text).closest('li') as HTMLElement;
 const textOf = (element: HTMLElement) => element.textContent ?? '';
+/** Opens the menu of a message and picks one of its actions: that is where Edit and Delete are. */
+async function chooseAction(user: ReturnType<typeof userEvent.setup>, messageText: string, action: 'Edit' | 'Delete') {
+  await user.click(within(messageNamed(messageText)).getByRole('button', { name: 'Message actions' }));
+  await user.click(screen.getByRole('menuitem', { name: action }));
+}
 
 /** John's direct room with Bea (id 1) holding the given messages. */
 function roomWithBea(...messages: Array<{ from: 'john' | 'bea'; content: string }>): FakeServer {
@@ -158,10 +163,44 @@ describe('a conversation', () => {
       'second',
       'third',
     ]);
-    expect(within(items[0]!).queryByRole('button', { name: 'Edit' })).toBeNull();
-    expect(within(items[1]!).getByRole('button', { name: 'Edit' })).toBeTruthy();
-    expect(within(items[1]!).getByRole('button', { name: 'Delete' })).toBeTruthy();
-    expect(within(items[2]!).queryByRole('button', { name: 'Delete' })).toBeNull();
+    expect(within(items[0]!).queryByRole('button', { name: 'Message actions' })).toBeNull();
+    expect(within(items[1]!).getByRole('button', { name: 'Message actions' })).toBeTruthy();
+    expect(within(items[2]!).queryByRole('button', { name: 'Message actions' })).toBeNull();
+    // The actions are in the menu and not on the message itself.
+    expect(within(items[1]!).queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(within(items[1]!).queryByRole('button', { name: 'Delete' })).toBeNull();
+  });
+
+  it('keeps the time of every message, the person\'s own and the others\', in the page for when it is asked for', async () => {
+    roomWithBea({ from: 'bea', content: 'first' }, { from: 'john', content: 'second' });
+    renderApp('/chat/1');
+
+    await findMessage('second');
+
+    for (const item of within(messageList()).getAllByRole('listitem')) {
+      expect(item.querySelector('time')?.textContent).toMatch(/\d/);
+    }
+  });
+
+  it('draws the time and the menu only when the message is pressed, and hides them again when the person presses elsewhere', async () => {
+    roomWithBea({ from: 'john', content: 'mine' }, { from: 'bea', content: 'theirs' });
+    const user = userEvent.setup();
+    renderApp('/chat/1');
+    await findMessage('mine');
+    // jsdom has no hover or focus styles to look at, so this is the press: what the classes say is the contract.
+    const sideOf = (text: string) => messageNamed(text).querySelector('time')!.parentElement!;
+
+    expect(sideOf('mine').className).toContain('opacity-0');
+    await user.click(within(messageList()).getByText('mine'));
+    expect(sideOf('mine').className).toContain('opacity-100');
+    expect(sideOf('mine').className).not.toContain('opacity-0');
+
+    // Pressing another message moves it there, and pressing the same one again puts it away.
+    await user.click(within(messageList()).getByText('theirs'));
+    expect(sideOf('mine').className).toContain('opacity-0');
+    expect(sideOf('theirs').className).toContain('opacity-100');
+    await user.click(within(messageList()).getByText('theirs'));
+    expect(sideOf('theirs').className).toContain('opacity-0');
   });
 
   it('names the sender in a group, and gives a deleted account\'s messages a placeholder and no actions', async () => {
@@ -194,6 +233,19 @@ describe('a conversation', () => {
 
     expect(await findMessage('Message deleted')).toBeTruthy();
     expect(textOf(messageNamed('changed'))).toContain('edited');
+  });
+
+  it('gives the person\'s own deleted message a placeholder with its time, and no menu', async () => {
+    const state = roomWithBea({ from: 'john', content: 'gone' });
+    state.messages[0]!.content = '';
+    state.messages[0]!.deletedAt = '2026-10-20T10:00:00.000Z';
+    renderApp('/chat/1');
+
+    await findMessage('Message deleted');
+
+    const item = messageNamed('Message deleted');
+    expect(within(item).queryByRole('button')).toBeNull();
+    expect(item.querySelector('time')?.textContent).toMatch(/\d/);
   });
 
   it.each(['/chat/99', '/chat/not-a-number', '/chat/0', '/chat/2147483648'])(
@@ -297,7 +349,7 @@ describe('editing and deleting', () => {
     renderApp('/chat/1');
     await findMessage('helo');
 
-    await user.click(within(messageNamed('helo')).getByRole('button', { name: 'Edit' }));
+    await chooseAction(user, 'helo', 'Edit');
     const box = screen.getByRole('textbox', { name: 'Edit message' }) as HTMLTextAreaElement;
     expect(box.value).toBe('helo');
     await user.clear(box);
@@ -319,7 +371,7 @@ describe('editing and deleting', () => {
     renderApp('/chat/1');
     await findMessage('first');
 
-    await user.click(within(messageNamed('first')).getByRole('button', { name: 'Edit' }));
+    await chooseAction(user, 'first', 'Edit');
     await user.type(screen.getByRole('textbox', { name: 'Edit message' }), ' (fixed){Enter}');
 
     expect(await findMessage('first (fixed)')).toBeTruthy();
@@ -335,12 +387,12 @@ describe('editing and deleting', () => {
     renderApp('/chat/1');
     await findMessage('keep me');
 
-    await user.click(within(messageNamed('keep me')).getByRole('button', { name: 'Edit' }));
+    await chooseAction(user, 'keep me', 'Edit');
     await user.type(screen.getByRole('textbox', { name: 'Edit message' }), ' changed{Escape}');
     expect(screen.queryByRole('textbox', { name: 'Edit message' })).toBeNull();
     expect(messageNamed('keep me')).toBeTruthy();
 
-    await user.click(within(messageNamed('keep me')).getByRole('button', { name: 'Edit' }));
+    await chooseAction(user, 'keep me', 'Edit');
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('textbox', { name: 'Edit message' })).toBeNull();
     expect(state.count('PATCH /api/chat/1/message/1')).toBe(0);
@@ -353,7 +405,7 @@ describe('editing and deleting', () => {
     renderApp('/chat/1');
     await findMessage('mine');
 
-    await user.click(within(messageNamed('mine')).getByRole('button', { name: 'Edit' }));
+    await chooseAction(user, 'mine', 'Edit');
     await user.type(screen.getByRole('textbox', { name: 'Edit message' }), '!{Enter}');
 
     expect((await screen.findByRole('alert')).textContent).toBe('content must be a non-empty string');
@@ -368,7 +420,7 @@ describe('editing and deleting', () => {
     await findMessage('Oops');
     expect(textOf(await within(nav).findByRole('link', { name: /Bea/ }))).toContain('Oops');
 
-    await user.click(within(messageNamed('Oops')).getByRole('button', { name: 'Delete' }));
+    await chooseAction(user, 'Oops', 'Delete');
     expect(state.count('DELETE /api/chat/1/message/2')).toBe(0);
     await user.click(within(screen.getByRole('group', { name: 'Confirm delete' })).getByRole('button', { name: 'Delete' }));
 
@@ -388,7 +440,7 @@ describe('editing and deleting', () => {
     renderApp('/chat/1');
     await findMessage('mine');
 
-    await user.click(within(messageNamed('mine')).getByRole('button', { name: 'Delete' }));
+    await chooseAction(user, 'mine', 'Delete');
     await user.click(within(screen.getByRole('group', { name: 'Confirm delete' })).getByRole('button', { name: 'Delete' }));
 
     expect(await findMessage('Message deleted')).toBeTruthy();
@@ -408,7 +460,7 @@ describe('editing and deleting', () => {
     renderApp('/chat/1');
     await findMessage('message 60');
 
-    await user.click(within(messageNamed('message 60')).getByRole('button', { name: 'Delete' }));
+    await chooseAction(user, 'message 60', 'Delete');
     await user.click(within(screen.getByRole('group', { name: 'Confirm delete' })).getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(state.count('GET /api/chat')).toBe(2));
@@ -421,7 +473,7 @@ describe('editing and deleting', () => {
     renderApp('/chat/1');
     await findMessage('stay');
 
-    await user.click(within(messageNamed('stay')).getByRole('button', { name: 'Delete' }));
+    await chooseAction(user, 'stay', 'Delete');
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(screen.queryByRole('group', { name: 'Confirm delete' })).toBeNull();
