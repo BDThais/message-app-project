@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { ListState } from '@/components/ui/ListState';
 import { useFriends, useUnfriend } from '../queries';
 import type { PublicUser } from '../types';
 import { useMessageFriend } from '../useMessageFriend';
-import { ListState } from './ListState';
 import { PersonRow } from './PersonRow';
 import { Section } from './Section';
 

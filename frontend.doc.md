@@ -166,7 +166,8 @@ frontend/
 │   │   │   └── responses.ts      // json(), noContent()
 │   │   └── renderApp.tsx         // the real <App> in memory, optionally in StrictMode
 │   ├── components/ui/
-│   │   └── Avatar.test.tsx
+│   │   ├── Avatar.test.tsx
+│   │   └── ListState.test.tsx
 │   ├── features/account/
 │   │   ├── guards.test.ts
 │   │   └── fragmentToken.test.ts
@@ -213,6 +214,7 @@ frontend/
     │       ├── Logo.tsx          // the mark and the name
     │       ├── Button.tsx        // variant (primary, secondary, ghost, danger), size (md, sm, xs), fullWidth; no className
     │       ├── Notice.tsx        // tone (info, success, error) and the role the caller gives it
+    │       ├── ListState.tsx     // what a list shows before it has items: loading, the server's error with a retry, or the empty text; the items stay when a refetch fails
     │       ├── Form.tsx          // <form> with the spacing between fields
     │       ├── FormLinks.tsx     // the row of links under a form or a notice
     │       ├── TextField.tsx     // label + input + hint, wired together
@@ -237,7 +239,7 @@ frontend/
     │   │   ├── cache.ts          // sortFriends, addFriendToCache, removeFriendFromCache, addRequestToCache, removeRequestFromCache, setRelationshipInSearches
     │   │   ├── queries.ts        // the friend list, the two request lists and the search, the mutations
     │   │   ├── useMessageFriend.ts  // makes or finds the direct room with a friend and opens it
-    │   │   └── components/       // FriendsPage, FindFriend, IncomingRequests, OutgoingRequests, FriendList, Section, PersonRow, ListState
+    │   │   └── components/       // FriendsPage, FindFriend, IncomingRequests, OutgoingRequests, FriendList, Section, PersonRow
     │   └── account/
     │       ├── types.ts          // User (from the contract), LoginInput and SignupInput (the contract's bodies), ResetPasswordInput
     │       ├── api.ts            // one function per endpoint, no React
@@ -480,6 +482,7 @@ Sound from the start, and kept: the direction of the imports (`routes/` use `fea
 - **The friend lists are asked for again on every visit and refocus (`staleTime: 0`), a search never is** (2026-11-04, step 4). A request can arrive while nobody looks and nothing pushes it before step 6, while a search is limited and counts every request. See "Using the API from the screens".
 - **The cache is patched from each friend action's answer, searches included,** instead of invalidating after it (step 4): invalidating would search again (the limit) and ask for three lists for one click. A `404` or `409` is the exception and invalidates everything, because it says the screen is out of date.
 - **"Message" is in `features/chats/` as `useStartDirectChat`,** with `useMessageFriend` in `features/friends/` to navigate: the room list's cache belongs to the chats feature, and the friends feature only imports its hook.
+- **One `ListState` for every list that loads** (2026-11-06): the friends page's three lists had it, and `RoomList` had the same loading, error-and-retry and empty states written out inline, so by the rule in "Conventions" it moved to `components/ui/` when the second feature needed it. One difference for the room list: it used to show an error above the rooms it had when a refetch failed, and it polls every 5 seconds, so a dropped request flashed a message over a list that was fine; now the rooms stay and nothing is said, like the friends lists.
 - **Signup shows a notice, not a sign-in.** The server does not sign anyone in at signup; the notice does not promise the mail (a mail that cannot be sent does not fail the request) and points to the banner's resend button.
 
 ## Open questions

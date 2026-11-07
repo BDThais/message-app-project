@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/Button';
+import { ListState } from '@/components/ui/ListState';
 import { useAcceptFriendRequest, useDeleteFriendRequest, useFriendRequests } from '../queries';
 import type { FriendRequest } from '../types';
-import { ListState } from './ListState';
 import { PersonRow } from './PersonRow';
 import { Section } from './Section';
 

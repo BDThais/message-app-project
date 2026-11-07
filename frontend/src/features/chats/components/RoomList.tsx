@@ -1,7 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Avatar } from '@/components/ui/Avatar';
-import { Button } from '@/components/ui/Button';
-import { Notice } from '@/components/ui/Notice';
+import { ListState } from '@/components/ui/ListState';
 import { useMe } from '@/features/account/queries';
 import { formatListTime, roomTitle } from '../format';
 import { useChatRooms } from '../queries';
@@ -25,31 +24,17 @@ export function RoomList({ roomOpen }: { roomOpen: boolean }) {
         <Heading className={roomOpen ? 'text-2xl font-semibold tracking-tight' : undefined}>Chats</Heading>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pb-3">
-        {rooms.isError && (
-          <div className="flex flex-col items-start gap-2 px-4">
-            <Notice tone="error" role="alert">
-              {rooms.error.message}
-            </Notice>
-            <Button type="button" size="sm" variant="secondary" onClick={() => void rooms.refetch()}>
-              Try again
-            </Button>
-          </div>
-        )}
-        {rooms.isPending && (
-          <p role="status" className="px-4 text-sm text-muted">
-            Loading chats…
-          </p>
-        )}
-        {rooms.data?.length === 0 && <p className="px-4 text-sm text-muted">You have no chats yet.</p>}
-        {rooms.data && rooms.data.length > 0 && (
-          <ul>
-            {rooms.data.map((room) => (
-              <li key={room.id}>
-                <RoomLink room={room} userId={user?.id} />
-              </li>
-            ))}
-          </ul>
-        )}
+        <ListState query={rooms} empty="You have no chats yet." loading="Loading chats…" inset>
+          {(items) => (
+            <ul>
+              {items.map((room) => (
+                <li key={room.id}>
+                  <RoomLink room={room} userId={user?.id} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </ListState>
       </div>
     </nav>
   );
