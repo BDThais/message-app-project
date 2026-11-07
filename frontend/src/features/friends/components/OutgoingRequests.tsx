@@ -1,9 +1,9 @@
 import { Button } from '@/components/ui/Button';
 import { ListState } from '@/components/ui/ListState';
+import { Section } from '@/components/ui/Section';
 import { useDeleteFriendRequest, useFriendRequests } from '../queries';
 import type { FriendRequest } from '../types';
 import { PersonRow } from './PersonRow';
-import { Section } from './Section';
 
 /** `onNews` gets the text of an action that found the page out of date, for a row the refresh then takes away. */
 export function OutgoingRequests({ onNews }: { onNews: (text: string) => void }) {

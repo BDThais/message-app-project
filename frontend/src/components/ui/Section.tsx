@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from 'react';
 
-/** A titled card of the friends page; the title names the region for a screen reader. */
+/** A titled card; the title names the region for a screen reader. */
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   const headingId = useId();
 

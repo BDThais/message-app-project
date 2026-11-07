@@ -75,7 +75,7 @@ Rules:
 
 - **Colors come from tokens,** declared once in `@theme` in `styles/theme.css` with the light value and the dark value side by side (`light-dark(#fff, #171a21)`): `bg-surface`, `text-muted`, `border-edge`, `bg-accent`, `text-danger`. A component never uses a palette color (`bg-white`, `text-zinc-500`) and never needs a `dark:` variant: the dark theme is the second value of the token. A new color is a new token.
 - **The theme is the system's** (`color-scheme: light dark`), with no toggle. To see the other one: browser developer tools, Rendering, "Emulate CSS media feature prefers-color-scheme".
-- **A look that is used twice is a component in `components/ui/`,** not a repeated class string and not `@apply`. `Button`, `Notice`, `Form`, `FormLinks`, `TextField`, `TextArea`, `Avatar`, `ListState`, `ActionMenu`, `Page` and `Logo` have no `className` prop on purpose: the look is the same everywhere, spacing around a component is its parent's job, and a missing look is added to the component as a variant.
+- **A look that is used twice is a component in `components/ui/`,** not a repeated class string and not `@apply`. `Button`, `Notice`, `Form`, `FormLinks`, `TextField`, `TextArea`, `Avatar`, `ListState`, `ActionMenu`, `Section`, `Page` and `Logo` have no `className` prop on purpose: the look is the same everywhere, spacing around a component is its parent's job, and a missing look is added to the component as a variant.
 - **`src/styles/` holds only what a class name cannot say,** one file per concern, all imported by `index.css` (the one file `main.tsx` imports; Tailwind comes first, because the files after it use its theme and its `@apply`). Today that is `theme.css` (the `@theme` tokens) and `base.css` (the `@layer base` rules for bare elements: body colors, `h1`, links, the focus ring). A new concern is a new file and one `@import` line in `index.css` (custom `@utility` and `@custom-variant` definitions, the overrides for a third-party widget), not more lines in an existing file. A component's own look is never here: it is its classes, or a shared component in `components/ui/`. Every page has one `h1` and none sets its size.
 - **Two utilities for the same property are decided by the order of the stylesheet, not by the order in `className`.** A component that varies a property gets it from its lookup object only: the sizes of `Button` carry their own `text-sm` or `text-xs`, and the shared classes carry none, because a `text-xs` next to a shared `text-sm` would win or lose by luck.
 - **A class name is written out in full in the source.** Tailwind finds classes by reading the text of the files, so `bg-${tone}` is never found; a lookup object (`tones` in `Notice`) is how a class varies.
@@ -167,6 +167,7 @@ frontend/
     │       ├── Button.tsx        // variant (primary, secondary, ghost, danger), size (md, sm, xs, icon), fullWidth; no className
     │       ├── ActionMenu.tsx    // a ⋮ button that opens a menu of actions: arrow keys, Escape, outside press, placed with `fixed`, flips upward near the bottom
     │       ├── Notice.tsx        // tone (info, success, error) and the role the caller gives it
+    │       ├── Section.tsx       // a titled card whose title names the region
     │       ├── ListState.tsx     // what a list shows before it has items: loading, the server's error with a retry, or the empty text; the items stay when a refetch fails
     │       ├── Form.tsx          // <form> with the spacing between fields
     │       ├── FormLinks.tsx     // the row of links under a form or a notice
@@ -192,7 +193,7 @@ frontend/
     │   │   ├── cache.ts          // sortFriends, addFriendToCache, removeFriendFromCache, addRequestToCache, removeRequestFromCache, setRelationshipInSearches
     │   │   ├── queries.ts        // the friend list, the two request lists and the search, the mutations
     │   │   ├── useMessageFriend.ts  // makes or finds the direct room with a friend and opens it
-    │   │   └── components/       // FriendsPage, FindFriend, IncomingRequests, OutgoingRequests, FriendList, Section, PersonRow
+    │   │   └── components/       // FriendsPage, FindFriend, IncomingRequests, OutgoingRequests, FriendList, PersonRow
     │   └── account/
     │       ├── types.ts          // User (from the contract), LoginInput and SignupInput (the contract's bodies), ResetPasswordInput
     │       ├── api.ts            // one function per endpoint, no React

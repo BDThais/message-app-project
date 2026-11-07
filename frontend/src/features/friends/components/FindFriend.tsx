@@ -3,12 +3,12 @@ import { Button } from '@/components/ui/Button';
 import { Form } from '@/components/ui/Form';
 import { Notice } from '@/components/ui/Notice';
 import { TextField } from '@/components/ui/TextField';
+import { Section } from '@/components/ui/Section';
 import { useAcceptFriendRequest, useDeleteFriendRequest, useSearchUser, useSendFriendRequest } from '../queries';
 import { normalizeTel } from '../tel';
 import type { SearchResult } from '../types';
 import { useMessageFriend } from '../useMessageFriend';
 import { PersonRow } from './PersonRow';
-import { Section } from './Section';
 
 const TEL_HINT = 'The full number with the country code, starting with +, for example +84912345678.';
 
