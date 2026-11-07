@@ -5,7 +5,8 @@ import type { FriendRequest } from '../types';
 import { PersonRow } from './PersonRow';
 import { Section } from './Section';
 
-export function OutgoingRequests() {
+/** `onNews` gets the text of an action that found the page out of date, for a row the refresh then takes away. */
+export function OutgoingRequests({ onNews }: { onNews: (text: string) => void }) {
   const requests = useFriendRequests('outgoing');
 
   return (
@@ -14,7 +15,7 @@ export function OutgoingRequests() {
         {(items) => (
           <ul className="divide-y divide-line">
             {items.map((request) => (
-              <OutgoingRow key={request.id} request={request} />
+              <OutgoingRow key={request.id} request={request} onNews={onNews} />
             ))}
           </ul>
         )}
@@ -23,8 +24,8 @@ export function OutgoingRequests() {
   );
 }
 
-function OutgoingRow({ request }: { request: FriendRequest }) {
-  const cancel = useDeleteFriendRequest();
+function OutgoingRow({ request, onNews }: { request: FriendRequest; onNews: (text: string) => void }) {
+  const cancel = useDeleteFriendRequest((text) => onNews(`${request.user.name}: ${text}`));
 
   return (
     <PersonRow person={request.user} error={cancel.error?.message}>

@@ -7,7 +7,8 @@ import { useMessageFriend } from '../useMessageFriend';
 import { PersonRow } from './PersonRow';
 import { Section } from './Section';
 
-export function FriendList() {
+/** `onNews` gets the text of an action that found the page out of date, for a row the refresh then takes away. */
+export function FriendList({ onNews }: { onNews: (text: string) => void }) {
   const friends = useFriends();
 
   return (
@@ -16,7 +17,7 @@ export function FriendList() {
         {(items) => (
           <ul className="divide-y divide-line">
             {items.map((friend) => (
-              <FriendRow key={friend.id} friend={friend} />
+              <FriendRow key={friend.id} friend={friend} onNews={onNews} />
             ))}
           </ul>
         )}
@@ -25,9 +26,9 @@ export function FriendList() {
   );
 }
 
-function FriendRow({ friend }: { friend: PublicUser }) {
+function FriendRow({ friend, onNews }: { friend: PublicUser; onNews: (text: string) => void }) {
   const [confirming, setConfirming] = useState(false);
-  const unfriend = useUnfriend();
+  const unfriend = useUnfriend((text) => onNews(`${friend.name}: ${text}`));
   const { message, isPending: isOpeningChat, error: chatError } = useMessageFriend();
   const busy = unfriend.isPending || isOpeningChat;
 

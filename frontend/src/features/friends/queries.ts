@@ -58,10 +58,14 @@ export function useSearchUser(tel: string | null) {
 /**
  * A refusal that means what the screen shows is out of date (the request is gone or was answered, the
  * two are already friends, they are not friends): ask the server again, and the server's text says why.
+ * `onOutOfDate` gets that text. A row that the refreshed list no longer has takes its own error with
+ * it, so the caller that has a place for it on the page passes this. It is a hook-level callback on
+ * purpose: one given to `mutate` would not run once the row is unmounted.
  */
-function refreshWhenOutOfDate(queryClient: QueryClient, error: unknown): void {
+function refreshWhenOutOfDate(queryClient: QueryClient, error: unknown, onOutOfDate?: (message: string) => void): void {
   if (isApiError(error) && (error.status === 404 || error.status === 409)) {
     void queryClient.invalidateQueries({ queryKey: friendKeys.all() });
+    onOutOfDate?.(error.message);
   }
 }
 
@@ -78,7 +82,7 @@ export function useSendFriendRequest() {
 }
 
 /** The variable is the request's id. */
-export function useAcceptFriendRequest() {
+export function useAcceptFriendRequest(onOutOfDate?: (message: string) => void) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: acceptFriendRequest,
@@ -87,12 +91,12 @@ export function useAcceptFriendRequest() {
       addFriendToCache(queryClient, friend);
       setRelationshipInSearches(queryClient, friend.id, 'friend');
     },
-    onError: (error) => refreshWhenOutOfDate(queryClient, error),
+    onError: (error) => refreshWhenOutOfDate(queryClient, error, onOutOfDate),
   });
 }
 
 /** Rejects a request that came in, or cancels one that was sent: the endpoint is the same. `userId` is the other person's, for the searches. */
-export function useDeleteFriendRequest() {
+export function useDeleteFriendRequest(onOutOfDate?: (message: string) => void) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ requestId }: { requestId: number; userId: number }) => deleteFriendRequest(requestId),
@@ -100,12 +104,12 @@ export function useDeleteFriendRequest() {
       removeRequestFromCache(queryClient, requestId);
       setRelationshipInSearches(queryClient, userId, 'none');
     },
-    onError: (error) => refreshWhenOutOfDate(queryClient, error),
+    onError: (error) => refreshWhenOutOfDate(queryClient, error, onOutOfDate),
   });
 }
 
 /** The variable is the other person's user id. Their direct room stays in the room list. */
-export function useUnfriend() {
+export function useUnfriend(onOutOfDate?: (message: string) => void) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: unfriend,
@@ -113,6 +117,6 @@ export function useUnfriend() {
       removeFriendFromCache(queryClient, userId);
       setRelationshipInSearches(queryClient, userId, 'none');
     },
-    onError: (error) => refreshWhenOutOfDate(queryClient, error),
+    onError: (error) => refreshWhenOutOfDate(queryClient, error, onOutOfDate),
   });
 }

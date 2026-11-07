@@ -5,7 +5,8 @@ import type { FriendRequest } from '../types';
 import { PersonRow } from './PersonRow';
 import { Section } from './Section';
 
-export function IncomingRequests() {
+/** `onNews` gets the text of an action that found the page out of date, for a row the refresh then takes away. */
+export function IncomingRequests({ onNews }: { onNews: (text: string) => void }) {
   const requests = useFriendRequests('incoming');
 
   return (
@@ -14,7 +15,7 @@ export function IncomingRequests() {
         {(items) => (
           <ul className="divide-y divide-line">
             {items.map((request) => (
-              <IncomingRow key={request.id} request={request} />
+              <IncomingRow key={request.id} request={request} onNews={onNews} />
             ))}
           </ul>
         )}
@@ -23,11 +24,12 @@ export function IncomingRequests() {
   );
 }
 
-function IncomingRow({ request }: { request: FriendRequest }) {
-  const accept = useAcceptFriendRequest();
-  const reject = useDeleteFriendRequest();
-  const busy = accept.isPending || reject.isPending;
+function IncomingRow({ request, onNews }: { request: FriendRequest; onNews: (text: string) => void }) {
   const { name } = request.user;
+  const report = (text: string) => onNews(`${name}: ${text}`);
+  const accept = useAcceptFriendRequest(report);
+  const reject = useDeleteFriendRequest(report);
+  const busy = accept.isPending || reject.isPending;
 
   return (
     <PersonRow person={request.user} error={(accept.error ?? reject.error)?.message}>

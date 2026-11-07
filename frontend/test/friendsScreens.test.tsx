@@ -39,6 +39,14 @@ async function searchFor(user: User, tel: string) {
   await user.click(screen.getByRole('button', { name: 'Search' }));
 }
 
+/** The page's line of news (a live region that is there all the time), or null while it says nothing. */
+function newsLine() {
+  const dismiss = screen.queryByRole('button', { name: 'Dismiss' });
+  if (!dismiss) return null;
+  const region = dismiss.closest('[role="status"]');
+  return { text: region?.querySelector('span')?.textContent ?? null, isLiveRegion: region !== null };
+}
+
 const namesIn = (list: HTMLElement) => within(list).getAllByRole('listitem').map((item) => item.querySelector('span.font-medium')?.textContent);
 
 describe('the friends page', () => {
@@ -282,6 +290,7 @@ describe('finding someone', () => {
 
     expect(await result.findByRole('button', { name: 'Accept' })).toBeTruthy();
     expect(result.getByRole('alert').textContent).toBe('This user has already sent you a friend request');
+    expect(newsLine()).toBeNull(); // the card is still there with its text, so the page has nothing to add
     // The incoming list learned of it too.
     expect(await (await section('Friend requests')).findByRole('button', { name: 'Accept Bea' })).toBeTruthy();
   });
@@ -384,6 +393,68 @@ describe('answering and cancelling requests', () => {
 
     expect(await incoming.findByText('No one is waiting for an answer.')).toBeTruthy();
     expect(state.count('GET /api/friend/requests?direction=incoming')).toBe(2);
+    // The row took its own error with it, so the page says why it went, with the person's name.
+    await waitFor(() => expect(newsLine()).toEqual({ text: 'Carl: Friend request not found', isLiveRegion: true }));
+  });
+
+  it('says why a request that was sent is gone, when the other person answered it while the page was open', async () => {
+    const { state } = openFriends((fake) => fake.addFriendRequest({ from: john, to: dana }));
+    const user = userEvent.setup();
+    const sent = await section('Requests you sent');
+    await sent.findByText('Dana');
+
+    state.friendRequests.length = 0; // Dana rejected it
+    await user.click(sent.getByRole('button', { name: 'Cancel request to Dana' }));
+
+    expect(await sent.findByText('You have no requests waiting for an answer.')).toBeTruthy();
+    await waitFor(() => expect(newsLine()?.text).toBe('Dana: Friend request not found'));
+  });
+
+  it('says why a request that came in is gone, when the person rejects one that was taken back', async () => {
+    const { state } = openFriends((fake) => fake.addFriendRequest({ from: carl, to: john }));
+    const user = userEvent.setup();
+    const incoming = await section('Friend requests');
+    await incoming.findByText('Carl');
+
+    state.friendRequests.length = 0;
+    await user.click(incoming.getByRole('button', { name: 'Reject Carl' }));
+
+    expect(await incoming.findByText('No one is waiting for an answer.')).toBeTruthy();
+    await waitFor(() => expect(newsLine()?.text).toBe('Carl: Friend request not found'));
+  });
+
+  it('says nothing when an action works', async () => {
+    openFriends((fake) => fake.addFriendRequest({ from: carl, to: john }));
+    const user = userEvent.setup();
+    const incoming = await section('Friend requests');
+
+    await user.click(await incoming.findByRole('button', { name: 'Reject Carl' }));
+    await incoming.findByText('No one is waiting for an answer.');
+
+    expect(newsLine()).toBeNull();
+  });
+
+  it('lets the person dismiss the news, and a newer piece of news takes its place', async () => {
+    const { state } = openFriends((fake) => {
+      fake.addFriendRequest({ from: carl, to: john });
+      fake.addFriendRequest({ from: dana, to: john });
+    });
+    const user = userEvent.setup();
+    const incoming = await section('Friend requests');
+    await incoming.findByText('Dana');
+
+    state.friendRequests.splice(0, 1); // Carl took his request back (it is the older one: Dana's is listed first)
+    await user.click(incoming.getByRole('button', { name: 'Accept Carl' }));
+    await waitFor(() => expect(newsLine()?.text).toBe('Carl: Friend request not found'));
+    expect(incoming.queryByRole('button', { name: 'Accept Carl' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(newsLine()).toBeNull();
+
+    // Not dismissed this time: the next piece of news replaces the one on the page.
+    state.friendRequests.length = 0; // and Dana did too
+    await user.click(await incoming.findByRole('button', { name: 'Accept Dana' }));
+    await waitFor(() => expect(newsLine()?.text).toBe('Dana: Friend request not found'));
   });
 });
 
@@ -430,6 +501,7 @@ describe('the friends', () => {
 
     expect(await friends.findByText(/You have no friends yet/)).toBeTruthy();
     expect(state.count('GET /api/friend')).toBe(2);
+    await waitFor(() => expect(newsLine()).toEqual({ text: 'Bea: You are not friends with this user', isLiveRegion: true }));
   });
 });
 
