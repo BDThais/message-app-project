@@ -5,8 +5,9 @@ import type { User } from './types';
 /**
  * The guard (`requireUser`) only runs when navigating. If the session ends while a page is open (a
  * request answered 401 and GET /api/account/me then came back empty, or this person signed out), the
- * cached user becomes `null` and this sends them to the login page. When `isSigningOut` is true (the
- * person clicked "Sign out", see `useSignOut`) it is a deliberate sign-out: plain /login, no `redirect`.
+ * cached user becomes `null` and this sends them to the login page. When `isSigningOut` is true it
+ * is a deliberate end of the session (a sign-out or a deleted account, see `useEndingSession`):
+ * plain /login, no `redirect`.
  *
  * The page they were on is read from the router inside the effect, once, and not from a hook: a
  * value that changes with the location would make the effect run again for the /login URL it has

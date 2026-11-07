@@ -142,6 +142,8 @@ export function createState({ signedIn }: { signedIn: boolean }) {
       this.messages.push(message);
       return message;
     },
+    /** The ids of group rooms in which John is the only admin while others remain: DELETE /api/account/me answers 409 with them. */
+    deletionBlockedBy: [] as number[],
     /** Make POST /api/account/logout answer 500, so the sign-out fails and the session stays. */
     logoutFails: false,
     /** While set, every request waits for it before it is answered (to look at a request that is still running). */

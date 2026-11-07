@@ -1,6 +1,19 @@
-import { queryOptions, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useMutationState, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { isApiError } from '@/lib/http';
-import { getMe, login, logout, requestPasswordReset, resendVerificationEmail, resetPassword, signup, verifyEmail } from './api';
+import {
+  changePassword,
+  deleteAccount,
+  getMe,
+  login,
+  logout,
+  requestPasswordReset,
+  resendVerificationEmail,
+  resetPassword,
+  signup,
+  updateProfile,
+  verifyEmail,
+} from './api';
+import type { DeleteAccountConflictBody } from '@contract/errors';
 import type { User } from './types';
 
 export const accountKeys = {
@@ -39,21 +52,67 @@ export function useLogin() {
   });
 }
 
+/** Signing out and deleting the account are the two ways a person ends their own session on purpose. */
+const endSessionKey = ['account', 'end-session'] as const;
+
 /**
- * Signs the person out. `isSigningOut` is true from the click until the request fails, and stays
- * true once it has succeeded: by then the cached user is `null` and the layout is about to leave
- * for /login, which `useRedirectWhenSignedOut` must not take for a session that ended by itself.
+ * True from the click until the request fails, and stays true once it has succeeded: by then the
+ * cached user is `null` and the layout is about to leave for /login, which `useRedirectWhenSignedOut`
+ * must not take for a session that ended by itself. It reads the mutation cache and not one
+ * component's mutation, because the delete button is deeper in the page than the layout that redirects.
  */
+export function useEndingSession(): boolean {
+  return useMutationState({ filters: { mutationKey: endSessionKey }, select: (mutation) => mutation.state.status }).some(
+    (status) => status === 'pending' || status === 'success',
+  );
+}
+
+/** `gcTime: 0`: a finished sign-out must not stay in the cache and make the next session look as if it were ending. */
 export function useSignOut() {
   const queryClient = useQueryClient();
   const signOut = useMutation({
+    mutationKey: endSessionKey,
+    gcTime: 0,
     mutationFn: logout,
     onSuccess: () => setSignedInUser(queryClient, null),
   });
-  return {
-    signOut: () => signOut.mutate(),
-    isSigningOut: signOut.isPending || signOut.isSuccess,
-  };
+  const isSigningOut = useEndingSession();
+  return { signOut: () => signOut.mutate(), isSigningOut };
+}
+
+/** Puts the user the server answers with into the cache; that is the one place the header and the forms read the name from. */
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateProfile,
+    onSuccess: (user) => queryClient.setQueryData(accountKeys.me(), user),
+  });
+}
+
+/** A wrong current password is a 401 that leaves the session valid (see `createApp.ts`); the person stays signed in. */
+export function useChangePassword() {
+  return useMutation({ mutationFn: changePassword });
+}
+
+/**
+ * Deletes the account and leaves like a sign-out does. A `409` means the person is the only admin of
+ * group rooms that still have other members: `blockingRoomIds` reads their ids from the error.
+ */
+export function useDeleteAccount() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: endSessionKey,
+    gcTime: 0,
+    mutationFn: deleteAccount,
+    onSuccess: () => setSignedInUser(queryClient, null),
+  });
+}
+
+/** The rooms that stop an account from being deleted (the `409`'s `chatIds`), or `[]` when the error carries none. */
+export function blockingRoomIds(error: unknown): number[] {
+  if (!isApiError(error)) return [];
+  const { chatIds } = (error.body ?? {}) as Partial<DeleteAccountConflictBody>;
+  return Array.isArray(chatIds) ? chatIds.filter((id) => typeof id === 'number') : [];
 }
 
 /**

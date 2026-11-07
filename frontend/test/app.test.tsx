@@ -158,7 +158,7 @@ describe('the app', () => {
     const changePassword = new MutationObserver(queryClient, {
       mutationFn: () => api.post('/account/password', { current_password: 'wrong', new_password: PASSWORD }),
     });
-    await expect(changePassword.mutate()).rejects.toThrow('Current password is wrong');
+    await expect(changePassword.mutate()).rejects.toThrow('Current password is incorrect');
 
     // The app asked again, was told the session is fine, and left the person where they were.
     await waitFor(() => expect(meRequests()).toBe(2));

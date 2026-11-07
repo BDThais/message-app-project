@@ -102,6 +102,7 @@ frontend/
 ├── test/                         // every test and its helpers, mirroring src/ (like the server's test/)
 │   ├── app.test.tsx              // the sign-in loop through the real app against a fake API
 │   ├── accountScreens.test.tsx   // signup, forgot/reset password, the mailed-link pages, the banner (same approach)
+│   ├── settingsScreens.test.tsx  // the settings page: profile, password, deleting the account (same approach)
 │   ├── chatScreens.test.tsx      // the room list, a conversation, sending, editing, deleting, older messages, the read marker, scrolling (same approach)
 │   ├── friendsScreens.test.tsx   // searching, the requests, the friend list, "Message", the main navigation (same approach)
 │   ├── pageFrame.test.tsx        // every page has exactly one <main>
@@ -158,7 +159,8 @@ frontend/
     │   ├── _app/chat.tsx         // layout of the chat pages: the room-list sidebar (ChatLayout)
     │   ├── _app/chat.index.tsx   // "select a chat", for wide screens
     │   ├── _app/chat.$chatId.tsx // the conversation; a path that is not a room id is "chat not found"
-    │   └── _app/friends.tsx      // the friends page
+    │   ├── _app/friends.tsx      // the friends page
+    │   └── _app/settings.tsx     // the settings page; hands the room names to it
     ├── components/
     │   └── ui/
     │       ├── Page.tsx          // the page frame: the <main>; layout narrow (a centered card), column, or fill (the room that is left)
@@ -202,7 +204,7 @@ frontend/
     │       ├── useRedirectWhenSignedOut.ts  // sends the person to /login when the session ends while a page is open
     │       ├── fragmentToken.ts  // parseFragmentToken, useFragmentToken
     │       ├── hints.ts          // texts that hint the server's rules (password)
-    │       └── components/       // AppLayout (header with the main navigation, banner, outlet), LoginForm, SignupForm, ForgotPasswordForm, ResetPasswordPage, VerifyEmailPage, VerifyEmailBanner
+    │       └── components/       // AppLayout (header with the main navigation, banner, outlet), LoginForm, SignupForm, ForgotPasswordForm, ResetPasswordPage, VerifyEmailPage, VerifyEmailBanner, SettingsPage, ProfileForm, PasswordForm, DeleteAccount
     └── lib/
         ├── http.ts               // api, ApiError
         ├── queryClient.ts        // createQueryClient, shouldRetry
@@ -241,7 +243,7 @@ Planned additions: more of `components/ui/` (dialog), and `lib/socket.ts` (step 
 | `/chat` | `_app/chat.index.tsx` | `_app`: a signed-out visitor is sent to `/login`; then `_app/chat.tsx` | done |
 | `/chat/$chatId` | `_app/chat.$chatId.tsx` | `_app`, then `_app/chat.tsx` | done |
 | `/friends` | `_app/friends.tsx` | `_app` | done |
-| `/settings` | `_app/settings.tsx` | `_app` | step 5 |
+| `/settings` | `_app/settings.tsx` | `_app` | done (step 5a) |
 
 How the guards work:
 
@@ -332,7 +334,7 @@ Built as described, with these changes and choices where the plan was open or tu
 Built as described, with these choices where the plan was open:
 
 - **One page, `/friends`, of four cards:** "Add a friend" (the search and its result), "Friend requests" (incoming: Accept, Reject), "Requests you sent" (Cancel) and "Your friends" (Message, Unfriend). The result of a search is one person with the button of their `relationship`: "Add friend", "Request sent" with "Cancel", "Accept", "Message", and for the person themselves only the words "This is you". A search that finds no one says so; the server's text is shown for a number it refuses and for the limit.
-- **A main navigation in the header** (Chats, Friends; the router marks the open page with `aria-current`). On a phone it takes a row of its own under the logo, so the header does not overflow. The step had no way to reach `/friends` otherwise.
+- **A main navigation in the header** (Chats, Friends, Settings; the router marks the open page with `aria-current`). On a phone it takes a row of its own under the logo, so the header does not overflow. The step had no way to reach `/friends` otherwise.
 - **The typed number is cleaned (`normalizeTel`: spaces, dashes and brackets go) and the segment encoded;** everything else that is wrong is left for the server's `400`. A number without a country code (`0912...`) is refused by the server, and the hint under the field says to start with `+`.
 - **Search is disabled while it runs and when there is nothing to search for,** and pressing it again for the same number asks again (a person may be waiting for an answer). Enter does the same as the button, because a form is not submitted by Enter while its button is disabled.
 - **Unfriending asks first,** in the row, like deleting a message ("Remove Bea from your friends? Your chats with them stay.").
@@ -344,8 +346,18 @@ Built as described, with these choices where the plan was open:
 
 ### Step 5 — account settings and room management
 
-- `/settings`: change name and avatar URL (`PATCH /api/account/me`), change password (`POST /api/account/password`), delete account (`DELETE /api/account/me`; show the rooms from the `409`'s `chatIds`).
-- Create a group room, the member list, add and remove members, promote and demote, leave, rename. Show actions according to the permission table in `./api.doc.md`, and rely on the server's answers for the rest.
+Two parts: 5a, `/settings` (done), and 5b, the rooms (to do).
+
+- **5a.** `/settings`: change name and avatar URL (`PATCH /api/account/me`), change password (`POST /api/account/password`), delete account (`DELETE /api/account/me`; show the rooms from the `409`'s `chatIds`).
+- **5b.** Create a group room, the member list, add and remove members, promote and demote, leave, rename, delete. Show actions according to the permission table in `./api.doc.md`, and rely on the server's answers for the rest.
+
+Built for 5a, with these choices where the plan was open:
+
+- **One page of three cards** (Profile, Password, Delete account) and a "Settings" link in the main navigation. The profile form shows the address and the phone number as text, because the API cannot change them, sends only what changed (the name trimmed; `avatar_url` as `null` when the field is emptied), puts the user the server answers with into the `me` cache (the header changes at once, no second request) and says "Saved." until something is edited again. The password form empties its fields on success and says that every other device was signed out.
+- **A wrong password is a `401` that leaves the session valid,** in the password form and in the deletion's. The app asks who is signed in again, is told "still you", and the person stays on the page with the server's text; `createApp.ts` already did that for any `401`.
+- **Deleting the account ends the session like Sign out does.** Both go through the same `mutationKey` and `useEndingSession` reads the mutation cache, because the delete button is deeper in the page than the layout that redirects to `/login`: without it the redirect would carry `?redirect=/settings`, back to a page of an account that is gone. Both mutations have `gcTime: 0`: a finished sign-out left in the cache made the next session look as if it were ending, and its Sign out button was disabled (a test covers it).
+- **The deletion is a button, then a password field.** The `409` (the person is the only admin of group rooms that still have other members) lists those rooms as links to their conversations, named from the room list. The account feature does not import the chats feature (chats imports account), so the route `_app/settings.tsx`, which may use both, builds `roomName` and hands it down; a room the list does not have is shown as "Chat 8".
+- **Until 5b exists, those rooms cannot be sorted out from the screens:** the server says to make someone else an admin or delete the room, and neither has a screen yet.
 
 ### Step 6 — Socket.io, together with the server
 
@@ -383,6 +395,7 @@ Client side:
 - The aim is not full coverage: tests are for behaviour that matters and is easy to break. When a test is written for a new rule, break the code on purpose once and check that the test fails.
 - `test/app.test.tsx` also checks that `/chat` is matched inside the `_app/chat.tsx` layout.
 - `test/chatScreens.test.tsx` runs the chat screens against the fake chat endpoints: the list (order, preview, unread count, the same sidebar element across rooms), a conversation (order, who may act, a group's sender names, deleted and edited messages, a room that is not there), sending (from the answer, no refetch of the messages, Enter and Shift+Enter, a refusal keeps the text), editing and deleting (the room preview follows from the loaded messages without a request, and the room list is asked for only when they cannot say), the "You:" prefix, older messages (the cursor, the order, a failure), the read marker (once, only when something is unread, only at the bottom and in front) and the polling (the newest page only, with fake timers). A mutation check on 2026-10-25 (ten changes to the cache, the cursor, the marker and the scroll code) was caught by a test each. The fake chat endpoints follow `./api.doc.md` with the room's unread count and last message worked out from its messages, as the server does.
+- `test/settingsScreens.test.tsx` runs the settings page against the fake account endpoints (`PATCH /api/account/me`, `POST /api/account/password`, `DELETE /api/account/me`, whose `409` the test sets with `deletionBlockedBy`): getting there from the navigation and as a signed-out visitor; the profile (only the changed field is sent, the trimmed name, `null` for an emptied avatar, the header changing at once without a second request, the server's refusal with the typed text kept, "Saved." going away on the next edit); the password (changed and the fields emptied, a wrong current password that keeps the person signed in, the server's text for a weak one); the deletion (Cancel forgets the password and the refusal, a plain `/login` afterwards, a wrong password, the rooms of the `409` as named links with the fallback name, and that Sign out is enabled in the session after one that ended). A mutation check on 2026-11-06 (19 changes to the hooks, the three forms, the navigation and the route) was caught by a test each, after two survivors: an equivalent status check, which was removed, and a Cancel that did not forget the refusal, which got a test.
 - `test/friendsScreens.test.tsx` runs the friends page against the fake friend endpoints: the lists (the friends in name order, the newest request first, empty states, a list that fails with a retry), the search (the number cleaned and encoded, "Add friend" and "Request sent", no one found, the server's texts for a refused number and the limit, Search disabled when empty and while it runs, the same number searched again, the button for each relationship, no button for oneself, a screen that was out of date), accepting, rejecting and cancelling from the lists and from the card (what the other one then shows, and that no list is asked for again), unfriending after a question, "Message" (a new room, the room that exists, from the card, into a room list loaded before, a `403`), the page's line of news (for a request taken back, one answered, a friend who is not one any more, in a live region, dismissed or replaced, and not there when an action works or the card keeps the text), the main navigation, and that a signed-out visitor is sent to the login page. A mutation check on 2026-11-04 (27 changes to the cache, the hooks, the search rules and the components) was caught by a test each; one survived, a second empty-number guard behind the disabled button, which was removed. The same check on 2026-11-06 for the line of news (nine changes: the hook, each of the four callers, the name, the live region, Dismiss) was caught by a test each. The fake friend endpoints follow `./api.doc.md`, and `POST /api/chat` of the fake chat endpoints makes only direct rooms, after the friend check.
 - The friend functions of `features/friends/api.ts` and `createDirectChatRoom` were run against the real server on 2026-11-04, with two accounts (search with a typed number, no one found, a refused number, send, both lists, the `409` texts and the `requestId` of the crossed request, accept, reject and cancel, unfriend, the direct room made and found again, the `403` once unfriended, the old room still listed): every shape, status code and text was the one `./api.doc.md` says and the fake API has.
 - jsdom has no layout, so the scroll tests give the message list one (`stubScrollLayout`: 50px a message in a window of 400px, a settable `scrollTop`) and check the arithmetic: the bottom on opening, the position kept when older messages are added, new messages followed only from the bottom, a sent message always scrolled to. How a real browser lays it out was looked at in headless Chromium on 2026-10-25 (the setup is in `CLAUDE_SANDBOX_NOTES.md`): the list opens at the bottom, the same message stays under the same pixel after older ones are added (exactly the added height), a new message while reading higher up moves nothing, a sent message scrolls to the bottom, and the phone width has no horizontal overflow. The friends page and the new header were looked at there on 2026-11-04 (390px and 1100px wide, light and dark, a long name, a search result): no horizontal overflow, the navigation on a row of its own on a phone, the name truncated before the buttons.
@@ -417,6 +430,7 @@ Sound from the start, and kept: the direction of the imports (`routes/` use `fea
 
 ## Decisions
 
+- **Signing out and deleting the account are one kind of mutation, `end-session`** (2026-11-06; see step 5a): `useEndingSession` is what `useRedirectWhenSignedOut` asks whether the person ended the session on purpose, so the redirect to `/login` is plain. A single `useMutation`'s `isPending || isSuccess` (what `useSignOut` used to return) cannot be seen from a component deeper in the page.
 - **A message's actions are in a ⋮ menu beside it, with the time** (2026-11-06). Edit and Delete used to sit under every message with the time, which would have grown with each action added later. Now the bubble is alone at rest; the time and, for the person's own message, the ⋮ button show when the pointer is over the message, when the focus is in it (the keyboard), or after a press on the bubble (the touch screen, where there is no hover, and a mouse click; a press elsewhere puts them away). They are always in the page and only drawn when asked for (`opacity`, plus `pointer-events` so an invisible button cannot be pressed), so showing them moves nothing in the list. Another action is one more item in `MessageItem`'s `actions`. Others' messages show the time and no button, because there is nothing to do with them yet.
   - `ActionMenu` is in `components/ui/` because step 5's member rows need the same thing. It is written by hand and not with a library (a headless menu such as Radix's was the option the Styling section left open): one component, no dependency, and the rules a menu needs are few and have tests (arrow keys that wrap, Home and End, Escape gives the focus back, Tab and a press outside and a scroll close it). It is `fixed` and measured when opened, not `absolute`, because the message list scrolls and would clip or stretch for the last message; the cost is that it closes on any scroll, which a new message at the bottom can cause.
   - The time and button beside the bubble take room from it: on a 390px phone a long message of the person's own is 264px wide and was 304, the others' about the same, and at `sm` and up nothing changes (the bubble is capped at `max-w-md`).

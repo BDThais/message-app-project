@@ -21,6 +21,7 @@ export function AppLayout() {
         <nav aria-label="Main" className="order-last -mx-2 flex basis-full items-center gap-1 sm:order-none sm:mx-0 sm:basis-auto">
           <NavLink to="/chat">Chats</NavLink>
           <NavLink to="/friends">Friends</NavLink>
+          <NavLink to="/settings">Settings</NavLink>
         </nav>
         <div className="ml-auto flex min-w-0 items-center gap-3">
           <span className="truncate text-sm text-muted">{user.name}</span>
@@ -38,7 +39,7 @@ export function AppLayout() {
 }
 
 /** A link of the main navigation; the router marks the one for the current page (and the pages below it) with `aria-current`. */
-function NavLink({ to, children }: { to: '/chat' | '/friends'; children: string }) {
+function NavLink({ to, children }: { to: '/chat' | '/friends' | '/settings'; children: string }) {
   return (
     <Link
       to={to}

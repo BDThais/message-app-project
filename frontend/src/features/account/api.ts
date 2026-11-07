@@ -1,7 +1,14 @@
 import { api } from '@/lib/http';
-import type { PasswordResetRequestBody, ResetPasswordBody, VerifyEmailBody } from '@contract/requests';
+import type {
+  ChangePasswordBody,
+  DeleteAccountBody,
+  PasswordResetRequestBody,
+  ResetPasswordBody,
+  UpdateProfileBody,
+  VerifyEmailBody,
+} from '@contract/requests';
 import type { LogoutResponse, MeResponse, MessageResponse, UserResponse } from '@contract/responses';
-import type { LoginInput, ResetPasswordInput, SignupInput, User } from './types';
+import type { ChangePasswordInput, LoginInput, ResetPasswordInput, SignupInput, UpdateProfileInput, User } from './types';
 
 // One function per endpoint; no React and no caching in here (see queries.ts for that).
 
@@ -43,4 +50,22 @@ export async function requestPasswordReset(email: string): Promise<void> {
 /** Sets a new password with the token from a reset mail. It does not sign anyone in. */
 export async function resetPassword({ token, newPassword }: ResetPasswordInput): Promise<void> {
   await api.post<void>('/account/password/reset', { token, new_password: newPassword } satisfies ResetPasswordBody);
+}
+
+/** Only the fields that are given are sent, so a name change leaves the avatar alone. */
+export async function updateProfile({ name, avatarUrl }: UpdateProfileInput): Promise<User> {
+  const body: UpdateProfileBody = {};
+  if (name !== undefined) body.name = name;
+  if (avatarUrl !== undefined) body.avatar_url = avatarUrl;
+  const { user } = await api.patch<UserResponse>('/account/me', body);
+  return user;
+}
+
+/** Every other session of the account is signed out; the one that asks stays. */
+export async function changePassword({ currentPassword, newPassword }: ChangePasswordInput): Promise<void> {
+  await api.post<void>('/account/password', { current_password: currentPassword, new_password: newPassword } satisfies ChangePasswordBody);
+}
+
+export async function deleteAccount(password: string): Promise<void> {
+  await api.delete<void>('/account/me', { password } satisfies DeleteAccountBody);
 }

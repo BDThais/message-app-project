@@ -1,3 +1,4 @@
+import type { DeleteAccountConflictBody } from '@contract/errors';
 import type { LogoutResponse, MeResponse, MessageResponse, UserResponse } from '@contract/responses';
 import { json, noContent } from './responses';
 import { textField } from './body';
@@ -79,10 +80,57 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
       return noContent();
     }
 
-    // A stand-in for the endpoints that answer 401 for a wrong current password while the session is
-    // still fine (this one and DELETE /api/account/me).
-    case 'POST /api/account/password':
-      return json({ error: 'Current password is wrong' }, 401);
+    case 'PATCH /api/account/me': {
+      const account = accounts.find(({ user }) => user.id === state.sessionUserId);
+      if (!account) return json({ error: 'Unauthorized Access' }, 401);
+      const sent = (field: string) => body !== undefined && body !== null && field in body;
+      if (!sent('name') && !sent('avatar_url')) return json({ error: "At least either 'name' or 'avatar_url' must be provided" }, 400);
+      if (sent('name')) {
+        const name = textField(body, 'name');
+        if (name === '') return json({ error: "'name' must be a non-empty string" }, 400);
+        if (!/^[A-Za-z0-9]+$/.test(name)) return json({ error: 'Name must contain only letters and numbers' }, 400);
+        account.user.name = name;
+      }
+      if (sent('avatar_url')) {
+        const url = body?.avatar_url;
+        if (url !== null && typeof url !== 'string') return json({ error: "'avatar_url' must be a string or null" }, 400);
+        if (typeof url === 'string' && !/^https?:\/\/\S+$/.test(url)) return json({ error: "'avatar_url' must be a valid URL" }, 400);
+        account.user.avatarUrl = url;
+      }
+      return json({ user: account.user } satisfies UserResponse);
+    }
+
+    // A wrong current password is a 401 while the session is still fine, which the app must not take for a lost session.
+    case 'POST /api/account/password': {
+      const account = accounts.find(({ user }) => user.id === state.sessionUserId);
+      if (!account) return json({ error: 'Unauthorized Access' }, 401);
+      const [current, next] = [textField(body, 'current_password'), textField(body, 'new_password')];
+      if (!current || !next) return json({ error: 'Current password and new password are required' }, 400);
+      if (current !== account.password) return json({ error: 'Current password is incorrect' }, 401);
+      const problem = passwordProblem(next);
+      if (problem) return json({ error: problem }, 400);
+      account.password = next;
+      return noContent();
+    }
+
+    case 'DELETE /api/account/me': {
+      const account = accounts.find(({ user }) => user.id === state.sessionUserId);
+      if (!account) return json({ error: 'Unauthorized Access' }, 401);
+      if (!textField(body, 'password')) return json({ error: 'Password is required' }, 400);
+      if (textField(body, 'password') !== account.password) return json({ error: 'Password is incorrect' }, 401);
+      if (state.deletionBlockedBy.length > 0) {
+        return json(
+          {
+            error: 'You are the only admin of a group room that still has other members. Make someone else an admin or delete the room first',
+            chatIds: state.deletionBlockedBy,
+          } satisfies DeleteAccountConflictBody,
+          409,
+        );
+      }
+      accounts.splice(accounts.indexOf(account), 1);
+      state.sessionUserId = null;
+      return noContent();
+    }
 
     default:
       return undefined;
