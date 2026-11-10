@@ -11,7 +11,9 @@ describe('POST /account/password/reset (rate limit)', () => {
       expect(res.status, `request ${i + 1}`).toBe(400);
     }
 
-    const blocked = await request(app).post('/api/account/password/reset').send({ token: 'anything', new_password: 'N3wer!Passw0rd' });
+    const blocked = await request(app)
+      .post('/api/account/password/reset')
+      .send({ token: 'anything', new_password: 'N3wer!Passw0rd' });
 
     expect(blocked.status).toBe(429);
     expect(blocked.body).toEqual({ error: 'Too many attempts, try again later' });

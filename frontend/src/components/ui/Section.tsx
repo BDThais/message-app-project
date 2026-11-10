@@ -5,7 +5,10 @@ export function Section({ title, children }: { title: string; children: ReactNod
   const headingId = useId();
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 sm:p-5">
+    <section
+      aria-labelledby={headingId}
+      className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 sm:p-5"
+    >
       <h2 id={headingId} className="text-lg font-semibold tracking-tight">
         {title}
       </h2>

@@ -59,7 +59,7 @@ describe('validateSendFriendRequestBody', () => {
 
   it.each([
     ['an ordinary ID', 2],
-    ['the smallest ID other than the requester\'s', 2],
+    ["the smallest ID other than the requester's", 2],
     ['the largest ID the database can hold', MAX_INT32],
   ])('accepts %s', (_label, receiverId) => {
     expect(validateSendFriendRequestBody({ receiver_id: receiverId }, requesterId)).toEqual({

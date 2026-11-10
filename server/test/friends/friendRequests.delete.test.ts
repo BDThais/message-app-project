@@ -24,31 +24,34 @@ describe('DELETE /friend/requests/:id', () => {
   it.each([
     ['the receiver rejects', 'bob'],
     ['the sender cancels', 'alice'],
-  ] as const)('%s: deletes that request, answers 204 with no body and leaves every other request alone', async (_label, caller) => {
-    const alice = await createUser('Alice');
-    const bob = await createUser('Bob');
-    const carol = await createUser('Carol');
-    // Alice -> Bob is the request under test. Bob -> Alice is the other half of
-    // the send-at-the-same-instant race: a different request, so it stays (that
-    // is why `:id` is a request ID and not a user ID).
-    const aliceToBob = await createFriendRequest(alice.id, bob.id);
-    await createFriendRequest(bob.id, alice.id);
-    await createFriendRequest(carol.id, bob.id);
-    await createFriendRequest(alice.id, carol.id);
-    const agent = await loginAs(caller === 'alice' ? alice : bob);
+  ] as const)(
+    '%s: deletes that request, answers 204 with no body and leaves every other request alone',
+    async (_label, caller) => {
+      const alice = await createUser('Alice');
+      const bob = await createUser('Bob');
+      const carol = await createUser('Carol');
+      // Alice -> Bob is the request under test. Bob -> Alice is the other half of
+      // the send-at-the-same-instant race: a different request, so it stays (that
+      // is why `:id` is a request ID and not a user ID).
+      const aliceToBob = await createFriendRequest(alice.id, bob.id);
+      await createFriendRequest(bob.id, alice.id);
+      await createFriendRequest(carol.id, bob.id);
+      await createFriendRequest(alice.id, carol.id);
+      const agent = await loginAs(caller === 'alice' ? alice : bob);
 
-    const res = await agent.delete(deleteUrl(aliceToBob.id));
+      const res = await agent.delete(deleteUrl(aliceToBob.id));
 
-    expect(res.status).toBe(204);
-    expect(res.text).toBe('');
-    expect(await requestPairs()).toEqual([
-      [alice.id, carol.id],
-      [bob.id, alice.id],
-      [carol.id, bob.id],
-    ]);
-    // Deleting a request never makes anyone a friend.
-    expect(await prisma.friendListMember.count()).toBe(0);
-  });
+      expect(res.status).toBe(204);
+      expect(res.text).toBe('');
+      expect(await requestPairs()).toEqual([
+        [alice.id, carol.id],
+        [bob.id, alice.id],
+        [carol.id, bob.id],
+      ]);
+      // Deleting a request never makes anyone a friend.
+      expect(await prisma.friendListMember.count()).toBe(0);
+    },
+  );
 
   it('answers 404 when the request does not exist or is between two other users, changing nothing', async () => {
     const alice = await createUser('Alice');

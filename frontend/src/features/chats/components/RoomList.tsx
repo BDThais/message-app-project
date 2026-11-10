@@ -62,10 +62,12 @@ function RoomLink({ room, userId }: { room: ChatRoomSummary; userId: number | un
         </span>
         <span className="flex items-center justify-between gap-2">
           <span className="truncate text-sm text-muted">
-            {room.lastMessage ? `${room.lastMessage.senderId === userId ? 'You: ' : ''}${room.lastMessage.content}` : 'No messages yet'}
+            {room.lastMessage
+              ? `${room.lastMessage.senderId === userId ? 'You: ' : ''}${room.lastMessage.content}`
+              : 'No messages yet'}
           </span>
           {unread && (
-            <span className="min-w-5 shrink-0 rounded-full bg-accent px-1.5 text-center text-xs font-semibold leading-5 text-on-accent">
+            <span className="min-w-5 shrink-0 rounded-full bg-accent px-1.5 text-center text-xs leading-5 font-semibold text-on-accent">
               <span aria-hidden="true">{room.unreadCount > 99 ? '99+' : room.unreadCount}</span>
               <span className="sr-only">{room.unreadCount} unread</span>
             </span>

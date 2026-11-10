@@ -8,9 +8,7 @@ import type { FriendRequestDirection, GetFriendRequestsQuery, SendFriendRequestB
 // does not start with 0, and at most 15 digits in total.
 const E164_RE = /^\+[1-9]\d{1,14}$/;
 
-type TelParamValidation =
-  | { valid: true; data: { tel: string } }
-  | { valid: false; message: string };
+type TelParamValidation = { valid: true; data: { tel: string } } | { valid: false; message: string };
 
 /**
  * Two checks, both required:
@@ -32,15 +30,10 @@ export function validateTelParam(rawTel: unknown): TelParamValidation {
   return { valid: true, data: { tel: rawTel } };
 }
 
-type SendFriendRequestValidation =
-  | { valid: true; data: { receiverId: number } }
-  | { valid: false; message: string };
+type SendFriendRequestValidation = { valid: true; data: { receiverId: number } } | { valid: false; message: string };
 
 /** Whether `receiver_id` refers to an existing user is the service's question, not the validator's. */
-export function validateSendFriendRequestBody(
-  body: unknown,
-  requesterId: number
-): SendFriendRequestValidation {
+export function validateSendFriendRequestBody(body: unknown, requesterId: number): SendFriendRequestValidation {
   const { receiver_id } = bodyFields<SendFriendRequestBody>(body);
 
   if (!Number.isInteger(receiver_id) || (receiver_id as number) < 1 || (receiver_id as number) > MAX_ID) {
@@ -55,8 +48,7 @@ export function validateSendFriendRequestBody(
 }
 
 type GetFriendRequestsQueryValidation =
-  | { valid: true; data: { direction: FriendRequestDirection } }
-  | { valid: false; message: string };
+  { valid: true; data: { direction: FriendRequestDirection } } | { valid: false; message: string };
 
 /** Anything but the two exact values is a 400, including an empty value, a different case and a repeated parameter (Express parses it into an array). */
 export function validateGetFriendRequestsQuery(query: unknown): GetFriendRequestsQueryValidation {
@@ -73,9 +65,7 @@ export function validateGetFriendRequestsQuery(query: unknown): GetFriendRequest
   return { valid: false, message: "'direction' must be 'incoming' or 'outgoing'" };
 }
 
-type RequestIdParamValidation =
-  | { valid: true; data: { requestId: number } }
-  | { valid: false; message: string };
+type RequestIdParamValidation = { valid: true; data: { requestId: number } } | { valid: false; message: string };
 
 /** The ':id' of the requests routes is a *request* ID (PendingFriendRequest.id), not a user ID. */
 export function validateRequestIdParam(rawRequestId: unknown): RequestIdParamValidation {
@@ -86,15 +76,11 @@ export function validateRequestIdParam(rawRequestId: unknown): RequestIdParamVal
     : { valid: true, data: { requestId } };
 }
 
-type UserIdParamValidation =
-  | { valid: true; data: { userId: number } }
-  | { valid: false; message: string };
+type UserIdParamValidation = { valid: true; data: { userId: number } } | { valid: false; message: string };
 
 /** The ':id' of the unfriend route is a *user* ID (the friend to remove), unlike the requests routes. */
 export function validateUserIdParam(rawUserId: unknown): UserIdParamValidation {
   const userId = parseIdParam(rawUserId);
 
-  return userId === null
-    ? { valid: false, message: 'Invalid user id' }
-    : { valid: true, data: { userId } };
+  return userId === null ? { valid: false, message: 'Invalid user id' } : { valid: true, data: { userId } };
 }

@@ -3,8 +3,7 @@ import type { UpdateProfileBody } from '../../contract/requests';
 import { validateName } from './signup.validator';
 
 type UpdateProfileValidation =
-  | { valid: true; data: { name?: string; avatarUrl?: string | null } }
-  | { valid: false; message: string };
+  { valid: true; data: { name?: string; avatarUrl?: string | null } } | { valid: false; message: string };
 
 /**
  * Validates the body of PATCH /api/account/me: { name?, avatar_url? } with at

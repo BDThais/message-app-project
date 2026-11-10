@@ -11,5 +11,7 @@ export const Route = createFileRoute('/_app/chat/$chatId')({
 function ChatPage() {
   const chatId = parseChatId(Route.useParams().chatId);
 
-  return <Page layout="fill">{chatId === null ? <ChatNotFound /> : <Conversation key={chatId} chatId={chatId} />}</Page>;
+  return (
+    <Page layout="fill">{chatId === null ? <ChatNotFound /> : <Conversation key={chatId} chatId={chatId} />}</Page>
+  );
 }

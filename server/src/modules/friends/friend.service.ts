@@ -15,10 +15,7 @@ import type { FriendRequestDirection } from '../../contract/requests';
  * can only coexist in both directions through the known send-at-the-same-instant race (see "Friend endpoints"
  * in backend.doc.md); "received" wins because accepting it clears both.
  */
-export async function findUserByTel(
-  requesterId: number,
-  tel: string
-): Promise<SearchResult | null> {
+export async function findUserByTel(requesterId: number, tel: string): Promise<SearchResult | null> {
   const user = await prisma.user.findUnique({
     where: { tel },
     select: {
@@ -88,10 +85,7 @@ function isPrismaError(err: unknown, code: string): boolean {
  * `receiver_not_found`. Two users sending each other a request at the same instant can both succeed; that race
  * is accepted (see "Friend endpoints" in backend.doc.md) because accepting clears both directions.
  */
-export async function createFriendRequest(
-  senderId: number,
-  receiverId: number
-): Promise<SendFriendRequestResult> {
+export async function createFriendRequest(senderId: number, receiverId: number): Promise<SendFriendRequestResult> {
   const receiver = await prisma.user.findUnique({
     where: { id: receiverId },
     select: {
@@ -138,10 +132,7 @@ const publicUserSelect = { id: true, name: true, avatarUrl: true } as const;
 
 // Newest first. `id` breaks ties between requests with the same createdAt, so
 // the order does not change from one call to the next.
-const newestFirst: Prisma.PendingFriendRequestOrderByWithRelationInput[] = [
-  { createdAt: 'desc' },
-  { id: 'desc' },
-];
+const newestFirst: Prisma.PendingFriendRequestOrderByWithRelationInput[] = [{ createdAt: 'desc' }, { id: 'desc' }];
 
 /**
  * The requester's pending requests in one direction, newest first. The other party is selected down to
@@ -153,7 +144,7 @@ const newestFirst: Prisma.PendingFriendRequestOrderByWithRelationInput[] = [
  */
 export async function listFriendRequests(
   requesterId: number,
-  direction: FriendRequestDirection
+  direction: FriendRequestDirection,
 ): Promise<FriendRequestData[]> {
   if (direction === 'incoming') {
     const rows = await prisma.pendingFriendRequest.findMany({
@@ -194,7 +185,7 @@ export type AcceptFriendRequestResult =
  */
 export async function acceptPendingFriendRequest(
   requesterId: number,
-  requestId: number
+  requestId: number,
 ): Promise<AcceptFriendRequestResult> {
   try {
     return await prisma.$transaction(async (tx) => {
@@ -213,8 +204,7 @@ export async function acceptPendingFriendRequest(
       // could end up waiting on the row the other just inserted, and Postgres
       // would abort one of them as a deadlock (a 500). In one fixed order the
       // second transaction just waits for the first and then skips the rows.
-      const [lowId, highId] =
-        requesterId < friend.id ? [requesterId, friend.id] : [friend.id, requesterId];
+      const [lowId, highId] = requesterId < friend.id ? [requesterId, friend.id] : [friend.id, requesterId];
 
       await tx.friendListMember.createMany({
         data: [
@@ -255,7 +245,7 @@ export type DeleteFriendRequestResult = { status: 'deleted' } | { status: 'not_f
  */
 export async function removePendingFriendRequest(
   requesterId: number,
-  requestId: number
+  requestId: number,
 ): Promise<DeleteFriendRequestResult> {
   const { count } = await prisma.pendingFriendRequest.deleteMany({
     where: {
@@ -315,7 +305,7 @@ export async function listFriends(requesterId: number): Promise<PublicUser[]> {
 export async function findNonFriendIds(
   client: Prisma.TransactionClient,
   requesterId: number,
-  userIds: number[]
+  userIds: number[],
 ): Promise<number[]> {
   if (userIds.length === 0) return [];
 
@@ -341,10 +331,7 @@ export type RemoveFriendResult = { status: 'removed' } | { status: 'not_friends'
  * second of two concurrent calls finds nothing left to delete and may still answer `removed`; that is harmless,
  * the friendship is gone either way.
  */
-export async function removeFriend(
-  requesterId: number,
-  friendId: number
-): Promise<RemoveFriendResult> {
+export async function removeFriend(requesterId: number, friendId: number): Promise<RemoveFriendResult> {
   return prisma.$transaction(async (tx) => {
     const own = await tx.friendListMember.findUnique({
       where: { userId_friendId: { userId: requesterId, friendId } },

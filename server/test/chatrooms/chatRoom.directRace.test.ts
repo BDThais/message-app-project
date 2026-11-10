@@ -64,11 +64,10 @@ describe('POST /api/chat for a direct room (simultaneous requests)', () => {
       const {
         rows: [{ id: roomId }],
       } = await other.query<{ id: number }>("INSERT INTO chat_rooms (type) VALUES ('direct') RETURNING id");
-      await other.query("INSERT INTO chat_members (chat_id, member_id, role) VALUES ($1, $2, 'admin'), ($1, $3, 'admin')", [
-        roomId,
-        alice.id,
-        bob.id,
-      ]);
+      await other.query(
+        "INSERT INTO chat_members (chat_id, member_id, role) VALUES ($1, $2, 'admin'), ($1, $3, 'admin')",
+        [roomId, alice.id, bob.id],
+      );
       await other.query('COMMIT');
 
       const res = await response;

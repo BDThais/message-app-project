@@ -10,7 +10,8 @@ vi.mock('../../src/modules/chatrooms/chatRoom.service', () => service);
 import { loadChatMembership, withChatMembership } from '../../src/modules/chatrooms/chatRoomAuth.middleware';
 
 const fakeRequest = (fields: object = {}) => fields as unknown as Request;
-const fakeResponse = () => ({ status: vi.fn(), json: vi.fn() }) as unknown as Response & { status: ReturnType<typeof vi.fn> };
+const fakeResponse = () =>
+  ({ status: vi.fn(), json: vi.fn() }) as unknown as Response & { status: ReturnType<typeof vi.fn> };
 const membership = { chatId: 5, role: 'admin', roomType: 'group' };
 
 describe('withChatMembership', () => {
@@ -32,7 +33,9 @@ describe('withChatMembership', () => {
     await withChatMembership(handler)(fakeRequest({ user: { id: 1 } }), fakeResponse(), next);
 
     expect(handler).not.toHaveBeenCalled();
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('loadChatMembership') }));
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('loadChatMembership') }),
+    );
   });
 
   it('fails the request with an error when there is no user either', async () => {

@@ -22,7 +22,8 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
 
     case 'POST /api/account/login': {
       const account = accounts.find(({ user }) => user.email === canonicalEmail(textField(body, 'email')));
-      if (!account || account.password !== textField(body, 'password')) return json({ error: 'Invalid email or password' }, 401);
+      if (!account || account.password !== textField(body, 'password'))
+        return json({ error: 'Invalid email or password' }, 401);
       state.session = account.user;
       return json({ user: account.user } satisfies UserResponse);
     }
@@ -34,7 +35,8 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
 
     case 'POST /api/account/signup': {
       const [name, tel, password] = [textField(body, 'name'), textField(body, 'tel'), textField(body, 'password')];
-      if (!name || !textField(body, 'email') || !tel || !password) return json({ error: 'All fields are required' }, 400);
+      if (!name || !textField(body, 'email') || !tel || !password)
+        return json({ error: 'All fields are required' }, 400);
       const problem = passwordProblem(password);
       if (problem) return json({ error: problem }, 400);
       const email = canonicalEmail(textField(body, 'email'));
@@ -66,7 +68,10 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
 
     case 'POST /api/account/password/reset-request':
       // The same answer for every address, registered or not.
-      return json({ message: 'If an account exists for that email, a reset link is on its way' } satisfies MessageResponse, 202);
+      return json(
+        { message: 'If an account exists for that email, a reset link is on its way' } satisfies MessageResponse,
+        202,
+      );
 
     case 'POST /api/account/password/reset': {
       const problem = passwordProblem(textField(body, 'new_password'));
@@ -84,7 +89,8 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
       const account = accounts.find(({ user }) => user.id === state.sessionUserId);
       if (!account) return json({ error: 'Unauthorized Access' }, 401);
       const sent = (field: string) => body !== undefined && body !== null && field in body;
-      if (!sent('name') && !sent('avatar_url')) return json({ error: "At least either 'name' or 'avatar_url' must be provided" }, 400);
+      if (!sent('name') && !sent('avatar_url'))
+        return json({ error: "At least either 'name' or 'avatar_url' must be provided" }, 400);
       if (sent('name')) {
         const name = textField(body, 'name');
         if (name === '') return json({ error: "'name' must be a non-empty string" }, 400);
@@ -93,8 +99,10 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
       }
       if (sent('avatar_url')) {
         const url = body?.avatar_url;
-        if (url !== null && typeof url !== 'string') return json({ error: "'avatar_url' must be a string or null" }, 400);
-        if (typeof url === 'string' && !/^https?:\/\/\S+$/.test(url)) return json({ error: "'avatar_url' must be a valid URL" }, 400);
+        if (url !== null && typeof url !== 'string')
+          return json({ error: "'avatar_url' must be a string or null" }, 400);
+        if (typeof url === 'string' && !/^https?:\/\/\S+$/.test(url))
+          return json({ error: "'avatar_url' must be a valid URL" }, 400);
         account.user.avatarUrl = url;
       }
       return json({ user: account.user } satisfies UserResponse);
@@ -121,7 +129,8 @@ export function accountEndpoints(request: string, body: Body, state: FakeServer)
       if (state.deletionBlockedBy.length > 0) {
         return json(
           {
-            error: 'You are the only admin of a group room that still has other members. Make someone else an admin or delete the room first',
+            error:
+              'You are the only admin of a group room that still has other members. Make someone else an admin or delete the room first',
             chatIds: state.deletionBlockedBy,
           } satisfies DeleteAccountConflictBody,
           409,

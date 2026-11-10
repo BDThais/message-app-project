@@ -1,7 +1,11 @@
 import type { Response, NextFunction } from 'express';
 import type { ApiErrorBody, FriendRequestConflictBody } from '../../contract/errors';
 import type {
-  AcceptedFriendResponse, FriendListResponse, FriendRequestListResponse, FriendRequestResponse, SearchUserResponse
+  AcceptedFriendResponse,
+  FriendListResponse,
+  FriendRequestListResponse,
+  FriendRequestResponse,
+  SearchUserResponse,
 } from '../../contract/responses';
 import type { AuthenticatedRequest } from '../../middlewares/UserSessionAuth';
 import { toFriendRequest } from './friend.serializer';
@@ -22,7 +26,11 @@ import {
   removeFriend,
 } from './friend.service';
 
-export async function searchUserByTel(req: AuthenticatedRequest, res: Response<SearchUserResponse | ApiErrorBody>, next: NextFunction) {
+export async function searchUserByTel(
+  req: AuthenticatedRequest,
+  res: Response<SearchUserResponse | ApiErrorBody>,
+  next: NextFunction,
+) {
   const validation = validateTelParam(req.params.tel);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });
@@ -37,7 +45,11 @@ export async function searchUserByTel(req: AuthenticatedRequest, res: Response<S
   }
 }
 
-export async function sendFriendRequest(req: AuthenticatedRequest, res: Response<FriendRequestResponse | FriendRequestConflictBody | ApiErrorBody>, next: NextFunction) {
+export async function sendFriendRequest(
+  req: AuthenticatedRequest,
+  res: Response<FriendRequestResponse | FriendRequestConflictBody | ApiErrorBody>,
+  next: NextFunction,
+) {
   const requesterId = req.user.id;
 
   const validation = validateSendFriendRequestBody(req.body, requesterId);
@@ -68,7 +80,11 @@ export async function sendFriendRequest(req: AuthenticatedRequest, res: Response
   }
 }
 
-export async function getFriendRequests(req: AuthenticatedRequest, res: Response<FriendRequestListResponse | ApiErrorBody>, next: NextFunction) {
+export async function getFriendRequests(
+  req: AuthenticatedRequest,
+  res: Response<FriendRequestListResponse | ApiErrorBody>,
+  next: NextFunction,
+) {
   const validation = validateGetFriendRequestsQuery(req.query);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });
@@ -83,7 +99,11 @@ export async function getFriendRequests(req: AuthenticatedRequest, res: Response
   }
 }
 
-export async function acceptFriendRequest(req: AuthenticatedRequest, res: Response<AcceptedFriendResponse | ApiErrorBody>, next: NextFunction) {
+export async function acceptFriendRequest(
+  req: AuthenticatedRequest,
+  res: Response<AcceptedFriendResponse | ApiErrorBody>,
+  next: NextFunction,
+) {
   const validation = validateRequestIdParam(req.params.id);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });

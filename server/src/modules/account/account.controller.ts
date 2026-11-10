@@ -13,7 +13,14 @@ import { validateChangePasswordBody } from './password.validator';
 import { validateDeleteAccountBody } from './deleteAccount.validator';
 import { validateVerifyEmailBody } from './emailVerification.validator';
 import { validatePasswordResetRequestBody, validateResetPasswordBody } from './passwordReset.validator';
-import { createUser, updateUserProfile, findPasswordHash, changePassword, deleteAccount, toUser } from './account.service';
+import {
+  createUser,
+  updateUserProfile,
+  findPasswordHash,
+  changePassword,
+  deleteAccount,
+  toUser,
+} from './account.service';
 import { newVerificationToken, issueEmailVerification, verifyEmailToken } from './emailVerification.service';
 import { sendVerificationEmail } from './emailVerification.mail';
 import { issuePasswordReset, resetPasswordWithToken } from './passwordReset.service';
@@ -23,70 +30,70 @@ import { getSessionUser, setSessionCookie, clearSessionCookie } from '../../midd
 import config from '../../config/config';
 
 export async function signup(req: Request, res: Response<MessageResponse | ApiErrorBody>, next: NextFunction) {
-    try {
-        const validation = validateAccountBody(req.body);
-        if (!validation.valid) {
-          return res.status(400).json({ error: validation.message });
-        }
-        const { name, email, tel, password } = validation.data;
-    
-        // validateAccountBody accepted tel, so it normalizes. The duplicate check,
-        // the insert and the mail use the canonical forms, never the raw input: the
-        // address lower-cased, so "John@x.com" is taken when "john@x.com" is.
-        const normalizedTel = normalizeTel(tel)!;
-        const normalizedEmail = normalizeEmail(email);
-
-        const duplicationError = await checkDuplication(normalizedEmail, normalizedTel);
-        if (duplicationError) {
-          return res.status(409).json({ error: duplicationError });
-        }
-    
-        const passwordHash = await hashPassword(password);
-    
-        // The link's token row is stored with the user, in one statement.
-        const verification = newVerificationToken();
-        await createUser({
-          name,
-          email: normalizedEmail,
-          tel: normalizedTel,
-          passwordHash,
-          emailVerification: verification
-        });
-    
-        res.status(201).json({ message: 'Account created successfully'});
-
-        // After responding, so the request never waits for the mail (see sendVerificationEmail,
-        // which does not throw). Signup does not log in; the link is only mailed here.
-        await sendVerificationEmail(normalizedEmail, verification.token);
-    } catch (error: unknown) {
-        // A concurrent signup took the email or phone number between the
-        // duplicate check and the insert: the database refuses this one.
-        const duplicationError = uniqueViolationMessage(error);
-        if (duplicationError) {
-          return res.status(409).json({ error: duplicationError });
-        }
-
-        console.error('Error creating account:', error);
-        next(error);
+  try {
+    const validation = validateAccountBody(req.body);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.message });
     }
+    const { name, email, tel, password } = validation.data;
+
+    // validateAccountBody accepted tel, so it normalizes. The duplicate check,
+    // the insert and the mail use the canonical forms, never the raw input: the
+    // address lower-cased, so "John@x.com" is taken when "john@x.com" is.
+    const normalizedTel = normalizeTel(tel)!;
+    const normalizedEmail = normalizeEmail(email);
+
+    const duplicationError = await checkDuplication(normalizedEmail, normalizedTel);
+    if (duplicationError) {
+      return res.status(409).json({ error: duplicationError });
+    }
+
+    const passwordHash = await hashPassword(password);
+
+    // The link's token row is stored with the user, in one statement.
+    const verification = newVerificationToken();
+    await createUser({
+      name,
+      email: normalizedEmail,
+      tel: normalizedTel,
+      passwordHash,
+      emailVerification: verification,
+    });
+
+    res.status(201).json({ message: 'Account created successfully' });
+
+    // After responding, so the request never waits for the mail (see sendVerificationEmail,
+    // which does not throw). Signup does not log in; the link is only mailed here.
+    await sendVerificationEmail(normalizedEmail, verification.token);
+  } catch (error: unknown) {
+    // A concurrent signup took the email or phone number between the
+    // duplicate check and the insert: the database refuses this one.
+    const duplicationError = uniqueViolationMessage(error);
+    if (duplicationError) {
+      return res.status(409).json({ error: duplicationError });
+    }
+
+    console.error('Error creating account:', error);
+    next(error);
+  }
 }
 
 export async function login(req: Request, res: Response<UserResponse | ApiErrorBody>, next: NextFunction) {
   try {
     const { email, password } = bodyFields<LoginBody>(req.body);
-  
+
     if (typeof email !== 'string' || typeof password !== 'string') {
       return res.status(400).json({ error: 'Email and password are required' });
     }
-  
+
     const user = await validateLogin(email, password);
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
-  
+
     const session = await createSession(user.id);
     setSessionCookie(res, session);
-  
+
     res.status(200).json({ user: toUser(user) });
   } catch (error) {
     console.error('Error during login:', error);
@@ -107,11 +114,11 @@ export async function me(req: Request, res: Response<MeResponse>, next: NextFunc
 export async function logout(req: Request, res: Response<LogoutResponse>, next: NextFunction) {
   try {
     const sessionId = req.cookies?.[config.SESSION_COOKIE];
-  
+
     if (sessionId) {
       await deleteSession(sessionId);
     }
-  
+
     clearSessionCookie(res);
     res.status(200).json({ user: null });
   } catch (error) {
@@ -120,7 +127,11 @@ export async function logout(req: Request, res: Response<LogoutResponse>, next: 
   }
 }
 
-export async function updateMe(req: AuthenticatedRequest, res: Response<UserResponse | ApiErrorBody>, next: NextFunction) {
+export async function updateMe(
+  req: AuthenticatedRequest,
+  res: Response<UserResponse | ApiErrorBody>,
+  next: NextFunction,
+) {
   try {
     const validation = validateUpdateProfileBody(req.body);
     if (!validation.valid) {
@@ -167,7 +178,11 @@ export async function updatePassword(req: AuthenticatedRequest, res: Response<Ap
   }
 }
 
-export async function deleteMe(req: AuthenticatedRequest, res: Response<DeleteAccountConflictBody | ApiErrorBody>, next: NextFunction) {
+export async function deleteMe(
+  req: AuthenticatedRequest,
+  res: Response<DeleteAccountConflictBody | ApiErrorBody>,
+  next: NextFunction,
+) {
   try {
     const validation = validateDeleteAccountBody(req.body);
     if (!validation.valid) {
@@ -183,7 +198,8 @@ export async function deleteMe(req: AuthenticatedRequest, res: Response<DeleteAc
     const result = await deleteAccount(userId, currentHash);
     if (result.status === 'only_admin') {
       return res.status(409).json({
-        error: 'You are the only admin of a group room that still has other members. Make someone else an admin or delete the room first',
+        error:
+          'You are the only admin of a group room that still has other members. Make someone else an admin or delete the room first',
         chatIds: result.chatIds,
       });
     }
@@ -221,7 +237,11 @@ export async function verifyEmail(req: Request, res: Response<ApiErrorBody>, nex
   }
 }
 
-export async function resendEmailVerification(req: AuthenticatedRequest, res: Response<ApiErrorBody>, next: NextFunction) {
+export async function resendEmailVerification(
+  req: AuthenticatedRequest,
+  res: Response<ApiErrorBody>,
+  next: NextFunction,
+) {
   try {
     const result = await issueEmailVerification(req.user.id);
     if (result.status === 'no_user') {
@@ -245,7 +265,11 @@ export async function resendEmailVerification(req: AuthenticatedRequest, res: Re
   }
 }
 
-export async function requestPasswordReset(req: Request, res: Response<MessageResponse | ApiErrorBody>, next: NextFunction) {
+export async function requestPasswordReset(
+  req: Request,
+  res: Response<MessageResponse | ApiErrorBody>,
+  next: NextFunction,
+) {
   try {
     const validation = validatePasswordResetRequestBody(req.body);
     if (!validation.valid) {

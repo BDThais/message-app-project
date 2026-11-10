@@ -26,8 +26,8 @@ export function DeleteAccount({ roomName }: { roomName: (chatId: number) => stri
     return (
       <>
         <p className="text-sm text-muted">
-          Deletes your account, your private chat and its messages. Your messages in other chats stay there, without your name.
-          This cannot be undone.
+          Deletes your account, your private chat and its messages. Your messages in other chats stay there, without
+          your name. This cannot be undone.
         </p>
         <div>
           <Button type="button" variant="danger" onClick={() => setConfirming(true)}>

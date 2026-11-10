@@ -24,7 +24,8 @@ beforeEach(() => {
 });
 
 const friends = () => queryClient.getQueryData<PublicUser[]>(friendKeys.list());
-const requests = (direction: 'incoming' | 'outgoing') => queryClient.getQueryData<FriendRequest[]>(friendKeys.requests(direction));
+const requests = (direction: 'incoming' | 'outgoing') =>
+  queryClient.getQueryData<FriendRequest[]>(friendKeys.requests(direction));
 
 describe('sortFriends', () => {
   it('sorts by name without regard to case, and by id when two names are the same', () => {
@@ -80,7 +81,10 @@ describe('the lists of requests', () => {
   });
 
   it('removes a request by its id from whichever list holds it, and only that one', () => {
-    queryClient.setQueryData(friendKeys.requests('incoming'), [request(1, user(2, 'Bea')), request(2, user(3, 'Carl'))]);
+    queryClient.setQueryData(friendKeys.requests('incoming'), [
+      request(1, user(2, 'Bea')),
+      request(2, user(3, 'Carl')),
+    ]);
     queryClient.setQueryData(friendKeys.requests('outgoing'), [request(3, user(4, 'Dana'))]);
 
     removeRequestFromCache(queryClient, 3);
@@ -113,7 +117,10 @@ describe('the cached searches', () => {
   });
 
   it('drops the request id when the person is no longer in a request state', () => {
-    queryClient.setQueryData(friendKeys.search('+84900000002'), found(2, { relationship: 'request_received', requestId: 7 }));
+    queryClient.setQueryData(
+      friendKeys.search('+84900000002'),
+      found(2, { relationship: 'request_received', requestId: 7 }),
+    );
 
     setRelationshipInSearches(queryClient, 2, 'friend');
 

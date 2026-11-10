@@ -3,7 +3,11 @@ import { bodyFields } from '../../src/lib/validation';
 
 describe('bodyFields', () => {
   it('gives the fields of a JSON object body, unchecked', () => {
-    const { token, new_password } = bodyFields<{ token: string; new_password: string }>({ token: 7, new_password: 'x', extra: true });
+    const { token, new_password } = bodyFields<{ token: string; new_password: string }>({
+      token: 7,
+      new_password: 'x',
+      extra: true,
+    });
 
     expect(token).toBe(7);
     expect(new_password).toBe('x');

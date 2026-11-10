@@ -1,4 +1,11 @@
-import { queryOptions, useMutation, useMutationState, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import {
+  queryOptions,
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
 import { isApiError } from '@/lib/http';
 import {
   changePassword,
@@ -62,9 +69,10 @@ const endSessionKey = ['account', 'end-session'] as const;
  * component's mutation, because the delete button is deeper in the page than the layout that redirects.
  */
 export function useEndingSession(): boolean {
-  return useMutationState({ filters: { mutationKey: endSessionKey }, select: (mutation) => mutation.state.status }).some(
-    (status) => status === 'pending' || status === 'success',
-  );
+  return useMutationState({
+    filters: { mutationKey: endSessionKey },
+    select: (mutation) => mutation.state.status,
+  }).some((status) => status === 'pending' || status === 'success');
 }
 
 /** `gcTime: 0`: a finished sign-out must not stay in the cache and make the next session look as if it were ending. */

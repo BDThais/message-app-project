@@ -67,7 +67,11 @@ function NewPasswordForm({ token }: { token: string }) {
           onChange={(event) => setNewPassword(event.target.value)}
           hint={PASSWORD_HINT}
         />
-        {reset.error && <Notice tone="error" role="alert">{reset.error.message}</Notice>}
+        {reset.error && (
+          <Notice tone="error" role="alert">
+            {reset.error.message}
+          </Notice>
+        )}
         <Button type="submit" fullWidth disabled={reset.isPending}>
           {reset.isPending ? 'Saving…' : 'Change password'}
         </Button>

@@ -44,9 +44,7 @@ describe(`POST ${loginRoute}`, () => {
   it('returns 401 when the credentials are invalid', async () => {
     await createUser();
 
-    const res = await request(app)
-      .post(loginRoute)
-      .send({ email: userData.email, password: 'Wrong!Pass1' });
+    const res = await request(app).post(loginRoute).send({ email: userData.email, password: 'Wrong!Pass1' });
 
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ error: 'Invalid email or password' });
@@ -56,9 +54,7 @@ describe(`POST ${loginRoute}`, () => {
   it('finds the account whatever the case the address is typed in', async () => {
     await createUser();
 
-    const res = await request(app)
-      .post(loginRoute)
-      .send({ email: 'ALICE@Example.COM', password: userData.password });
+    const res = await request(app).post(loginRoute).send({ email: 'ALICE@Example.COM', password: userData.password });
 
     expect(res.status).toBe(200);
     expect(res.body.user.email).toBe(userData.email);
@@ -67,9 +63,7 @@ describe(`POST ${loginRoute}`, () => {
   it('returns 200 and persists a session for valid credentials', async () => {
     const user = await createUser();
 
-    const res = await request(app)
-      .post(loginRoute)
-      .send({ email: userData.email, password: userData.password });
+    const res = await request(app).post(loginRoute).send({ email: userData.email, password: userData.password });
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
@@ -77,7 +71,7 @@ describe(`POST ${loginRoute}`, () => {
     });
     expect(res.body.user.passwordHash).toBeUndefined();
     expect(res.headers['set-cookie']).toEqual(
-      expect.arrayContaining([expect.stringContaining(`${config.SESSION_COOKIE}=`)])
+      expect.arrayContaining([expect.stringContaining(`${config.SESSION_COOKIE}=`)]),
     );
     expect(await prisma.session.count({ where: { userId: user.id } })).toBe(1);
   });
@@ -86,9 +80,7 @@ describe(`POST ${loginRoute}`, () => {
     const user = await createUser();
     await prisma.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } });
 
-    const res = await request(app)
-      .post(loginRoute)
-      .send({ email: userData.email, password: userData.password });
+    const res = await request(app).post(loginRoute).send({ email: userData.email, password: userData.password });
 
     expect(res.status).toBe(200);
     expect(res.body.user.emailVerified).toBe(true);
@@ -116,9 +108,7 @@ describe(`GET ${meRoute}`, () => {
     await createUser();
     const agent = request.agent(app);
 
-    const login = await agent
-      .post(loginRoute)
-      .send({ email: userData.email, password: userData.password });
+    const login = await agent.post(loginRoute).send({ email: userData.email, password: userData.password });
     const res = await agent.get(meRoute);
 
     expect(login.status).toBe(200);
@@ -140,9 +130,7 @@ describe(`GET ${meRoute}`, () => {
     await prisma.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } });
     const session = await createSessionRow(user.id, new Date(Date.now() + 60_000));
 
-    const res = await request(app)
-      .get(meRoute)
-      .set('Cookie', `${config.SESSION_COOKIE}=${session.id}`);
+    const res = await request(app).get(meRoute).set('Cookie', `${config.SESSION_COOKIE}=${session.id}`);
 
     expect(res.body.user.emailVerified).toBe(true);
     expect(res.body.user).not.toHaveProperty('emailVerifiedAt');
@@ -159,9 +147,7 @@ describe(`GET ${meRoute}`, () => {
     const user = await createUser();
     const session = await createSessionRow(user.id, new Date(Date.now() - 1000));
 
-    const res = await request(app)
-      .get(meRoute)
-      .set('Cookie', `${config.SESSION_COOKIE}=${session.id}`);
+    const res = await request(app).get(meRoute).set('Cookie', `${config.SESSION_COOKIE}=${session.id}`);
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ user: null });
@@ -174,9 +160,7 @@ describe(`POST ${logoutRoute}`, () => {
     await createUser();
     const agent = request.agent(app);
 
-    await agent
-      .post(loginRoute)
-      .send({ email: userData.email, password: userData.password });
+    await agent.post(loginRoute).send({ email: userData.email, password: userData.password });
     expect(await prisma.session.count()).toBe(1);
 
     const res = await agent.post(logoutRoute);

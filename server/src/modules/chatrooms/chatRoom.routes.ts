@@ -1,9 +1,20 @@
 import Router from 'express';
 import { requireUserAuth, withUser } from '../../middlewares/UserSessionAuth';
 import {
-    createChatRoom, getChatRooms, getChatRoomById, updateChatRoom, deleteChatRoom, addChatRoomMembers,
-    removeChatRoomMember, changeChatRoomMemberRole, sendChatRoomMessage, getChatRoomMessages,
-    editChatRoomMessage, deleteChatRoomMessage, getChatRoomMembers, markChatRoomAsRead
+  createChatRoom,
+  getChatRooms,
+  getChatRoomById,
+  updateChatRoom,
+  deleteChatRoom,
+  addChatRoomMembers,
+  removeChatRoomMember,
+  changeChatRoomMemberRole,
+  sendChatRoomMessage,
+  getChatRoomMessages,
+  editChatRoomMessage,
+  deleteChatRoomMessage,
+  getChatRoomMembers,
+  markChatRoomAsRead,
 } from './chatRoom.controller';
 import { loadChatMembership, requireGroupRoom, requireChatAdmin, withChatMembership } from './chatRoomAuth.middleware';
 
@@ -22,7 +33,12 @@ chatRoomRouter.delete('/:chatid', requireGroupRoom, requireChatAdmin, withChatMe
 chatRoomRouter.get('/:chatid/member', withChatMembership(getChatRoomMembers)); // membership alone is enough, direct or group
 chatRoomRouter.post('/:chatid/member', requireGroupRoom, requireChatAdmin, withChatMembership(addChatRoomMembers));
 chatRoomRouter.delete('/:chatid/member/:userid', withChatMembership(removeChatRoomMember)); // No blanket guard: any member may remove themself (leave); removing someone else needs a group room and an admin, checked in the controller.
-chatRoomRouter.patch('/:chatid/member/:userid', requireGroupRoom, requireChatAdmin, withChatMembership(changeChatRoomMemberRole));
+chatRoomRouter.patch(
+  '/:chatid/member/:userid',
+  requireGroupRoom,
+  requireChatAdmin,
+  withChatMembership(changeChatRoomMemberRole),
+);
 
 chatRoomRouter.post('/:chatid/message', withChatMembership(sendChatRoomMessage)); // membership alone is enough
 chatRoomRouter.get('/:chatid/message', withChatMembership(getChatRoomMessages)); // membership alone is enough

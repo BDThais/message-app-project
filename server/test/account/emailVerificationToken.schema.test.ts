@@ -16,8 +16,12 @@ describe('EmailVerificationToken (schema)', () => {
     const bob = await createUser('Bob');
     await prisma.emailVerificationToken.create({ data: tokenData(alice.id, 'hash-1') });
 
-    await expect(prisma.emailVerificationToken.create({ data: tokenData(alice.id, 'hash-2') })).rejects.toMatchObject({ code: 'P2002' });
-    await expect(prisma.emailVerificationToken.create({ data: tokenData(bob.id, 'hash-1') })).rejects.toMatchObject({ code: 'P2002' });
+    await expect(prisma.emailVerificationToken.create({ data: tokenData(alice.id, 'hash-2') })).rejects.toMatchObject({
+      code: 'P2002',
+    });
+    await expect(prisma.emailVerificationToken.create({ data: tokenData(bob.id, 'hash-1') })).rejects.toMatchObject({
+      code: 'P2002',
+    });
   });
 
   it('is deleted with its user, and a new user starts unverified', async () => {

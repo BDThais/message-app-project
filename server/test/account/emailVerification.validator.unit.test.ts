@@ -8,7 +8,10 @@ describe('validateVerifyEmailBody', () => {
   });
 
   it('ignores unknown fields', () => {
-    expect(validateVerifyEmailBody({ token: 'abc', email: 'a@example.com' })).toEqual({ valid: true, data: { token: 'abc' } });
+    expect(validateVerifyEmailBody({ token: 'abc', email: 'a@example.com' })).toEqual({
+      valid: true,
+      data: { token: 'abc' },
+    });
   });
 
   it.each([

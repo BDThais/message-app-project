@@ -20,7 +20,7 @@ async function markerOf(chatId: number, memberId: number) {
 }
 
 describe('PUT /chat/:chatid/read', () => {
-  it('sets the requester\'s marker, returns it, and leaves the other members\' markers alone', async () => {
+  it("sets the requester's marker, returns it, and leaves the other members' markers alone", async () => {
     const alice = await createUser('Alice');
     const bob = await createUser('Bob');
     const room = await createGroupRoom(alice.id, [bob.id]);

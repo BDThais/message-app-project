@@ -2,7 +2,15 @@
 // 204 has no body and no type here.
 
 import type {
-  ChatRoomDetail, ChatRoomSummary, CreatedChatRoom, FriendRequest, Member, Message, PublicUser, SearchResult, User
+  ChatRoomDetail,
+  ChatRoomSummary,
+  CreatedChatRoom,
+  FriendRequest,
+  Member,
+  Message,
+  PublicUser,
+  SearchResult,
+  User,
 } from './types';
 
 /** POST /api/account/signup (201) and POST /api/account/password/reset-request (202). */

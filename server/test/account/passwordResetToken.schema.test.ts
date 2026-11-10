@@ -15,8 +15,12 @@ describe('PasswordResetToken (schema)', () => {
     const bob = await createUser('Bob');
     await prisma.passwordResetToken.create({ data: tokenData(alice.id, 'hash-1') });
 
-    await expect(prisma.passwordResetToken.create({ data: tokenData(alice.id, 'hash-2') })).rejects.toMatchObject({ code: 'P2002' });
-    await expect(prisma.passwordResetToken.create({ data: tokenData(bob.id, 'hash-1') })).rejects.toMatchObject({ code: 'P2002' });
+    await expect(prisma.passwordResetToken.create({ data: tokenData(alice.id, 'hash-2') })).rejects.toMatchObject({
+      code: 'P2002',
+    });
+    await expect(prisma.passwordResetToken.create({ data: tokenData(bob.id, 'hash-1') })).rejects.toMatchObject({
+      code: 'P2002',
+    });
   });
 
   it('is deleted with its user', async () => {

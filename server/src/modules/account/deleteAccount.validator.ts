@@ -1,9 +1,7 @@
 import { bodyFields } from '../../lib/validation';
 import type { DeleteAccountBody } from '../../contract/requests';
 
-type DeleteAccountValidation =
-  | { valid: true; data: { password: string } }
-  | { valid: false; message: string };
+type DeleteAccountValidation = { valid: true; data: { password: string } } | { valid: false; message: string };
 
 /**
  * Validates the body of DELETE /api/account/me: { password }. The password is only

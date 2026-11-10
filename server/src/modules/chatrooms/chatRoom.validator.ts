@@ -2,8 +2,13 @@ import { MAX_INT32 as MAX_ID } from '../../lib/constants';
 import { parseIdParam } from '../../lib/parseIdParam';
 import { bodyFields, isValidHttpUrl } from '../../lib/validation';
 import type {
-  AddMembersBody, ChangeMemberRoleBody, CreateChatRoomBody, GetMessagesQuery, MarkReadBody,
-  SendMessageBody, UpdateChatRoomBody
+  AddMembersBody,
+  ChangeMemberRoleBody,
+  CreateChatRoomBody,
+  GetMessagesQuery,
+  MarkReadBody,
+  SendMessageBody,
+  UpdateChatRoomBody,
 } from '../../contract/requests';
 import type { CreatableRoomType } from '../../contract/types';
 
@@ -11,86 +16,80 @@ import type { CreatableRoomType } from '../../contract/types';
 const MAX_CHAT_NAME_LENGTH = 100;
 
 type ValidationResult =
-    | {
-        valid: true;
-        type: CreatableRoomType;
-        memberIds: number[];
-        name?: string;
-        avatarUrl?: string;
+  | {
+      valid: true;
+      type: CreatableRoomType;
+      memberIds: number[];
+      name?: string;
+      avatarUrl?: string;
     }
-    | { valid: false; message: string };
+  | { valid: false; message: string };
 
 /**
  * Returns everything the controller needs, normalized: `memberIds` deduplicated and without the
  * requester's own ID (the service adds them back, with a role that depends on the room type), `name`
  * and `avatarUrl` only when valid, camelCased to match the Prisma field names.
  */
-export function validateCreateChatRoomInput(
-  body: unknown,
-  requesterId: number
-): ValidationResult {
+export function validateCreateChatRoomInput(body: unknown, requesterId: number): ValidationResult {
   const { type, member_ids, name, avatar_url } = bodyFields<CreateChatRoomBody>(body);
 
-    if (type !== 'direct' && type !== 'group') {
-        return { valid: false, message: 'type must be "direct" or "group"' };
+  if (type !== 'direct' && type !== 'group') {
+    return { valid: false, message: 'type must be "direct" or "group"' };
+  }
+
+  // Same ID range as validateAddMembersBody. An ID outside the INTEGER column's range would make the
+  // friendship lookup fail with a 500.
+  if (
+    member_ids !== undefined &&
+    (!Array.isArray(member_ids) || member_ids.some((id) => !Number.isInteger(id) || id < 1 || id > MAX_ID))
+  ) {
+    return { valid: false, message: 'member_ids must be an array of user IDs' };
+  }
+
+  const memberIds = Array.from(new Set((member_ids ?? []) as number[])).filter((id) => id !== requesterId);
+
+  if (type === 'direct') {
+    if (memberIds.length !== 1) {
+      return { valid: false, message: 'a direct chat room requires exactly one other member' };
     }
-
-    // Same ID range as validateAddMembersBody. An ID outside the INTEGER column's range would make the
-    // friendship lookup fail with a 500.
-    if (member_ids !== undefined && (
-      !Array.isArray(member_ids) ||
-      member_ids.some((id) => !Number.isInteger(id) || id < 1 || id > MAX_ID)
-    )) {
-      return { valid: false, message: 'member_ids must be an array of user IDs' };
+    if (name !== undefined || avatar_url !== undefined) {
+      return { valid: false, message: 'direct chat rooms cannot have a name or avatar' };
     }
+  }
 
-    const memberIds = Array.from(new Set((member_ids ?? []) as number[])).filter(
-        (id) => id !== requesterId
-    );
+  if (name !== undefined && (typeof name !== 'string' || name.trim().length === 0)) {
+    return { valid: false, message: 'name must be a non-empty string if provided' };
+  }
 
-    if (type === 'direct') {
-        if (memberIds.length !== 1) {
-            return { valid: false, message: 'a direct chat room requires exactly one other member' };
-        }
-        if (name !== undefined || avatar_url !== undefined) {
-            return { valid: false, message: 'direct chat rooms cannot have a name or avatar' };
-        }
-    }
+  if (name !== undefined && name.trim().length > MAX_CHAT_NAME_LENGTH) {
+    return { valid: false, message: `name must be ${MAX_CHAT_NAME_LENGTH} characters or fewer` };
+  }
 
-    if (name !== undefined && (typeof name !== 'string' || name.trim().length === 0)) {
-        return { valid: false, message: 'name must be a non-empty string if provided' };
-    }
+  if (avatar_url !== undefined && typeof avatar_url !== 'string') {
+    return { valid: false, message: 'avatar_url must be a string if provided' };
+  }
 
-    if (name !== undefined && name.trim().length > MAX_CHAT_NAME_LENGTH) {
-        return { valid: false, message: `name must be ${MAX_CHAT_NAME_LENGTH} characters or fewer` };
-    }
+  if (avatar_url !== undefined && !isValidHttpUrl(avatar_url)) {
+    return { valid: false, message: 'avatar_url must be a valid URL' };
+  }
 
-    if (avatar_url !== undefined && typeof avatar_url !== 'string') {
-        return { valid: false, message: 'avatar_url must be a string if provided' };
-    }
-
-    if (avatar_url !== undefined && !isValidHttpUrl(avatar_url)) {
-        return { valid: false, message: 'avatar_url must be a valid URL' };
-    }
-
-    return {
-        valid: true,
-        type,
-        memberIds,
-        ...(name !== undefined ? { name } : {}),
-        ...(avatar_url !== undefined ? { avatarUrl: avatar_url } : {}),
-    };
+  return {
+    valid: true,
+    type,
+    memberIds,
+    ...(name !== undefined ? { name } : {}),
+    ...(avatar_url !== undefined ? { avatarUrl: avatar_url } : {}),
+  };
 }
 
 type UpdateChatRoomValidation =
-  | { valid: true; data: { name?: string; avatarUrl?: string | null } }
-  | { valid: false; message: string };
+  { valid: true; data: { name?: string; avatarUrl?: string | null } } | { valid: false; message: string };
 
 export function validateUpdateChatRoomBody(body: unknown): UpdateChatRoomValidation {
   const { name, avatar_url } = bodyFields<UpdateChatRoomBody>(body);
 
   if (name === undefined && avatar_url === undefined) {
-    return { valid: false, message: "At least either Name or Avatar must be provided" };
+    return { valid: false, message: 'At least either Name or Avatar must be provided' };
   }
 
   const data: { name?: string; avatarUrl?: string | null } = {};
@@ -120,9 +119,7 @@ export function validateUpdateChatRoomBody(body: unknown): UpdateChatRoomValidat
   return { valid: true, data };
 }
 
-type AddMembersValidation =
-  | { valid: true; data: { memberIds: number[] } }
-  | { valid: false; message: string };
+type AddMembersValidation = { valid: true; data: { memberIds: number[] } } | { valid: false; message: string };
 
 /** member_ids is required here, unlike at room creation: adding nobody is a client bug, not a no-op. */
 export function validateAddMembersBody(body: unknown): AddMembersValidation {
@@ -140,8 +137,7 @@ export function validateAddMembersBody(body: unknown): AddMembersValidation {
 }
 
 type ChangeMemberRoleValidation =
-  | { valid: true; data: { role: 'admin' | 'member' } }
-  | { valid: false; message: string };
+  { valid: true; data: { role: 'admin' | 'member' } } | { valid: false; message: string };
 
 export function validateChangeMemberRoleBody(body: unknown): ChangeMemberRoleValidation {
   const { role } = bodyFields<ChangeMemberRoleBody>(body);
@@ -153,9 +149,7 @@ export function validateChangeMemberRoleBody(body: unknown): ChangeMemberRoleVal
   return { valid: true, data: { role } };
 }
 
-type SendMessageValidation =
-  | { valid: true; data: { content: string } }
-  | { valid: false; message: string };
+type SendMessageValidation = { valid: true; data: { content: string } } | { valid: false; message: string };
 
 const MAX_MESSAGE_LENGTH = 4000;
 
@@ -176,9 +170,7 @@ export function validateSendMessageBody(body: unknown): SendMessageValidation {
   return { valid: true, data: { content: content.trim() } };
 }
 
-type MarkReadValidation =
-  | { valid: true; data: { messageId: number } }
-  | { valid: false; message: string };
+type MarkReadValidation = { valid: true; data: { messageId: number } } | { valid: false; message: string };
 
 export function validateMarkReadBody(body: unknown): MarkReadValidation {
   const { message_id } = bodyFields<MarkReadBody>(body);
@@ -201,8 +193,7 @@ export function validateEditMessageBody(body: unknown): EditMessageValidation {
 }
 
 type GetMessagesQueryValidation =
-  | { valid: true; data: { limit: number; before?: number; after?: number } }
-  | { valid: false; message: string };
+  { valid: true; data: { limit: number; before?: number; after?: number } } | { valid: false; message: string };
 
 const DEFAULT_MESSAGE_PAGE_SIZE = 50;
 const MAX_MESSAGE_PAGE_SIZE = 100;
@@ -254,38 +245,26 @@ export function validateGetMessagesQuery(query: unknown): GetMessagesQueryValida
   };
 }
 
-type ChatIdParamValidation =
-  | { valid: true; data: { chatId: number } }
-  | { valid: false; message: string };
+type ChatIdParamValidation = { valid: true; data: { chatId: number } } | { valid: false; message: string };
 
 export function validateChatIdParam(rawChatId: unknown): ChatIdParamValidation {
   const chatId = parseIdParam(rawChatId);
 
-  return chatId === null
-    ? { valid: false, message: 'Invalid chat room id' }
-    : { valid: true, data: { chatId } };
+  return chatId === null ? { valid: false, message: 'Invalid chat room id' } : { valid: true, data: { chatId } };
 }
 
-type UserIdParamValidation =
-  | { valid: true; data: { userId: number } }
-  | { valid: false; message: string };
+type UserIdParamValidation = { valid: true; data: { userId: number } } | { valid: false; message: string };
 
 export function validateUserIdParam(rawUserId: unknown): UserIdParamValidation {
   const userId = parseIdParam(rawUserId);
 
-  return userId === null
-    ? { valid: false, message: 'Invalid user id' }
-    : { valid: true, data: { userId } };
+  return userId === null ? { valid: false, message: 'Invalid user id' } : { valid: true, data: { userId } };
 }
 
-type MessageIdParamValidation =
-  | { valid: true; data: { messageId: number } }
-  | { valid: false; message: string };
+type MessageIdParamValidation = { valid: true; data: { messageId: number } } | { valid: false; message: string };
 
 export function validateMessageIdParam(rawMessageId: unknown): MessageIdParamValidation {
   const messageId = parseIdParam(rawMessageId);
 
-  return messageId === null
-    ? { valid: false, message: 'Invalid message id' }
-    : { valid: true, data: { messageId } };
+  return messageId === null ? { valid: false, message: 'Invalid message id' } : { valid: true, data: { messageId } };
 }

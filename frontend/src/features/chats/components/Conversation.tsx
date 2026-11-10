@@ -43,7 +43,12 @@ export function Conversation({ chatId }: { chatId: number }) {
   });
 
   if (!user) return null;
-  if (messagesQuery.isError && !messagesQuery.data && isApiError(messagesQuery.error) && messagesQuery.error.status === 404) {
+  if (
+    messagesQuery.isError &&
+    !messagesQuery.data &&
+    isApiError(messagesQuery.error) &&
+    messagesQuery.error.status === 404
+  ) {
     return <ChatNotFound />;
   }
 

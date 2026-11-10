@@ -40,48 +40,54 @@ describe('lastMessage in the room summaries', () => {
   it.each([
     ['group', (aliceId: number, bobId: number) => createGroupRoom(aliceId, [bobId])],
     ['direct', (aliceId: number, bobId: number) => createDirectRoom(aliceId, bobId)],
-  ])('skips deleted messages in a %s room, so the preview shows the message before a deleted one', async (_type, createRoom) => {
-    const alice = await createUser('Alice');
-    const bob = await createUser('Bob');
-    const room = await createRoom(alice.id, bob.id);
-    const agent = await loginAs(alice);
-    const earlier = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Earlier' });
-    const latest = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Oops' });
-    await agent.delete(`/api/chat/${room.id}/message/${latest.body.message.id}`);
+  ])(
+    'skips deleted messages in a %s room, so the preview shows the message before a deleted one',
+    async (_type, createRoom) => {
+      const alice = await createUser('Alice');
+      const bob = await createUser('Bob');
+      const room = await createRoom(alice.id, bob.id);
+      const agent = await loginAs(alice);
+      const earlier = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Earlier' });
+      const latest = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Oops' });
+      await agent.delete(`/api/chat/${room.id}/message/${latest.body.message.id}`);
 
-    const { inList, single } = await summariesOf(await loginAs(bob), room.id);
+      const { inList, single } = await summariesOf(await loginAs(bob), room.id);
 
-    for (const summary of [inList, single]) {
-      expect(summary.lastMessage).toMatchObject({ id: earlier.body.message.id, content: 'Earlier' });
-    }
-  });
+      for (const summary of [inList, single]) {
+        expect(summary.lastMessage).toMatchObject({ id: earlier.body.message.id, content: 'Earlier' });
+      }
+    },
+  );
 
   it.each([
     ['group', (aliceId: number, bobId: number) => createGroupRoom(aliceId, [bobId])],
     ['direct', (aliceId: number, bobId: number) => createDirectRoom(aliceId, bobId)],
-  ])('names the message and its sender in a %s room: the id, and null once the sender\'s account is gone', async (_type, createRoom) => {
-    const alice = await createUser('Alice');
-    const bob = await createUser('Bob');
-    const room = await createRoom(alice.id, bob.id);
-    const fromAlice = await addMessage(room.id, alice.id, 'From Alice');
-    const agent = await loginAs(bob);
+  ])(
+    "names the message and its sender in a %s room: the id, and null once the sender's account is gone",
+    async (_type, createRoom) => {
+      const alice = await createUser('Alice');
+      const bob = await createUser('Bob');
+      const room = await createRoom(alice.id, bob.id);
+      const fromAlice = await addMessage(room.id, alice.id, 'From Alice');
+      const agent = await loginAs(bob);
 
-    const before = await summariesOf(agent, room.id);
-    const orphan = await addMessage(room.id, null, 'From nobody');
-    const after = await summariesOf(agent, room.id);
+      const before = await summariesOf(agent, room.id);
+      const orphan = await addMessage(room.id, null, 'From nobody');
+      const after = await summariesOf(agent, room.id);
 
-    for (const summary of [before.inList, before.single]) {
-      expect(summary.lastMessage).toEqual({
-        id: fromAlice.id,
-        senderId: alice.id,
-        content: 'From Alice',
-        createdAt: expect.any(String),
-      });
-    }
-    for (const summary of [after.inList, after.single]) {
-      expect(summary.lastMessage).toMatchObject({ id: orphan.id, senderId: null, content: 'From nobody' });
-    }
-  });
+      for (const summary of [before.inList, before.single]) {
+        expect(summary.lastMessage).toEqual({
+          id: fromAlice.id,
+          senderId: alice.id,
+          content: 'From Alice',
+          createdAt: expect.any(String),
+        });
+      }
+      for (const summary of [after.inList, after.single]) {
+        expect(summary.lastMessage).toMatchObject({ id: orphan.id, senderId: null, content: 'From nobody' });
+      }
+    },
+  );
 
   it('is null when every message was deleted, and the room is then ordered by when it was created', async () => {
     const alice = await createUser('Alice');
@@ -118,7 +124,7 @@ describe('lastMessage in the room summaries', () => {
 });
 
 describe('unreadCount in the room summaries', () => {
-  it('counts the messages above the requester\'s marker, leaving out their own, deleted ones and anything at or below the marker', async () => {
+  it("counts the messages above the requester's marker, leaving out their own, deleted ones and anything at or below the marker", async () => {
     const alice = await createUser('Alice');
     const bob = await createUser('Bob');
     const room = await createGroupRoom(alice.id, [bob.id]);
@@ -156,7 +162,7 @@ describe('unreadCount in the room summaries', () => {
     expect(empty.single.unreadCount).toBe(0);
   });
 
-  it('counts each room against its own marker, in direct and group rooms alike, and ignores the other members\' markers', async () => {
+  it("counts each room against its own marker, in direct and group rooms alike, and ignores the other members' markers", async () => {
     const alice = await createUser('Alice');
     const bob = await createUser('Bob');
     const carol = await createUser('Carol');
@@ -175,12 +181,12 @@ describe('unreadCount in the room summaries', () => {
     const res = await (await loginAs(alice)).get('/api/chat');
 
     const unreadByRoom = Object.fromEntries(
-      res.body.chatRooms.map((room: { id: number; unreadCount: number }) => [room.id, room.unreadCount])
+      res.body.chatRooms.map((room: { id: number; unreadCount: number }) => [room.id, room.unreadCount]),
     );
     expect(unreadByRoom).toEqual({ [direct.id]: 2, [group.id]: 2 });
   });
 
-  it('counts a message whose author has deleted their account, because it is still somebody else\'s message', async () => {
+  it("counts a message whose author has deleted their account, because it is still somebody else's message", async () => {
     const alice = await createUser('Alice');
     const bob = await createUser('Bob');
     const room = await createGroupRoom(alice.id, [bob.id]);
@@ -194,7 +200,7 @@ describe('unreadCount in the room summaries', () => {
     expect(single.unreadCount).toBe(1);
   });
 
-  it('follows PUT /chat/:chatid/read and new messages, and one member reading does not change another\'s count', async () => {
+  it("follows PUT /chat/:chatid/read and new messages, and one member reading does not change another's count", async () => {
     const alice = await createUser('Alice');
     const bob = await createUser('Bob');
     const room = await createGroupRoom(alice.id, [bob.id]);
@@ -220,9 +226,7 @@ describe('unreadCount in the room summaries', () => {
     const room = await createGroupRoom(alice.id, [bob.id], 'This one');
     const otherRoom = await createGroupRoom(alice.id, [bob.id], 'Another one');
     const bobAgent = await loginAs(bob);
-    const sent = await (await loginAs(alice))
-      .post(`/api/chat/${room.id}/message`)
-      .send({ content: 'Soon gone' });
+    const sent = await (await loginAs(alice)).post(`/api/chat/${room.id}/message`).send({ content: 'Soon gone' });
     await addMessage(otherRoom.id, alice.id, 'Somewhere else');
     expect((await summariesOf(bobAgent, room.id)).single.unreadCount).toBe(1);
 

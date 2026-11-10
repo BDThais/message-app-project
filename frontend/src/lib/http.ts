@@ -76,7 +76,11 @@ async function request<T>(method: Method, path: string, { body, signal }: Reques
 
   const data = await readBody(response);
   if (!response.ok) {
-    throw new ApiError(response.status, errorMessageFrom(data) ?? `Request failed with status ${response.status}`, data);
+    throw new ApiError(
+      response.status,
+      errorMessageFrom(data) ?? `Request failed with status ${response.status}`,
+      data,
+    );
   }
   return data as T;
 }

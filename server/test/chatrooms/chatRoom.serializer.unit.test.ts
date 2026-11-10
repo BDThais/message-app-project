@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { toChatRoomDetail, toChatRoomSummary, toCreatedChatRoom, toMessage } from '../../src/modules/chatrooms/chatRoom.serializer';
+import {
+  toChatRoomDetail,
+  toChatRoomSummary,
+  toCreatedChatRoom,
+  toMessage,
+} from '../../src/modules/chatrooms/chatRoom.serializer';
 
 const created = new Date('2026-09-13T12:00:00.000Z');
 const later = new Date('2026-09-14T08:30:15.123Z');
@@ -26,8 +31,11 @@ describe('toChatRoomSummary', () => {
     });
   });
 
-  it('keeps the id and a null senderId (the sender\'s account is gone) of the last message', () => {
-    const { lastMessage } = toChatRoomSummary({ ...room, lastMessage: { id: 43, senderId: null, content: 'Bye', createdAt: later } });
+  it("keeps the id and a null senderId (the sender's account is gone) of the last message", () => {
+    const { lastMessage } = toChatRoomSummary({
+      ...room,
+      lastMessage: { id: 43, senderId: null, content: 'Bye', createdAt: later },
+    });
 
     expect(lastMessage).toEqual({ id: 43, senderId: null, content: 'Bye', createdAt: '2026-09-14T08:30:15.123Z' });
   });
@@ -45,7 +53,15 @@ describe('toChatRoomSummary', () => {
   it('names its fields: a property the service data happens to carry is not sent', () => {
     const summary = toChatRoomSummary({ ...room, emptiedAt: created } as typeof room);
 
-    expect(Object.keys(summary).sort()).toEqual(['avatarUrl', 'createdAt', 'id', 'lastMessage', 'name', 'type', 'unreadCount']);
+    expect(Object.keys(summary).sort()).toEqual([
+      'avatarUrl',
+      'createdAt',
+      'id',
+      'lastMessage',
+      'name',
+      'type',
+      'unreadCount',
+    ]);
   });
 });
 
@@ -59,9 +75,14 @@ describe('toChatRoomDetail and toCreatedChatRoom', () => {
     lastMessage: { id: 8, senderId: 2, content: 'Hi', createdAt: later },
     unreadCount: 1,
   };
-  const member = { chatId: 7, role: 'admin' as const, lastReadMessageId: null, member: { id: 1, name: 'Alice', avatarUrl: null } };
+  const member = {
+    chatId: 7,
+    role: 'admin' as const,
+    lastReadMessageId: null,
+    member: { id: 1, name: 'Alice', avatarUrl: null },
+  };
 
-  it('is the summary with the requester\'s role', () => {
+  it("is the summary with the requester's role", () => {
     expect(toChatRoomDetail(summary, 'member')).toEqual({ ...toChatRoomSummary(summary), role: 'member' });
   });
 
@@ -110,6 +131,15 @@ describe('toMessage', () => {
     const sent = toMessage({ ...message, ipAddress: '10.0.0.1' } as typeof message);
 
     expect(sent).not.toHaveProperty('ipAddress');
-    expect(Object.keys(sent).sort()).toEqual(['chatId', 'content', 'createdAt', 'deletedAt', 'editedAt', 'id', 'sender', 'senderId']);
+    expect(Object.keys(sent).sort()).toEqual([
+      'chatId',
+      'content',
+      'createdAt',
+      'deletedAt',
+      'editedAt',
+      'id',
+      'sender',
+      'senderId',
+    ]);
   });
 });

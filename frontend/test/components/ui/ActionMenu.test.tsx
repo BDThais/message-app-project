@@ -141,13 +141,16 @@ describe('ActionMenu', () => {
     /** The button is where `button` says, the menu is `menu` big; jsdom measures everything as zero. */
     function measure(button: { top: number; bottom: number; right: number }, menu: { width: number; height: number }) {
       vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-        const box = this.getAttribute('role') === 'menu' ? { top: 0, left: 0, right: menu.width, bottom: menu.height, ...menu } : { left: button.right - 32, ...button, width: 32, height: 32 };
+        const box =
+          this.getAttribute('role') === 'menu'
+            ? { top: 0, left: 0, right: menu.width, bottom: menu.height, ...menu }
+            : { left: button.right - 32, ...button, width: 32, height: 32 };
         return { x: 0, y: 0, toJSON: () => ({}), ...box } as DOMRect;
       });
     }
     const menuStyle = () => screen.getByRole('menu').style;
 
-    it('opens below the button with its right edge on the button\'s', async () => {
+    it("opens below the button with its right edge on the button's", async () => {
       measure({ top: 100, bottom: 132, right: 500 }, { width: 128, height: 80 });
       const { user } = renderMenu();
 

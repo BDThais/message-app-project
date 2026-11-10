@@ -37,7 +37,7 @@ export async function addChatRoomMembers(
   chatId: number,
   memberIds: number[],
   role: ChatMemberRole = ChatMemberRole.member,
-  lastReadMessageId: number | null = null
+  lastReadMessageId: number | null = null,
 ) {
   if (memberIds.length === 0) {
     return { count: 0 };
@@ -62,11 +62,7 @@ export async function addChatRoomMembers(
  * The insert is a single statement: a user deleted after the friend check makes it fail with the
  * foreign-key error (see isForeignKeyConstraintError) and nobody from this request is added.
  */
-export async function addMembersToExistingChatRoom(
-  chatId: number,
-  requesterId: number,
-  memberIds: number[]
-) {
+export async function addMembersToExistingChatRoom(chatId: number, requesterId: number, memberIds: number[]) {
   const existingMembers = await prisma.chatMember.findMany({
     where: { chatId, memberId: { in: memberIds } },
     select: { memberId: true },
@@ -120,7 +116,7 @@ export type RemoveChatMemberResult =
 export async function removeMemberFromChatRoom(
   chatId: number,
   targetId: number,
-  roomType: ChatRoomType
+  roomType: ChatRoomType,
 ): Promise<RemoveChatMemberResult> {
   return prisma.$transaction(async (tx) => {
     const lockedRooms = await tx.$queryRaw<{ id: number }[]>`
@@ -189,7 +185,7 @@ export type ChangeMemberRoleResult =
 export async function changeMemberRoleInChatRoom(
   chatId: number,
   targetId: number,
-  role: ChatMemberRole
+  role: ChatMemberRole,
 ): Promise<ChangeMemberRoleResult> {
   return prisma.$transaction(async (tx) => {
     const lockedRooms = await tx.$queryRaw<{ id: number }[]>`
@@ -245,8 +241,7 @@ export async function getMembersForChatRoom(chatId: number): Promise<ChatMemberW
 
   return members.sort(
     (a, b) =>
-      roleRank(a.role) - roleRank(b.role) ||
-      a.member.name.localeCompare(b.member.name, 'en', { sensitivity: 'base' })
+      roleRank(a.role) - roleRank(b.role) || a.member.name.localeCompare(b.member.name, 'en', { sensitivity: 'base' }),
   );
 }
 
@@ -274,7 +269,7 @@ export type MarkChatRoomReadResult =
 export async function markChatRoomRead(
   chatId: number,
   memberId: number,
-  messageId: number
+  messageId: number,
 ): Promise<MarkChatRoomReadResult> {
   const message = await prisma.message.findFirst({
     where: { id: messageId, chatId },
@@ -308,7 +303,9 @@ export async function markChatRoomRead(
   // A null here would mean the message the marker pointed at vanished in between; messages are never
   // hard-deleted apart from the whole room, and that takes this row with it.
   if (current.lastReadMessageId === null) {
-    throw new Error(`last_read_message_id of member ${memberId} in room ${chatId} is null after an update that skipped it`);
+    throw new Error(
+      `last_read_message_id of member ${memberId} in room ${chatId} is null after an update that skipped it`,
+    );
   }
 
   return { outcome: 'marked', lastReadMessageId: current.lastReadMessageId };

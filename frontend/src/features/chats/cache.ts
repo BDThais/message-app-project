@@ -149,7 +149,9 @@ export function markMessageDeletedInCache(
   deletedAt: string,
 ): void {
   updatePages(queryClient, chatId, (pages) =>
-    changeMessage(pages, messageId, (message) => (message.deletedAt ? message : { ...message, content: '', deletedAt })),
+    changeMessage(pages, messageId, (message) =>
+      message.deletedAt ? message : { ...message, content: '', deletedAt },
+    ),
   );
 }
 
@@ -176,8 +178,13 @@ export function refreshPreviewAfterChange(
   const everythingIsLoaded = data.pages.at(-1)?.hasMore === false;
   if (!newest && !everythingIsLoaded) return 'unknown';
 
-  queryClient.setQueryData<ChatRoomSummary[]>(chatKeys.list(), (rooms) =>
-    rooms && sortRooms(rooms.map((each) => (each.id === chatId ? { ...each, lastMessage: newest ? previewOf(newest) : null } : each))),
+  queryClient.setQueryData<ChatRoomSummary[]>(
+    chatKeys.list(),
+    (rooms) =>
+      rooms &&
+      sortRooms(
+        rooms.map((each) => (each.id === chatId ? { ...each, lastMessage: newest ? previewOf(newest) : null } : each)),
+      ),
   );
   return 'updated';
 }

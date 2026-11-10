@@ -28,11 +28,26 @@ describe('validateChangePasswordBody', () => {
 
   it.each([
     { desc: 'too short', password: 'Ab1!', message: 'Password must be at least 8 characters long' },
-    { desc: 'no uppercase letter', password: 'newer!passw0rd', message: 'Password must contain at least one uppercase letter' },
-    { desc: 'no lowercase letter', password: 'NEWER!PASSW0RD', message: 'Password must contain at least one lowercase letter' },
+    {
+      desc: 'no uppercase letter',
+      password: 'newer!passw0rd',
+      message: 'Password must contain at least one uppercase letter',
+    },
+    {
+      desc: 'no lowercase letter',
+      password: 'NEWER!PASSW0RD',
+      message: 'Password must contain at least one lowercase letter',
+    },
     { desc: 'no digit', password: 'Newer!Password', message: 'Password must contain at least one number' },
-    { desc: 'no special character', password: 'Newer1Password', message: 'Password must contain at least one special character' },
+    {
+      desc: 'no special character',
+      password: 'Newer1Password',
+      message: 'Password must contain at least one special character',
+    },
   ])('rejects a new password with $desc', ({ password, message }) => {
-    expect(validateChangePasswordBody({ current_password: 'x', new_password: password })).toEqual({ valid: false, message });
+    expect(validateChangePasswordBody({ current_password: 'x', new_password: password })).toEqual({
+      valid: false,
+      message,
+    });
   });
 });

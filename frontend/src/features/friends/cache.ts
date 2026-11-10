@@ -30,7 +30,11 @@ export function removeFriendFromCache(queryClient: QueryClient, userId: number):
 }
 
 /** A request the person just sent is the newest one, so it goes first, like the server's list has it. */
-export function addRequestToCache(queryClient: QueryClient, direction: FriendRequestDirection, request: FriendRequest): void {
+export function addRequestToCache(
+  queryClient: QueryClient,
+  direction: FriendRequestDirection,
+  request: FriendRequest,
+): void {
   queryClient.setQueryData<FriendRequest[]>(friendKeys.requests(direction), (requests) =>
     !requests || requests.some(({ id }) => id === request.id) ? requests : [request, ...requests],
   );

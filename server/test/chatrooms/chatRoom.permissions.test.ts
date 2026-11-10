@@ -71,8 +71,7 @@ describe('every chat-room route', () => {
 const adminOnlyRoutes = [
   {
     name: 'PATCH /chat/:chatid',
-    call: (agent: TestAgent, chatId: number) =>
-      agent.patch(`/api/chat/${chatId}`).send({ name: 'Not allowed' }),
+    call: (agent: TestAgent, chatId: number) => agent.patch(`/api/chat/${chatId}`).send({ name: 'Not allowed' }),
   },
   {
     name: 'DELETE /chat/:chatid',

@@ -49,7 +49,14 @@ describe(`PATCH ${route}`, () => {
 
     expect(set.status).toBe(200);
     expect(set.body.user).toMatchObject({ name: 'Alice', avatarUrl });
-    expect(me.body.user).toEqual({ id: alice.id, name: 'Alice', email: alice.email, tel: alice.tel, avatarUrl, emailVerified: false });
+    expect(me.body.user).toEqual({
+      id: alice.id,
+      name: 'Alice',
+      email: alice.email,
+      tel: alice.tel,
+      avatarUrl,
+      emailVerified: false,
+    });
 
     const cleared = await agent.patch(route).send({ avatar_url: null });
 

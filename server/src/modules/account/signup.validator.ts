@@ -15,29 +15,29 @@ export type AccountBody = {
 const NAME_RE = /^[a-zA-Z0-9]+$/;
 
 export function validateName(name: string): string | null {
-     if (!NAME_RE.test(name)) {
-        return 'Name must contain only letters and numbers';
-    }
-    return null;
+  if (!NAME_RE.test(name)) {
+    return 'Name must contain only letters and numbers';
+  }
+  return null;
 }
 
 export function validatePassword(password: string): string | null {
-    if (password.length < 8) {
-        return 'Password must be at least 8 characters long';
-    }
-    if (!/[A-Z]/.test(password)) {
-        return 'Password must contain at least one uppercase letter';
-    }
-    if (!/[a-z]/.test(password)) {
-        return 'Password must contain at least one lowercase letter';
-    }
-    if (!/[0-9]/.test(password)) {
-        return 'Password must contain at least one number';
-    }
-    if (!/[^A-Za-z0-9\s]/.test(password)) {
-        return 'Password must contain at least one special character';
-    }
-    return null;
+  if (password.length < 8) {
+    return 'Password must be at least 8 characters long';
+  }
+  if (!/[A-Z]/.test(password)) {
+    return 'Password must contain at least one uppercase letter';
+  }
+  if (!/[a-z]/.test(password)) {
+    return 'Password must contain at least one lowercase letter';
+  }
+  if (!/[0-9]/.test(password)) {
+    return 'Password must contain at least one number';
+  }
+  if (!/[^A-Za-z0-9\s]/.test(password)) {
+    return 'Password must contain at least one special character';
+  }
+  return null;
 }
 
 /**
@@ -55,21 +55,19 @@ export function validatePassword(password: string): string | null {
  * not change.
  */
 export function normalizeTel(tel: string): string | null {
-    if (!isValidPhoneNumber(tel)) return null;
+  if (!isValidPhoneNumber(tel)) return null;
 
-    return parsePhoneNumberFromString(tel)?.number ?? null;
+  return parsePhoneNumberFromString(tel)?.number ?? null;
 }
 
 function validateTel(tel: string): string | null {
-    if (normalizeTel(tel) === null) {
-        return 'Invalid phone number format';
-    }
-    return null;
+  if (normalizeTel(tel) === null) {
+    return 'Invalid phone number format';
+  }
+  return null;
 }
 
-type AccountValidation =
-    | { valid: true; data: AccountBody }
-    | { valid: false; message: string };
+type AccountValidation = { valid: true; data: AccountBody } | { valid: false; message: string };
 
 /**
  * Validates the body of POST /api/account/signup: { name, email, tel, password }. A field that is not a
@@ -78,27 +76,27 @@ type AccountValidation =
  * then). The rules are checked in this order, and the first one that fails is the answer.
  */
 export function validateAccountBody(body: unknown): AccountValidation {
-    const { name, email, tel, password } = bodyFields<SignupBody>(body);
+  const { name, email, tel, password } = bodyFields<SignupBody>(body);
 
-    if (
-        typeof name !== 'string' || name === '' ||
-        typeof email !== 'string' || email === '' ||
-        typeof tel !== 'string' || tel === '' ||
-        typeof password !== 'string' || password === ''
-    ) {
-        return { valid: false, message: 'All fields are required' };
-    }
+  if (
+    typeof name !== 'string' ||
+    name === '' ||
+    typeof email !== 'string' ||
+    email === '' ||
+    typeof tel !== 'string' ||
+    tel === '' ||
+    typeof password !== 'string' ||
+    password === ''
+  ) {
+    return { valid: false, message: 'All fields are required' };
+  }
 
-    const message =
-        validateName(name) ??
-        validateEmail(email) ??
-        validateTel(tel) ??
-        validatePassword(password);
-    if (message) {
-        return { valid: false, message };
-    }
+  const message = validateName(name) ?? validateEmail(email) ?? validateTel(tel) ?? validatePassword(password);
+  if (message) {
+    return { valid: false, message };
+  }
 
-    return { valid: true, data: { name, email, tel, password } };
+  return { valid: true, data: { name, email, tel, password } };
 }
 
 const EMAIL_EXISTS = 'Email already exists';
@@ -106,14 +104,14 @@ const TEL_EXISTS = 'Phone number already exists';
 
 // `email` and `tel` are the canonical forms (normalizeEmail, normalizeTel), never the raw input.
 export async function checkDuplication(email: string, tel: string): Promise<string | null> {
-    // Check for duplication in email or phone number
-    const existingUser = await findExistingUser(email, tel);
+  // Check for duplication in email or phone number
+  const existingUser = await findExistingUser(email, tel);
 
-    if (existingUser) {
-        return existingUser.email === email ? EMAIL_EXISTS : TEL_EXISTS;
-    }
+  if (existingUser) {
+    return existingUser.email === email ? EMAIL_EXISTS : TEL_EXISTS;
+  }
 
-    return null;
+  return null;
 }
 
 /**
@@ -126,23 +124,23 @@ export async function checkDuplication(email: string, tel: string): Promise<stri
  * so a change of setup does not silently turn every answer into one message.
  */
 function uniqueViolationNames(meta: unknown): string[] {
-    if (!isRecord(meta)) return [];
+  if (!isRecord(meta)) return [];
 
-    const names: string[] = [];
-    const collect = (value: unknown) => {
-        if (typeof value === 'string') names.push(value);
-        else if (Array.isArray(value)) value.forEach(collect);
-    };
+  const names: string[] = [];
+  const collect = (value: unknown) => {
+    if (typeof value === 'string') names.push(value);
+    else if (Array.isArray(value)) value.forEach(collect);
+  };
 
-    collect(meta.target);
-    const cause = isRecord(meta.driverAdapterError) ? meta.driverAdapterError.cause : undefined;
-    const constraint = isRecord(cause) ? cause.constraint : undefined;
-    if (isRecord(constraint)) {
-        collect(constraint.fields);
-        collect(constraint.index);
-    }
+  collect(meta.target);
+  const cause = isRecord(meta.driverAdapterError) ? meta.driverAdapterError.cause : undefined;
+  const constraint = isRecord(cause) ? cause.constraint : undefined;
+  if (isRecord(constraint)) {
+    collect(constraint.fields);
+    collect(constraint.index);
+  }
 
-    return names;
+  return names;
 }
 
 /**
@@ -156,13 +154,13 @@ function uniqueViolationNames(meta: unknown): string[] {
  * instead of guessing one.
  */
 export function uniqueViolationMessage(error: unknown): string | null {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
-        return null;
-    }
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+    return null;
+  }
 
-    const names = uniqueViolationNames(error.meta);
-    if (names.some((name) => name.includes('email'))) return EMAIL_EXISTS;
-    if (names.some((name) => name.includes('tel'))) return TEL_EXISTS;
+  const names = uniqueViolationNames(error.meta);
+  if (names.some((name) => name.includes('email'))) return EMAIL_EXISTS;
+  if (names.some((name) => name.includes('tel'))) return TEL_EXISTS;
 
-    return 'Email or phone number already exists';
+  return 'Email or phone number already exists';
 }

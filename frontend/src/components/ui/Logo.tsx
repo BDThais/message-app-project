@@ -1,6 +1,6 @@
 export function Logo() {
   return (
-    <span className="inline-flex shrink-0 items-center gap-2.5 whitespace-nowrap text-lg font-semibold tracking-tight">
+    <span className="inline-flex shrink-0 items-center gap-2.5 text-lg font-semibold tracking-tight whitespace-nowrap">
       <svg viewBox="0 0 32 32" aria-hidden="true" className="size-8 shrink-0">
         <rect width="32" height="32" rx="9" className="fill-accent" />
         <path

@@ -33,7 +33,7 @@ export function createConsoleMailer(): Mailer {
   return {
     async send({ to, subject, text }) {
       console.log(
-        `--- mail (console transport, not sent) ---\nTo: ${to}\nSubject: ${subject}\n\n${text}\n--- end of mail ---`
+        `--- mail (console transport, not sent) ---\nTo: ${to}\nSubject: ${subject}\n\n${text}\n--- end of mail ---`,
       );
     },
   };
@@ -75,7 +75,7 @@ export function createMailerFromConfig(settings: MailSettings): Mailer {
   }
   if (settings.NODE_ENV === 'production' && transport !== 'resend') {
     throw new Error(
-      'MAIL_TRANSPORT must be "resend" when NODE_ENV=production: the console transport only logs mails, so nobody would receive them'
+      'MAIL_TRANSPORT must be "resend" when NODE_ENV=production: the console transport only logs mails, so nobody would receive them',
     );
   }
   if (transport === 'console') {
@@ -88,7 +88,9 @@ export function createMailerFromConfig(settings: MailSettings): Mailer {
     throw new Error('RESEND_API_KEY is required when MAIL_TRANSPORT=resend');
   }
   if (!from) {
-    throw new Error('MAIL_FROM is required when MAIL_TRANSPORT=resend (for example "Message App <no-reply@yourdomain.com>")');
+    throw new Error(
+      'MAIL_FROM is required when MAIL_TRANSPORT=resend (for example "Message App <no-reply@yourdomain.com>")',
+    );
   }
   return createResendMailer({ apiKey, from });
 }

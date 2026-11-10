@@ -141,7 +141,7 @@ describe('createResendMailer', () => {
       .send(mail)
       .then(
         () => null,
-        (err: unknown) => err
+        (err: unknown) => err,
       );
 
     expect(failure).toBeInstanceOf(Error);

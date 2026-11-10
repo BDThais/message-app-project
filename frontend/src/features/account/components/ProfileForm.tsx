@@ -15,7 +15,8 @@ export function ProfileForm({ user }: { user: User }) {
 
   const changes: UpdateProfileInput = {};
   if (name.trim() !== user.name) changes.name = name.trim();
-  if (avatarUrl.trim() !== (user.avatarUrl ?? '')) changes.avatarUrl = avatarUrl.trim() === '' ? null : avatarUrl.trim();
+  if (avatarUrl.trim() !== (user.avatarUrl ?? ''))
+    changes.avatarUrl = avatarUrl.trim() === '' ? null : avatarUrl.trim();
   const dirty = changes.name !== undefined || changes.avatarUrl !== undefined;
 
   function handleSubmit(event: SyntheticEvent<HTMLFormElement>) {

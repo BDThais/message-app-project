@@ -123,7 +123,9 @@ describe('issueEmailVerification', () => {
 
     expect(result.status).toBe('issued');
     expect(await prisma.emailVerificationToken.count()).toBe(1);
-    expect((await prisma.emailVerificationToken.findUniqueOrThrow({ where: { userId: alice.id } })).createdAt).toEqual(now);
+    expect((await prisma.emailVerificationToken.findUniqueOrThrow({ where: { userId: alice.id } })).createdAt).toEqual(
+      now,
+    );
     expect(await verifyEmailToken(oldToken)).toEqual({ status: 'invalid' });
   });
 
@@ -161,7 +163,7 @@ describe('issueEmailVerification', () => {
     const issued = results.find((result) => result.status === 'issued');
     if (issued?.status !== 'issued') throw new Error('unreachable');
     expect((await prisma.emailVerificationToken.findUniqueOrThrow({ where: { userId: alice.id } })).tokenHash).toBe(
-      hashToken(issued.token)
+      hashToken(issued.token),
     );
   });
 

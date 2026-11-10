@@ -19,11 +19,7 @@ describe('GET /chat/:chatid/message', () => {
     const res = await agent.get(`/api/chat/${room.id}/message`);
 
     expect(res.status).toBe(200);
-    expect(res.body.messages.map((m: { content: string }) => m.content)).toEqual([
-      'Third',
-      'Second',
-      'First',
-    ]);
+    expect(res.body.messages.map((m: { content: string }) => m.content)).toEqual(['Third', 'Second', 'First']);
     expect(res.body.hasMore).toBe(false);
   });
 
@@ -37,16 +33,11 @@ describe('GET /chat/:chatid/message', () => {
     }
 
     const firstPage = await agent.get(`/api/chat/${room.id}/message?limit=2`);
-    expect(firstPage.body.messages.map((m: { content: string }) => m.content)).toEqual([
-      'Three',
-      'Two',
-    ]);
+    expect(firstPage.body.messages.map((m: { content: string }) => m.content)).toEqual(['Three', 'Two']);
     expect(firstPage.body.hasMore).toBe(true);
 
     const oldestLoadedId = firstPage.body.messages[1].id;
-    const secondPage = await agent.get(
-      `/api/chat/${room.id}/message?before=${oldestLoadedId}&limit=2`
-    );
+    const secondPage = await agent.get(`/api/chat/${room.id}/message?before=${oldestLoadedId}&limit=2`);
 
     expect(secondPage.body.messages.map((m: { content: string }) => m.content)).toEqual(['One']);
     expect(secondPage.body.hasMore).toBe(false);
@@ -86,7 +77,11 @@ describe('GET /chat/:chatid/message', () => {
     const res = await agent.get(`/api/chat/${room.id}/message?after=${first.body.message.id}`);
 
     expect(res.body.messages).toHaveLength(1);
-    expect(res.body.messages[0]).toMatchObject({ id: second.body.message.id, content: '', deletedAt: expect.any(String) });
+    expect(res.body.messages[0]).toMatchObject({
+      id: second.body.message.id,
+      content: '',
+      deletedAt: expect.any(String),
+    });
   });
 
   it('only returns the messages of this room, whatever id after names', async () => {

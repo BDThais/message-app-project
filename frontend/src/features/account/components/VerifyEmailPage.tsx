@@ -32,16 +32,22 @@ export function VerifyEmailPage() {
           in the banner at the top of the page to send a new one.
         </p>
       ) : isSuccess ? (
-        <Notice tone="success" role="status">Your email address is verified.</Notice>
+        <Notice tone="success" role="status">
+          Your email address is verified.
+        </Notice>
       ) : error ? (
         <>
           <Notice tone="error" role="alert">
             {error.message}
           </Notice>
-          <p>If the link has expired, sign in and use the button in the banner at the top of the page to send a new one.</p>
+          <p>
+            If the link has expired, sign in and use the button in the banner at the top of the page to send a new one.
+          </p>
         </>
       ) : (
-        <Notice tone="info" role="status">Verifying your email address…</Notice>
+        <Notice tone="info" role="status">
+          Verifying your email address…
+        </Notice>
       )}
       <FormLinks>
         <Link to="/chat">Continue</Link>

@@ -134,7 +134,10 @@ describe('the password', () => {
     const password = await fill(user, PASSWORD, NEW_PASSWORD);
 
     expect(await password.findByText(/Password changed/)).toBeTruthy();
-    expect(bodyOf(server, 'POST /api/account/password')).toEqual({ current_password: PASSWORD, new_password: NEW_PASSWORD });
+    expect(bodyOf(server, 'POST /api/account/password')).toEqual({
+      current_password: PASSWORD,
+      new_password: NEW_PASSWORD,
+    });
     expect((password.getByLabelText('Current password') as HTMLInputElement).value).toBe('');
     expect((password.getByLabelText('New password') as HTMLInputElement).value).toBe('');
     expect(router.state.location.pathname).toBe('/settings');
@@ -154,12 +157,14 @@ describe('the password', () => {
     expect((password.getByLabelText('Current password') as HTMLInputElement).value).toBe('not-it');
   });
 
-  it('shows the server\'s text for a new password that breaks its rules', async () => {
+  it("shows the server's text for a new password that breaks its rules", async () => {
     const { user } = openSettings();
 
     const password = await fill(user, PASSWORD, 'weakpass1!');
 
-    expect((await password.findByRole('alert')).textContent).toBe('Password must contain at least one uppercase letter');
+    expect((await password.findByRole('alert')).textContent).toBe(
+      'Password must contain at least one uppercase letter',
+    );
   });
 });
 
@@ -239,7 +244,11 @@ describe('deleting the account', () => {
 
     expect((await deletion.findByRole('alert')).textContent).toMatch(/only admin of a group room/);
     const rooms = deletion.getByRole('list', { name: 'Rooms to sort out first' });
-    expect(within(rooms).getAllByRole('link').map((link) => link.textContent)).toEqual(['Project chat', 'Chat 8']);
+    expect(
+      within(rooms)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['Project chat', 'Chat 8']);
     expect(server.accounts).toHaveLength(1);
 
     await user.click(within(rooms).getByRole('link', { name: 'Project chat' }));

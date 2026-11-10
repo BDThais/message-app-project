@@ -19,9 +19,7 @@ async function createUserWithPassword(name: string) {
 
 describe(`POST ${route}`, () => {
   it('returns 401 without a session', async () => {
-    const res = await request(app)
-      .post(route)
-      .send({ current_password: currentPassword, new_password: newPassword });
+    const res = await request(app).post(route).send({ current_password: currentPassword, new_password: newPassword });
 
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ error: 'Unauthorized Access' });
@@ -69,7 +67,9 @@ describe(`POST ${route}`, () => {
     const agent = await loginAs(alice);
     await agent.post(route).send({ current_password: currentPassword, new_password: newPassword });
 
-    const oldLogin = await request(app).post('/api/account/login').send({ email: alice.email, password: currentPassword });
+    const oldLogin = await request(app)
+      .post('/api/account/login')
+      .send({ email: alice.email, password: currentPassword });
     const newLogin = await request(app).post('/api/account/login').send({ email: alice.email, password: newPassword });
 
     expect(oldLogin.status).toBe(401);

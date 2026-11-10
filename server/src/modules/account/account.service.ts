@@ -4,16 +4,16 @@ import type { User } from '../../contract/types';
 import { createPrivateChatRoom, findPrivateChatRoomIds } from '../chatrooms/privateRoom.service';
 
 export function findExistingUser(email: string, tel: string) {
-	return prisma.user.findFirst({
-		where: {
-			OR: [{ email }, { tel }]
-		}
-	});
+  return prisma.user.findFirst({
+    where: {
+      OR: [{ email }, { tel }],
+    },
+  });
 }
 
 /** The account with this address, or null. */
 export function findUserByEmail(email: string) {
-	return prisma.user.findUnique({ where: { email } });
+  return prisma.user.findUnique({ where: { email } });
 }
 
 /**
@@ -24,38 +24,45 @@ export function findUserByEmail(email: string) {
  * exists without its account. Only the hash of the token is stored.
  */
 export function createUser(data: {
-	name: string;
-	email: string;
-	tel: string;
-	passwordHash: string;
-	emailVerification?: { tokenHash: string; createdAt: Date; expiresAt: Date };
+  name: string;
+  email: string;
+  tel: string;
+  passwordHash: string;
+  emailVerification?: { tokenHash: string; createdAt: Date; expiresAt: Date };
 }) {
-	const { emailVerification, ...fields } = data;
+  const { emailVerification, ...fields } = data;
 
-	return prisma.$transaction(async (tx) => {
-		const user = await tx.user.create({
-			data: {
-				...fields,
-				...(emailVerification && {
-					emailVerificationToken: {
-						create: {
-							email: fields.email,
-							tokenHash: emailVerification.tokenHash,
-							createdAt: emailVerification.createdAt,
-							expiresAt: emailVerification.expiresAt,
-						},
-					},
-				}),
-			},
-		});
-		await createPrivateChatRoom(tx, user.id);
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        ...fields,
+        ...(emailVerification && {
+          emailVerificationToken: {
+            create: {
+              email: fields.email,
+              tokenHash: emailVerification.tokenHash,
+              createdAt: emailVerification.createdAt,
+              expiresAt: emailVerification.expiresAt,
+            },
+          },
+        }),
+      },
+    });
+    await createPrivateChatRoom(tx, user.id);
 
-		return user;
-	});
+    return user;
+  });
 }
 
 // What is read from the database to build a user (see toUser). Never includes passwordHash.
-export const userSelect = { id: true, name: true, email: true, tel: true, avatarUrl: true, emailVerifiedAt: true } as const;
+export const userSelect = {
+  id: true,
+  name: true,
+  email: true,
+  tel: true,
+  avatarUrl: true,
+  emailVerifiedAt: true,
+} as const;
 
 /**
  * A user's own account as the API shows it (`User` in contract/types.ts): returned by login,
@@ -63,33 +70,36 @@ export const userSelect = { id: true, name: true, email: true, tel: true, avatar
  * verification stays on the server: clients only get whether the address is verified.
  */
 export function toUser(user: {
-	id: number;
-	name: string;
-	email: string;
-	tel: string;
-	avatarUrl: string | null;
-	emailVerifiedAt: Date | null;
+  id: number;
+  name: string;
+  email: string;
+  tel: string;
+  avatarUrl: string | null;
+  emailVerifiedAt: Date | null;
 }): User {
-	return {
-		id: user.id,
-		name: user.name,
-		email: user.email,
-		tel: user.tel,
-		avatarUrl: user.avatarUrl,
-		emailVerified: user.emailVerifiedAt !== null,
-	};
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    tel: user.tel,
+    avatarUrl: user.avatarUrl,
+    emailVerified: user.emailVerifiedAt !== null,
+  };
 }
 
 /** Updates the profile fields that were sent and returns the user. */
-export async function updateUserProfile(userId: number, data: { name?: string; avatarUrl?: string | null }): Promise<User> {
-	return toUser(await prisma.user.update({ where: { id: userId }, data, select: userSelect }));
+export async function updateUserProfile(
+  userId: number,
+  data: { name?: string; avatarUrl?: string | null },
+): Promise<User> {
+  return toUser(await prisma.user.update({ where: { id: userId }, data, select: userSelect }));
 }
 
 /** The stored password hash, or null when the account no longer exists. */
 export async function findPasswordHash(userId: number): Promise<string | null> {
-	const user = await prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true } });
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true } });
 
-	return user?.passwordHash ?? null;
+  return user?.passwordHash ?? null;
 }
 
 /**
@@ -107,31 +117,31 @@ export async function findPasswordHash(userId: number): Promise<string | null> {
  * false, so a stale "current password" cannot overwrite a newer one.
  */
 export function changePassword(
-	userId: number,
-	oldPasswordHash: string,
-	newPasswordHash: string,
-	currentSessionId: string
+  userId: number,
+  oldPasswordHash: string,
+  newPasswordHash: string,
+  currentSessionId: string,
 ): Promise<boolean> {
-	return prisma.$transaction(async (tx) => {
-		const updated = await tx.user.updateMany({
-			where: { id: userId, passwordHash: oldPasswordHash },
-			data: { passwordHash: newPasswordHash },
-		});
-		if (updated.count === 0) return false;
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.user.updateMany({
+      where: { id: userId, passwordHash: oldPasswordHash },
+      data: { passwordHash: newPasswordHash },
+    });
+    if (updated.count === 0) return false;
 
-		await tx.session.deleteMany({ where: { userId, id: { not: currentSessionId } } });
-		await tx.passwordResetToken.deleteMany({ where: { userId } });
-		return true;
-	});
+    await tx.session.deleteMany({ where: { userId, id: { not: currentSessionId } } });
+    await tx.passwordResetToken.deleteMany({ where: { userId } });
+    return true;
+  });
 }
 
 export type DeleteAccountResult =
-	| { status: 'deleted' }
-	// Refused: the user is the only admin of these group rooms, which still have other members.
-	| { status: 'only_admin'; chatIds: number[] }
-	// The stored hash is no longer the one the caller verified (the password was changed in the
-	// meantime) or the account is already gone, so nothing was deleted.
-	| { status: 'stale_password' };
+  | { status: 'deleted' }
+  // Refused: the user is the only admin of these group rooms, which still have other members.
+  | { status: 'only_admin'; chatIds: number[] }
+  // The stored hash is no longer the one the caller verified (the password was changed in the
+  // meantime) or the account is already gone, so nothing was deleted.
+  | { status: 'stale_password' };
 
 /**
  * Deletes the account (DELETE /api/account/me). The foreign keys do the rest in
@@ -164,49 +174,49 @@ export type DeleteAccountResult =
  * stored hash is no longer that one nothing is deleted.
  */
 export function deleteAccount(userId: number, passwordHash: string): Promise<DeleteAccountResult> {
-	return prisma.$transaction(async (tx) => {
-		await tx.$queryRaw`
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`
 			SELECT id FROM chat_rooms
 			WHERE id IN (SELECT chat_id FROM chat_members WHERE member_id = ${userId})
 			ORDER BY id
 			FOR UPDATE
 		`;
 
-		// A group room where the user is an admin, somebody else is still a member,
-		// and none of those others is an admin.
-		const blockingRooms = await tx.chatMember.findMany({
-			where: {
-				memberId: userId,
-				role: ChatMemberRole.admin,
-				chatRoom: {
-					type: ChatRoomType.group,
-					members: { some: { memberId: { not: userId } } },
-					NOT: { members: { some: { memberId: { not: userId }, role: ChatMemberRole.admin } } },
-				},
-			},
-			select: { chatId: true },
-			orderBy: { chatId: 'asc' },
-		});
-		if (blockingRooms.length > 0) {
-			return { status: 'only_admin', chatIds: blockingRooms.map((room) => room.chatId) };
-		}
+    // A group room where the user is an admin, somebody else is still a member,
+    // and none of those others is an admin.
+    const blockingRooms = await tx.chatMember.findMany({
+      where: {
+        memberId: userId,
+        role: ChatMemberRole.admin,
+        chatRoom: {
+          type: ChatRoomType.group,
+          members: { some: { memberId: { not: userId } } },
+          NOT: { members: { some: { memberId: { not: userId }, role: ChatMemberRole.admin } } },
+        },
+      },
+      select: { chatId: true },
+      orderBy: { chatId: 'asc' },
+    });
+    if (blockingRooms.length > 0) {
+      return { status: 'only_admin', chatIds: blockingRooms.map((room) => room.chatId) };
+    }
 
-		const soloRooms = await tx.chatRoom.findMany({
-			where: { members: { some: { memberId: userId }, none: { memberId: { not: userId } } } },
-			select: { id: true },
-		});
+    const soloRooms = await tx.chatRoom.findMany({
+      where: { members: { some: { memberId: userId }, none: { memberId: { not: userId } } } },
+      select: { id: true },
+    });
 
-		const privateRoomIds = await findPrivateChatRoomIds(tx, userId);
+    const privateRoomIds = await findPrivateChatRoomIds(tx, userId);
 
-		const deleted = await tx.user.deleteMany({ where: { id: userId, passwordHash } });
-		if (deleted.count === 0) return { status: 'stale_password' };
+    const deleted = await tx.user.deleteMany({ where: { id: userId, passwordHash } });
+    if (deleted.count === 0) return { status: 'stale_password' };
 
-		await tx.chatRoom.deleteMany({ where: { id: { in: privateRoomIds } } });
+    await tx.chatRoom.deleteMany({ where: { id: { in: privateRoomIds } } });
 
-		await tx.chatRoom.updateMany({
-			where: { id: { in: soloRooms.map((room) => room.id) } },
-			data: { emptiedAt: new Date() },
-		});
-		return { status: 'deleted' };
-	});
+    await tx.chatRoom.updateMany({
+      where: { id: { in: soloRooms.map((room) => room.id) } },
+      data: { emptiedAt: new Date() },
+    });
+    return { status: 'deleted' };
+  });
 }

@@ -3,22 +3,44 @@ import type { AuthenticatedRequest } from '../../middlewares/UserSessionAuth';
 import type { ChatRoomRequest } from './chatRoomAuth.middleware';
 import type { ApiErrorBody } from '../../contract/errors';
 import type {
-  AddMembersResponse, ChatMessageResponse, ChatRoomDetailResponse, ChatRoomListResponse, CreatedChatRoomResponse,
-  MarkReadResponse, MemberListResponse, MemberResponse, MessageListResponse
+  AddMembersResponse,
+  ChatMessageResponse,
+  ChatRoomDetailResponse,
+  ChatRoomListResponse,
+  CreatedChatRoomResponse,
+  MarkReadResponse,
+  MemberListResponse,
+  MemberResponse,
+  MessageListResponse,
 } from '../../contract/responses';
 import {
-  validateCreateChatRoomInput, validateUpdateChatRoomBody, validateAddMembersBody,
-  validateUserIdParam, validateChangeMemberRoleBody, validateSendMessageBody,
-  validateGetMessagesQuery, validateMessageIdParam, validateEditMessageBody, validateMarkReadBody
+  validateCreateChatRoomInput,
+  validateUpdateChatRoomBody,
+  validateAddMembersBody,
+  validateUserIdParam,
+  validateChangeMemberRoleBody,
+  validateSendMessageBody,
+  validateGetMessagesQuery,
+  validateMessageIdParam,
+  validateEditMessageBody,
+  validateMarkReadBody,
 } from './chatRoom.validator';
 import {
-  addMembersToExistingChatRoom, removeMemberFromChatRoom, changeMemberRoleInChatRoom,
-  getMembersForChatRoom, markChatRoomRead
+  addMembersToExistingChatRoom,
+  removeMemberFromChatRoom,
+  changeMemberRoleInChatRoom,
+  getMembersForChatRoom,
+  markChatRoomRead,
 } from './chatMember.service';
 import {
-  createChatRoom as createChatRoomService, updateChatRoomById,
-  getDirectChatRoomsForUser, getGroupAndPrivateChatRoomsForUser, getChatRoomSummaryForUser, activityTimestamp,
-  deleteChatRoomById, isForeignKeyConstraintError
+  createChatRoom as createChatRoomService,
+  updateChatRoomById,
+  getDirectChatRoomsForUser,
+  getGroupAndPrivateChatRoomsForUser,
+  getChatRoomSummaryForUser,
+  activityTimestamp,
+  deleteChatRoomById,
+  isForeignKeyConstraintError,
 } from './chatRoom.service';
 import { createMessage, getMessagesForChatRoom, deleteMessage, editMessage } from './message.service';
 import { toChatRoomDetail, toChatRoomSummary, toCreatedChatRoom, toMessage } from './chatRoom.serializer';
@@ -74,7 +96,7 @@ export async function getChatRooms(req: AuthenticatedRequest, res: Response<Chat
     ]);
 
     const chatRooms = [...directRooms, ...groupAndPrivateRooms].sort(
-      (a, b) => activityTimestamp(b) - activityTimestamp(a)
+      (a, b) => activityTimestamp(b) - activityTimestamp(a),
     );
 
     res.json({ chatRooms: chatRooms.map(toChatRoomSummary) });
@@ -83,7 +105,11 @@ export async function getChatRooms(req: AuthenticatedRequest, res: Response<Chat
   }
 }
 
-export async function getChatRoomById(req: ChatRoomRequest, res: Response<ChatRoomDetailResponse | ApiErrorBody>, next: NextFunction) {
+export async function getChatRoomById(
+  req: ChatRoomRequest,
+  res: Response<ChatRoomDetailResponse | ApiErrorBody>,
+  next: NextFunction,
+) {
   try {
     const userId = req.user.id;
     const { chatId, roomType, role } = req.chatMembership;
@@ -101,7 +127,11 @@ export async function getChatRoomById(req: ChatRoomRequest, res: Response<ChatRo
   }
 }
 
-export async function updateChatRoom(req: ChatRoomRequest, res: Response<ChatRoomDetailResponse | ApiErrorBody>, next: NextFunction) {
+export async function updateChatRoom(
+  req: ChatRoomRequest,
+  res: Response<ChatRoomDetailResponse | ApiErrorBody>,
+  next: NextFunction,
+) {
   const validation = validateUpdateChatRoomBody(req.body);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });
@@ -131,7 +161,11 @@ export async function deleteChatRoom(req: ChatRoomRequest, res: Response<ApiErro
   }
 }
 
-export async function addChatRoomMembers(req: ChatRoomRequest, res: Response<AddMembersResponse | ApiErrorBody>, next: NextFunction) {
+export async function addChatRoomMembers(
+  req: ChatRoomRequest,
+  res: Response<AddMembersResponse | ApiErrorBody>,
+  next: NextFunction,
+) {
   const validation = validateAddMembersBody(req.body);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });
@@ -141,7 +175,7 @@ export async function addChatRoomMembers(req: ChatRoomRequest, res: Response<Add
     const result = await addMembersToExistingChatRoom(
       req.chatMembership.chatId,
       req.user.id,
-      validation.data.memberIds
+      validation.data.memberIds,
     );
 
     if (result.status === 'not_friends') {
@@ -150,9 +184,7 @@ export async function addChatRoomMembers(req: ChatRoomRequest, res: Response<Add
 
     const { addedMembers, alreadyMemberIds } = result;
 
-    return res
-      .status(addedMembers.length > 0 ? 201 : 200)
-      .json({ addedMembers, alreadyMemberIds });
+    return res.status(addedMembers.length > 0 ? 201 : 200).json({ addedMembers, alreadyMemberIds });
   } catch (err) {
     if (isForeignKeyConstraintError(err)) {
       // A member_ids user was deleted after the friendship check, so they are
@@ -176,9 +208,7 @@ export async function removeChatRoomMember(req: ChatRoomRequest, res: Response<A
     // Direct rooms make both users admins, so the role check below can't
     // catch this case on its own - the room type has to be checked first.
     if (roomType === 'direct') {
-      return res
-        .status(403)
-        .json({ error: 'You can only remove yourself from a direct chat room' });
+      return res.status(403).json({ error: 'You can only remove yourself from a direct chat room' });
     }
     if (role !== 'admin') {
       return res.status(403).json({ error: 'Admin role required for this action' });
@@ -195,8 +225,7 @@ export async function removeChatRoomMember(req: ChatRoomRequest, res: Response<A
         return res.status(404).json({ error: 'Member not found in this chat room' });
       case 'only_admin':
         return res.status(409).json({
-          error:
-            'The only admin cannot be removed while other members remain; promote another member to admin first',
+          error: 'The only admin cannot be removed while other members remain; promote another member to admin first',
         });
       case 'private_room':
         return res.status(403).json({ error: 'You cannot leave your private chat room' });
@@ -206,7 +235,11 @@ export async function removeChatRoomMember(req: ChatRoomRequest, res: Response<A
   }
 }
 
-export async function changeChatRoomMemberRole(req: ChatRoomRequest, res: Response<MemberResponse | ApiErrorBody>, next: NextFunction) {
+export async function changeChatRoomMemberRole(
+  req: ChatRoomRequest,
+  res: Response<MemberResponse | ApiErrorBody>,
+  next: NextFunction,
+) {
   const idValidation = validateUserIdParam(req.params.userid);
   if (!idValidation.valid) {
     return res.status(400).json({ error: idValidation.message });
@@ -229,8 +262,7 @@ export async function changeChatRoomMemberRole(req: ChatRoomRequest, res: Respon
         return res.status(404).json({ error: 'Member not found in this chat room' });
       case 'only_admin':
         return res.status(409).json({
-          error:
-            'The only admin cannot be demoted while other members remain; promote another member to admin first',
+          error: 'The only admin cannot be demoted while other members remain; promote another member to admin first',
         });
     }
   } catch (err) {
@@ -238,18 +270,18 @@ export async function changeChatRoomMemberRole(req: ChatRoomRequest, res: Respon
   }
 }
 
-export async function sendChatRoomMessage(req: ChatRoomRequest, res: Response<ChatMessageResponse | ApiErrorBody>, next: NextFunction) {
+export async function sendChatRoomMessage(
+  req: ChatRoomRequest,
+  res: Response<ChatMessageResponse | ApiErrorBody>,
+  next: NextFunction,
+) {
   const validation = validateSendMessageBody(req.body);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });
   }
 
   try {
-    const message = await createMessage(
-      req.chatMembership.chatId,
-      req.user.id,
-      validation.data.content
-    );
+    const message = await createMessage(req.chatMembership.chatId, req.user.id, validation.data.content);
 
     return res.status(201).json({ message: toMessage(message) });
   } catch (err) {
@@ -257,7 +289,11 @@ export async function sendChatRoomMessage(req: ChatRoomRequest, res: Response<Ch
   }
 }
 
-export async function getChatRoomMessages(req: ChatRoomRequest, res: Response<MessageListResponse | ApiErrorBody>, next: NextFunction) {
+export async function getChatRoomMessages(
+  req: ChatRoomRequest,
+  res: Response<MessageListResponse | ApiErrorBody>,
+  next: NextFunction,
+) {
   const validation = validateGetMessagesQuery(req.query);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });
@@ -280,11 +316,7 @@ export async function deleteChatRoomMessage(req: ChatRoomRequest, res: Response<
   }
 
   try {
-    const result = await deleteMessage(
-      req.chatMembership.chatId,
-      validation.data.messageId,
-      req.user.id
-    );
+    const result = await deleteMessage(req.chatMembership.chatId, validation.data.messageId, req.user.id);
 
     switch (result) {
       case 'deleted':
@@ -299,7 +331,11 @@ export async function deleteChatRoomMessage(req: ChatRoomRequest, res: Response<
   }
 }
 
-export async function editChatRoomMessage(req: ChatRoomRequest, res: Response<ChatMessageResponse | ApiErrorBody>, next: NextFunction) {
+export async function editChatRoomMessage(
+  req: ChatRoomRequest,
+  res: Response<ChatMessageResponse | ApiErrorBody>,
+  next: NextFunction,
+) {
   const idValidation = validateMessageIdParam(req.params.message_id);
   if (!idValidation.valid) {
     return res.status(400).json({ error: idValidation.message });
@@ -315,7 +351,7 @@ export async function editChatRoomMessage(req: ChatRoomRequest, res: Response<Ch
       req.chatMembership.chatId,
       idValidation.data.messageId,
       req.user.id,
-      bodyValidation.data.content
+      bodyValidation.data.content,
     );
 
     switch (result.status) {
@@ -342,18 +378,18 @@ export async function getChatRoomMembers(req: ChatRoomRequest, res: Response<Mem
   }
 }
 
-export async function markChatRoomAsRead(req: ChatRoomRequest, res: Response<MarkReadResponse | ApiErrorBody>, next: NextFunction) {
+export async function markChatRoomAsRead(
+  req: ChatRoomRequest,
+  res: Response<MarkReadResponse | ApiErrorBody>,
+  next: NextFunction,
+) {
   const validation = validateMarkReadBody(req.body);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.message });
   }
 
   try {
-    const result = await markChatRoomRead(
-      req.chatMembership.chatId,
-      req.user.id,
-      validation.data.messageId
-    );
+    const result = await markChatRoomRead(req.chatMembership.chatId, req.user.id, validation.data.messageId);
 
     switch (result.outcome) {
       case 'marked':

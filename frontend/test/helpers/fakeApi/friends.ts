@@ -26,7 +26,10 @@ function friendsOf(state: FakeServer): PublicUser[] {
 }
 
 /** A request as John sees it: `user` is the other party. Newest first comes from the caller. */
-function requestView(request: { id: number; createdAt: string; fromId: number; toId: number }, mine: number): FriendRequest {
+function requestView(
+  request: { id: number; createdAt: string; fromId: number; toId: number },
+  mine: number,
+): FriendRequest {
   const other = personById(request.fromId === mine ? request.toId : request.fromId)!;
   return { id: request.id, createdAt: request.createdAt, user: publicUser(other) };
 }
@@ -55,9 +58,20 @@ export function friendEndpoints(request: string, body: Body, state: FakeServer):
     const sent = state.friendRequests.find(({ fromId, toId }) => fromId === me && toId === person.id);
     // The first that applies wins: self, friend, request_received, request_sent.
     const relationship: Relationship =
-      person.id === me ? 'self' : state.friendIds.includes(person.id) ? 'friend' : received ? 'request_received' : sent ? 'request_sent' : 'none';
-    const requestId = relationship === 'request_received' ? received?.id : relationship === 'request_sent' ? sent?.id : undefined;
-    return json({ user: { ...publicUser(person), relationship, ...(requestId !== undefined && { requestId }) } } satisfies SearchUserResponse);
+      person.id === me
+        ? 'self'
+        : state.friendIds.includes(person.id)
+          ? 'friend'
+          : received
+            ? 'request_received'
+            : sent
+              ? 'request_sent'
+              : 'none';
+    const requestId =
+      relationship === 'request_received' ? received?.id : relationship === 'request_sent' ? sent?.id : undefined;
+    return json({
+      user: { ...publicUser(person), relationship, ...(requestId !== undefined && { requestId }) },
+    } satisfies SearchUserResponse);
   }
 
   if (first === 'requests' && second === undefined) {

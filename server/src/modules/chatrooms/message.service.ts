@@ -11,11 +11,7 @@ export type MessageWithSender = Prisma.MessageGetPayload<{
  * Creates a message. There is no membership check: chatId and senderId come from req.chatMembership
  * and req.user, which loadChatMembership has already vouched for.
  */
-export async function createMessage(
-  chatId: number,
-  senderId: number,
-  content: string
-): Promise<MessageWithSender> {
+export async function createMessage(chatId: number, senderId: number, content: string): Promise<MessageWithSender> {
   return prisma.message.create({
     data: { chatId, senderId, content },
     include: { sender: { select: senderSelect } },
@@ -38,7 +34,7 @@ export type MessagesPage = {
 export async function getMessagesForChatRoom(
   chatId: number,
   limit: number,
-  cursor: { before?: number; after?: number } = {}
+  cursor: { before?: number; after?: number } = {},
 ): Promise<MessagesPage> {
   const { before, after } = cursor;
   const forward = after !== undefined;
@@ -69,7 +65,7 @@ export type DeleteMessageResult =
 export async function deleteMessage(
   chatId: number,
   messageId: number,
-  requesterId: number
+  requesterId: number,
 ): Promise<DeleteMessageResult> {
   const message = await prisma.message.findUnique({
     where: { id: messageId },
@@ -110,7 +106,7 @@ export async function editMessage(
   chatId: number,
   messageId: number,
   requesterId: number,
-  content: string
+  content: string,
 ): Promise<EditMessageResult> {
   const message = await prisma.message.findUnique({
     where: { id: messageId },

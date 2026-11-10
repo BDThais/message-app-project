@@ -65,7 +65,10 @@ describe('issuePasswordReset', () => {
     const createdAt = new Date('2026-10-08T10:00:00.000Z');
     await createResetLink(alice, { createdAt });
 
-    const justBefore = await issuePasswordReset(alice.email, new Date(createdAt.getTime() + RESET_REQUEST_COOLDOWN_MS - 1));
+    const justBefore = await issuePasswordReset(
+      alice.email,
+      new Date(createdAt.getTime() + RESET_REQUEST_COOLDOWN_MS - 1),
+    );
     const exactly = await issuePasswordReset(alice.email, new Date(createdAt.getTime() + RESET_REQUEST_COOLDOWN_MS));
 
     expect(justBefore).toEqual({ status: 'cooldown' });
@@ -97,7 +100,7 @@ describe('issuePasswordReset', () => {
       const issued = results.find((result) => result.status === 'reset_link');
       if (issued?.status !== 'reset_link') throw new Error('unreachable');
       expect((await prisma.passwordResetToken.findUniqueOrThrow({ where: { userId: alice.id } })).tokenHash).toBe(
-        hashToken(issued.token)
+        hashToken(issued.token),
       );
     }
   });
@@ -147,7 +150,7 @@ describe('issuePasswordReset', () => {
     expect(result.status).toBe('verification_link');
   });
 
-  it('only ever writes the requested account\'s own link', async () => {
+  it("only ever writes the requested account's own link", async () => {
     const alice = await createVerifiedUser('Alice');
     const bob = await createVerifiedUser('Bob');
     const bobsToken = await createResetLink(bob, { createdAt: new Date(Date.now() - 2 * RESET_REQUEST_COOLDOWN_MS) });
@@ -155,7 +158,7 @@ describe('issuePasswordReset', () => {
     await issuePasswordReset(alice.email);
 
     expect((await prisma.passwordResetToken.findUniqueOrThrow({ where: { userId: bob.id } })).tokenHash).toBe(
-      hashToken(bobsToken)
+      hashToken(bobsToken),
     );
     expect(await prisma.passwordResetToken.count({ where: { userId: alice.id } })).toBe(1);
   });
@@ -209,7 +212,10 @@ describe('resetPasswordWithToken', () => {
       const alice = await createVerifiedUser('Alice');
       const token = await createResetLink(alice);
 
-      const results = await Promise.all([resetPasswordWithToken(token, 'hash-a'), resetPasswordWithToken(token, 'hash-b')]);
+      const results = await Promise.all([
+        resetPasswordWithToken(token, 'hash-a'),
+        resetPasswordWithToken(token, 'hash-b'),
+      ]);
 
       expect(results.map((result) => result.status).sort(), `round ${round}`).toEqual(['invalid', 'reset']);
       const stored = (await prisma.user.findUniqueOrThrow({ where: { id: alice.id } })).passwordHash;

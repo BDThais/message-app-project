@@ -38,9 +38,19 @@ function FriendRow({ friend, onNews }: { friend: PublicUser; onNews: (text: stri
       error={(unfriend.error ?? chatError)?.message}
       below={
         confirming && (
-          <div role="group" aria-label={`Confirm unfriend ${friend.name}`} className="flex flex-wrap items-center gap-2 text-sm">
+          <div
+            role="group"
+            aria-label={`Confirm unfriend ${friend.name}`}
+            className="flex flex-wrap items-center gap-2 text-sm"
+          >
             <span>Remove {friend.name} from your friends? Your chats with them stay.</span>
-            <Button type="button" variant="danger" size="xs" disabled={unfriend.isPending} onClick={() => unfriend.mutate(friend.id)}>
+            <Button
+              type="button"
+              variant="danger"
+              size="xs"
+              disabled={unfriend.isPending}
+              onClick={() => unfriend.mutate(friend.id)}
+            >
               Unfriend
             </Button>
             <Button type="button" variant="secondary" size="xs" onClick={() => setConfirming(false)}>
@@ -52,7 +62,13 @@ function FriendRow({ friend, onNews }: { friend: PublicUser; onNews: (text: stri
     >
       {!confirming && (
         <>
-          <Button type="button" size="sm" aria-label={`Message ${friend.name}`} disabled={busy} onClick={() => message(friend.id)}>
+          <Button
+            type="button"
+            size="sm"
+            aria-label={`Message ${friend.name}`}
+            disabled={busy}
+            onClick={() => message(friend.id)}
+          >
             Message
           </Button>
           <Button

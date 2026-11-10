@@ -33,7 +33,7 @@ describe('checkPasswordResetSettings', () => {
         NODE_ENV: 'development',
         PASSWORD_RESET_URL: 'http://localhost:5173/reset-password',
         PASSWORD_RESET_TTL_MS: 1_800_000,
-      })
+      }),
     ).not.toThrow();
   });
 
@@ -51,20 +51,28 @@ describe('checkPasswordResetSettings', () => {
     { desc: 'Infinity', ttl: Number.POSITIVE_INFINITY },
   ])('rejects a lifetime of $desc, and names the setting', ({ ttl }) => {
     expect(() => checkPasswordResetSettings({ ...goodSettings, PASSWORD_RESET_TTL_MS: ttl })).toThrow(
-      /PASSWORD_RESET_TTL_MS/
+      /PASSWORD_RESET_TTL_MS/,
     );
   });
 
   it('requires the page URL in production, and says why', () => {
     expect(() => checkPasswordResetSettings({ ...goodSettings, PASSWORD_RESET_URL: '' })).toThrow(
-      /PASSWORD_RESET_URL is required when NODE_ENV=production/
+      /PASSWORD_RESET_URL is required when NODE_ENV=production/,
     );
   });
 
   it.each([
     { desc: 'a relative path', url: '/reset-password', message: /PASSWORD_RESET_URL is not a valid absolute URL/ },
-    { desc: 'a scheme other than http(s)', url: 'javascript:alert(1)', message: /PASSWORD_RESET_URL must be an http or https URL/ },
-    { desc: 'a URL that already has a fragment', url: 'https://app.example.com/reset#top', message: /PASSWORD_RESET_URL must not contain a "#"/ },
+    {
+      desc: 'a scheme other than http(s)',
+      url: 'javascript:alert(1)',
+      message: /PASSWORD_RESET_URL must be an http or https URL/,
+    },
+    {
+      desc: 'a URL that already has a fragment',
+      url: 'https://app.example.com/reset#top',
+      message: /PASSWORD_RESET_URL must not contain a "#"/,
+    },
   ])('rejects $desc, and names the setting', ({ url, message }) => {
     expect(() => checkPasswordResetSettings({ ...goodSettings, PASSWORD_RESET_URL: url })).toThrow(message);
   });
@@ -83,7 +91,10 @@ describe('sendPasswordResetEmail', () => {
   });
 
   it('never rejects: a failed send is logged without the address or the token', async () => {
-    const failing: Mailer = { send: () => Promise.reject(new Error('Resend could not send the email (rate_limit_exceeded, HTTP 429): slow down')) };
+    const failing: Mailer = {
+      send: () =>
+        Promise.reject(new Error('Resend could not send the email (rate_limit_exceeded, HTTP 429): slow down')),
+    };
     setMailer(failing);
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -91,7 +102,10 @@ describe('sendPasswordResetEmail', () => {
 
     expect(logged).toHaveBeenCalledTimes(1);
     // An Error does not survive JSON.stringify (it becomes {}), so read the real text of every argument.
-    const text = logged.mock.calls.flat().map((arg) => (arg instanceof Error ? arg.message : String(arg))).join(' ');
+    const text = logged.mock.calls
+      .flat()
+      .map((arg) => (arg instanceof Error ? arg.message : String(arg)))
+      .join(' ');
     expect(text).toContain('rate_limit_exceeded');
     expect(text).not.toContain('alice@example.com');
     expect(text).not.toContain('the-token');

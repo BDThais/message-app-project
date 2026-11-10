@@ -19,19 +19,14 @@ export interface EmptyChatRoomCleanupOptions {
  * With several instances every one would sweep, which is harmless: deleting a
  * room that is already gone just matches zero rows.
  */
-export function startEmptyChatRoomCleanup({
-  retentionMs,
-  intervalMs,
-}: EmptyChatRoomCleanupOptions): () => void {
+export function startEmptyChatRoomCleanup({ retentionMs, intervalMs }: EmptyChatRoomCleanupOptions): () => void {
   // Fail loudly at startup: a NaN from a mistyped env var would otherwise turn
   // into a 1 ms timer or an invalid cutoff date on every sweep.
   if (!Number.isFinite(retentionMs) || retentionMs < 0) {
     throw new Error('Empty chat room retention must be a number of milliseconds >= 0');
   }
   if (!Number.isInteger(intervalMs) || intervalMs < 1 || intervalMs > MAX_TIMER_DELAY_MS) {
-    throw new Error(
-      `Empty chat room cleanup interval must be between 1 and ${MAX_TIMER_DELAY_MS} milliseconds`
-    );
+    throw new Error(`Empty chat room cleanup interval must be between 1 and ${MAX_TIMER_DELAY_MS} milliseconds`);
   }
 
   let sweeping = false;

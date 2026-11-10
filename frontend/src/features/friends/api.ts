@@ -18,9 +18,14 @@ export async function getFriends(signal?: AbortSignal): Promise<PublicUser[]> {
 }
 
 /** `incoming`: what others sent to the person. `outgoing`: what the person sent and can still cancel. Newest first. */
-export async function getFriendRequests(direction: FriendRequestDirection, signal?: AbortSignal): Promise<FriendRequest[]> {
+export async function getFriendRequests(
+  direction: FriendRequestDirection,
+  signal?: AbortSignal,
+): Promise<FriendRequest[]> {
   const params = { direction } satisfies GetFriendRequestsQuery;
-  const { requests } = await api.get<FriendRequestListResponse>(`/friend/requests?${new URLSearchParams(params)}`, { signal });
+  const { requests } = await api.get<FriendRequestListResponse>(`/friend/requests?${new URLSearchParams(params)}`, {
+    signal,
+  });
   return requests;
 }
 
@@ -32,10 +37,9 @@ export async function searchUserByTel(tel: string, signal?: AbortSignal): Promis
 
 /** The new request, whose `user` is the receiver. */
 export async function sendFriendRequest(receiverId: number): Promise<FriendRequest> {
-  const { request } = await api.post<FriendRequestResponse>(
-    '/friend/requests',
-    { receiver_id: receiverId } satisfies SendFriendRequestBody,
-  );
+  const { request } = await api.post<FriendRequestResponse>('/friend/requests', {
+    receiver_id: receiverId,
+  } satisfies SendFriendRequestBody);
   return request;
 }
 

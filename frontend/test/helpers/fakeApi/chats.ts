@@ -31,7 +31,8 @@ function summaryOf(room: FakeRoom, state: FakeServer): ChatRoomSummary {
       : null,
     // Like the server: above the read marker, not the requester's own, not deleted (a deleted account's still counts).
     unreadCount: inRoom.filter(
-      (message) => message.id > (room.lastReadMessageId ?? 0) && message.senderId !== mine && message.deletedAt === null,
+      (message) =>
+        message.id > (room.lastReadMessageId ?? 0) && message.senderId !== mine && message.deletedAt === null,
     ).length,
   };
 }
@@ -40,19 +41,32 @@ function summaryOf(room: FakeRoom, state: FakeServer): ChatRoomSummary {
 function createDirectRoom(body: Body, state: FakeServer): Response {
   const memberIds = body?.member_ids;
   const other = Array.isArray(memberIds) && memberIds.length === 1 ? personById(Number(memberIds[0])) : undefined;
-  if (body?.type !== 'direct' || !other) return json({ error: 'a direct chat room requires exactly one other member' }, 400);
+  if (body?.type !== 'direct' || !other)
+    return json({ error: 'a direct chat room requires exactly one other member' }, 400);
   // Before the lookup of an existing room, as the server does: two people who are no longer friends get no room back.
   if (!state.friendIds.includes(other.id)) return json({ error: 'Only your friends can be added to a chat room' }, 403);
 
   const existing = state.rooms.find((room) => room.type === 'direct' && room.memberId === other.id);
-  const room = existing ?? state.addRoom({ id: Math.max(0, ...state.rooms.map(({ id }) => id)) + 1, name: other.name, memberId: other.id });
+  const room =
+    existing ??
+    state.addRoom({ id: Math.max(0, ...state.rooms.map(({ id }) => id)) + 1, name: other.name, memberId: other.id });
   const me = state.session!;
   const created: CreatedChatRoom = {
     ...summaryOf(room, state),
     role: 'admin',
     members: [
-      { chatId: room.id, role: 'admin', lastReadMessageId: room.lastReadMessageId, member: { id: me.id, name: me.name, avatarUrl: me.avatarUrl } },
-      { chatId: room.id, role: 'admin', lastReadMessageId: null, member: { id: other.id, name: other.name, avatarUrl: other.avatarUrl } },
+      {
+        chatId: room.id,
+        role: 'admin',
+        lastReadMessageId: room.lastReadMessageId,
+        member: { id: me.id, name: me.name, avatarUrl: me.avatarUrl },
+      },
+      {
+        chatId: room.id,
+        role: 'admin',
+        lastReadMessageId: null,
+        member: { id: other.id, name: other.name, avatarUrl: other.avatarUrl },
+      },
     ],
   };
   return json({ chatRoom: created } satisfies CreatedChatRoomResponse, existing ? 200 : 201);
@@ -100,7 +114,10 @@ export function chatEndpoints(request: string, body: Body, state: FakeServer): R
       if (params.has('after')) {
         // The oldest messages above the id, still listed newest first, like every page.
         const newer = inRoom.filter(({ id }) => id > Number(params.get('after')));
-        return json({ messages: newer.slice(0, limit).reverse(), hasMore: newer.length > limit } satisfies MessageListResponse);
+        return json({
+          messages: newer.slice(0, limit).reverse(),
+          hasMore: newer.length > limit,
+        } satisfies MessageListResponse);
       }
       const before = params.has('before') ? Number(params.get('before')) : Infinity;
       const older = inRoom.filter(({ id }) => id < before).reverse(); // newest first

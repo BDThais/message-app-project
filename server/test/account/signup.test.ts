@@ -37,7 +37,9 @@ describe(`POST ${signUpRoute}`, () => {
   });
 
   it('stores the address lower-cased, and a person who typed capitals signs in with any spelling', async () => {
-    const res = await request(app).post(signUpRoute).send({ ...validBody, email: 'John.Doe@Example.COM' });
+    const res = await request(app)
+      .post(signUpRoute)
+      .send({ ...validBody, email: 'John.Doe@Example.COM' });
 
     expect(res.status).toBe(201);
     const user = await prisma.user.findUniqueOrThrow({ where: { tel: validBody.tel } });
@@ -58,7 +60,9 @@ describe(`POST ${signUpRoute}`, () => {
     ['spaces', '+1 415 555 2671'],
     ['an extension', '+14155552671 ext. 123'],
   ])('stores the canonical number when the phone number is typed with %s', async (_label, tel) => {
-    const res = await request(app).post(signUpRoute).send({ ...validBody, tel });
+    const res = await request(app)
+      .post(signUpRoute)
+      .send({ ...validBody, tel });
 
     expect(res.status).toBe(201);
     const user = await prisma.user.findUniqueOrThrow({ where: { email: validBody.email } });
@@ -76,7 +80,9 @@ describe(`POST ${signUpRoute}`, () => {
     ['password is a number', { password: 12345678 }],
     ['password is an array', { password: ['Str0ng!Pass'] }],
   ])('returns 400, not 500, when %s', async (_label, override) => {
-    const res = await request(app).post(signUpRoute).send({ ...validBody, ...override });
+    const res = await request(app)
+      .post(signUpRoute)
+      .send({ ...validBody, ...override });
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'All fields are required' });
@@ -217,7 +223,9 @@ describe(`POST ${signUpRoute}`, () => {
       // This request's check ran before the user above was inserted.
       vi.spyOn(accountService, 'findExistingUser').mockResolvedValueOnce(null);
 
-      const res = await request(app).post(signUpRoute).send({ ...validBody, ...changedField });
+      const res = await request(app)
+        .post(signUpRoute)
+        .send({ ...validBody, ...changedField });
 
       expect(res.status).toBe(409);
       expect(res.body).toEqual({ error: expectedError });
@@ -249,7 +257,9 @@ describe(`POST ${signUpRoute} (verification email)`, () => {
   });
 
   it('mails the link to the lower-cased address, and keeps that address with the link', async () => {
-    const res = await request(app).post(signUpRoute).send({ ...validBody, email: 'John@Example.COM' });
+    const res = await request(app)
+      .post(signUpRoute)
+      .send({ ...validBody, email: 'John@Example.COM' });
 
     expect(res.status).toBe(201);
     expect(outbox.sent).toHaveLength(1);
@@ -291,7 +301,9 @@ describe(`POST ${signUpRoute} (verification email)`, () => {
   });
 
   it('mails nothing and stores no link when the signup is refused', async () => {
-    const invalid = await request(app).post(signUpRoute).send({ ...validBody, password: 'weak' });
+    const invalid = await request(app)
+      .post(signUpRoute)
+      .send({ ...validBody, password: 'weak' });
     expect(invalid.status).toBe(400);
 
     await prisma.user.create({

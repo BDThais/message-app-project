@@ -38,7 +38,8 @@ export function ActionMenu({ label, items }: { label: string; items: ActionMenuI
     const trigger = triggerRef.current.getBoundingClientRect();
     const menu = menuRef.current.getBoundingClientRect();
     const below = trigger.bottom + GAP;
-    const top = below + menu.height + EDGE > window.innerHeight ? Math.max(EDGE, trigger.top - GAP - menu.height) : below;
+    const top =
+      below + menu.height + EDGE > window.innerHeight ? Math.max(EDGE, trigger.top - GAP - menu.height) : below;
     const left = Math.min(Math.max(EDGE, trigger.right - menu.width), window.innerWidth - menu.width - EDGE);
     setPlace({ top, left });
   }, [open]);
@@ -125,7 +126,12 @@ export function ActionMenu({ label, items }: { label: string; items: ActionMenuI
           role="menu"
           aria-label={label}
           onKeyDown={onMenuKeyDown}
-          style={{ position: 'fixed', top: place?.top ?? 0, left: place?.left ?? 0, visibility: place ? 'visible' : 'hidden' }}
+          style={{
+            position: 'fixed',
+            top: place?.top ?? 0,
+            left: place?.left ?? 0,
+            visibility: place ? 'visible' : 'hidden',
+          }}
           className="z-20 flex min-w-32 flex-col rounded-lg border border-edge bg-surface p-1 shadow-md"
         >
           {items.map((item) => (

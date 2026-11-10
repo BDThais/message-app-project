@@ -14,7 +14,10 @@ function sourceFiles(dir: URL): URL[] {
 }
 
 const withoutComments = (source: string) => source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-const files = sourceFiles(src).map((url) => ({ name: url.pathname.split('/src/')[1] ?? url.pathname, code: withoutComments(readFileSync(url, 'utf8')) }));
+const files = sourceFiles(src).map((url) => ({
+  name: url.pathname.split('/src/')[1] ?? url.pathname,
+  code: withoutComments(readFileSync(url, 'utf8')),
+}));
 
 describe('how the server uses the contract', () => {
   it('has files to check', () => {
@@ -24,7 +27,11 @@ describe('how the server uses the contract', () => {
   it('types the response of every controller handler: `res: Response<...>`, not a bare `Response` that accepts any body', () => {
     const untyped = files
       .filter((file) => file.name.endsWith('.controller.ts'))
-      .flatMap((file) => [...file.code.matchAll(/export async function (\w+)\([^)]*res: Response\s*[,)]/g)].map((match) => `${file.name}: ${match[1]}`));
+      .flatMap((file) =>
+        [...file.code.matchAll(/export async function (\w+)\([^)]*res: Response\s*[,)]/g)].map(
+          (match) => `${file.name}: ${match[1]}`,
+        ),
+      );
 
     expect(untyped, 'write res: Response<TheContractsBody | ApiErrorBody>').toEqual([]);
   });

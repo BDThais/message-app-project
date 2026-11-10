@@ -21,10 +21,7 @@ describe('validateCreateChatRoomInput', () => {
   const requesterId = 1;
 
   it('drops the requester and duplicate ids from member_ids', () => {
-    const result = validateCreateChatRoomInput(
-      { type: 'group', member_ids: [1, 2, 2, 3], name: 'Team' },
-      requesterId
-    );
+    const result = validateCreateChatRoomInput({ type: 'group', member_ids: [1, 2, 2, 3], name: 'Team' }, requesterId);
 
     expect(result).toEqual({ valid: true, type: 'group', memberIds: [2, 3], name: 'Team' });
   });
@@ -39,7 +36,7 @@ describe('validateCreateChatRoomInput', () => {
 
   it('accepts an http or https avatar_url on a group room', () => {
     expect(
-      validateCreateChatRoomInput({ type: 'group', avatar_url: 'https://example.com/team.png' }, requesterId)
+      validateCreateChatRoomInput({ type: 'group', avatar_url: 'https://example.com/team.png' }, requesterId),
     ).toEqual({ valid: true, type: 'group', memberIds: [], avatarUrl: 'https://example.com/team.png' });
   });
 
@@ -57,19 +54,51 @@ describe('validateCreateChatRoomInput', () => {
   it.each([
     ['a missing type', { member_ids: [2] }, 'type must be "direct" or "group"'],
     ['an unknown type', { type: 'channel' }, 'type must be "direct" or "group"'],
-    ['member_ids that are not integers', { type: 'group', member_ids: ['2'] }, 'member_ids must be an array of user IDs'],
+    [
+      'member_ids that are not integers',
+      { type: 'group', member_ids: ['2'] },
+      'member_ids must be an array of user IDs',
+    ],
     ['a member id below 1', { type: 'group', member_ids: [0] }, 'member_ids must be an array of user IDs'],
     // One past the INTEGER column's maximum: it would make the database refuse the friendship lookup.
-    ['a member id too big for the database', { type: 'group', member_ids: [2_147_483_648] }, 'member_ids must be an array of user IDs'],
-    ['a direct room with no other member', { type: 'direct', member_ids: [] }, 'a direct chat room requires exactly one other member'],
-    ['a direct room with only the requester', { type: 'direct', member_ids: [1] }, 'a direct chat room requires exactly one other member'],
-    ['a direct room with two other members', { type: 'direct', member_ids: [2, 3] }, 'a direct chat room requires exactly one other member'],
-    ['a direct room with a name', { type: 'direct', member_ids: [2], name: 'Bob' }, 'direct chat rooms cannot have a name or avatar'],
+    [
+      'a member id too big for the database',
+      { type: 'group', member_ids: [2_147_483_648] },
+      'member_ids must be an array of user IDs',
+    ],
+    [
+      'a direct room with no other member',
+      { type: 'direct', member_ids: [] },
+      'a direct chat room requires exactly one other member',
+    ],
+    [
+      'a direct room with only the requester',
+      { type: 'direct', member_ids: [1] },
+      'a direct chat room requires exactly one other member',
+    ],
+    [
+      'a direct room with two other members',
+      { type: 'direct', member_ids: [2, 3] },
+      'a direct chat room requires exactly one other member',
+    ],
+    [
+      'a direct room with a name',
+      { type: 'direct', member_ids: [2], name: 'Bob' },
+      'direct chat rooms cannot have a name or avatar',
+    ],
     ['a blank group name', { type: 'group', name: '   ' }, 'name must be a non-empty string if provided'],
-    ['a group name over 100 characters', { type: 'group', name: 'a'.repeat(101) }, 'name must be 100 characters or fewer'],
+    [
+      'a group name over 100 characters',
+      { type: 'group', name: 'a'.repeat(101) },
+      'name must be 100 characters or fewer',
+    ],
     ['an avatar_url that is not a string', { type: 'group', avatar_url: 5 }, 'avatar_url must be a string if provided'],
     ['an avatar_url that is not a URL', { type: 'group', avatar_url: 'not a url' }, 'avatar_url must be a valid URL'],
-    ['an avatar_url with another scheme', { type: 'group', avatar_url: 'javascript:alert(1)' }, 'avatar_url must be a valid URL'],
+    [
+      'an avatar_url with another scheme',
+      { type: 'group', avatar_url: 'javascript:alert(1)' },
+      'avatar_url must be a valid URL',
+    ],
   ])('rejects %s', (_label, body, message) => {
     expect(validateCreateChatRoomInput(body, requesterId)).toEqual({ valid: false, message });
   });
@@ -177,11 +206,7 @@ describe('validateSendMessageBody', () => {
     ['a missing content', {}, "'content' must be a non-empty string"],
     ['a non-string content', { content: 5 }, "'content' must be a non-empty string"],
     ['a blank content', { content: '   ' }, "'content' must be a non-empty string"],
-    [
-      'content over the length limit',
-      { content: 'a'.repeat(4001) },
-      "'content' must be 4000 characters or fewer",
-    ],
+    ['content over the length limit', { content: 'a'.repeat(4001) }, "'content' must be 4000 characters or fewer"],
   ])('rejects %s', (_label, body, message) => {
     expect(validateSendMessageBody(body)).toEqual({ valid: false, message });
   });
@@ -200,11 +225,7 @@ describe('validateEditMessageBody', () => {
   it.each([
     ['no body', undefined, "'content' must be a non-empty string"],
     ['a blank content', { content: '   ' }, "'content' must be a non-empty string"],
-    [
-      'content over the length limit',
-      { content: 'a'.repeat(4001) },
-      "'content' must be 4000 characters or fewer",
-    ],
+    ['content over the length limit', { content: 'a'.repeat(4001) }, "'content' must be 4000 characters or fewer"],
   ])('rejects %s', (_label, body, message) => {
     expect(validateEditMessageBody(body)).toEqual({ valid: false, message });
   });
@@ -224,7 +245,10 @@ describe('validateGetMessagesQuery', () => {
 
   it('accepts an after cursor, with the default or a custom limit', () => {
     expect(validateGetMessagesQuery({ after: '10' })).toEqual({ valid: true, data: { limit: 50, after: 10 } });
-    expect(validateGetMessagesQuery({ after: '10', limit: '5' })).toEqual({ valid: true, data: { limit: 5, after: 10 } });
+    expect(validateGetMessagesQuery({ after: '10', limit: '5' })).toEqual({
+      valid: true,
+      data: { limit: 5, after: 10 },
+    });
   });
 
   it('refuses before and after together: one pages back and the other forward', () => {

@@ -1,9 +1,7 @@
 import { bodyFields } from '../../lib/validation';
 import type { VerifyEmailBody } from '../../contract/requests';
 
-type VerifyEmailValidation =
-  | { valid: true; data: { token: string } }
-  | { valid: false; message: string };
+type VerifyEmailValidation = { valid: true; data: { token: string } } | { valid: false; message: string };
 
 /**
  * Validates the body of POST /api/account/email/verify: { token }. The token is

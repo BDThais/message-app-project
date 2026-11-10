@@ -7,16 +7,16 @@ import { passwordResetEmailKey } from '../../src/modules/account/accountRateLimi
 describe('passwordResetEmailKey', () => {
   it('is the address lower-cased, so spellings of the case share one budget', () => {
     expect(passwordResetEmailKey({ body: { email: 'John.Doe@Example.com' }, ip: '203.0.113.5' })).toBe(
-      'email:john.doe@example.com'
+      'email:john.doe@example.com',
     );
     expect(passwordResetEmailKey({ body: { email: 'JOHN.DOE@EXAMPLE.COM' }, ip: '198.51.100.7' })).toBe(
-      'email:john.doe@example.com'
+      'email:john.doe@example.com',
     );
   });
 
   it('does not depend on the IP when there is an address', () => {
     expect(passwordResetEmailKey({ body: { email: 'a@example.com' }, ip: '203.0.113.5' })).toBe(
-      passwordResetEmailKey({ body: { email: 'a@example.com' }, ip: '198.51.100.7' })
+      passwordResetEmailKey({ body: { email: 'a@example.com' }, ip: '198.51.100.7' }),
     );
   });
 
@@ -48,7 +48,7 @@ describe('passwordResetEmailKey', () => {
 
   it('groups the addresses of an IPv6 subnet, so one client cannot get a budget per address', () => {
     expect(passwordResetEmailKey({ body: {}, ip: '2001:db8:abcd:12::1' })).toBe(
-      passwordResetEmailKey({ body: {}, ip: '2001:db8:abcd:12::2' })
+      passwordResetEmailKey({ body: {}, ip: '2001:db8:abcd:12::2' }),
     );
   });
 });

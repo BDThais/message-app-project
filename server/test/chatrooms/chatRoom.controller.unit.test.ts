@@ -52,7 +52,9 @@ describe('getChatRoomById', () => {
     await getChatRoomById(request('group'), res as unknown as Response, vi.fn());
 
     expect(services.getChatRoomSummaryForUser).toHaveBeenCalledWith(1, 5, 'group');
-    expect(res.json).toHaveBeenCalledWith({ chatRoom: { ...summary, createdAt: '2026-09-13T12:00:00.000Z', role: 'admin' } });
+    expect(res.json).toHaveBeenCalledWith({
+      chatRoom: { ...summary, createdAt: '2026-09-13T12:00:00.000Z', role: 'admin' },
+    });
   });
 });
 

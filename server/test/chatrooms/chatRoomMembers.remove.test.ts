@@ -8,8 +8,7 @@ import { createDirectRoom, createGroupRoom, memberIdsOf, promoteToAdmin } from '
 // chatRoom.permissions.test.ts; the ':userid' format check is in
 // chatRoom.validator.unit.test.ts.
 
-const memberUrl = (chatId: number, userId: number | string) =>
-  `/api/chat/${chatId}/member/${userId}`;
+const memberUrl = (chatId: number, userId: number | string) => `/api/chat/${chatId}/member/${userId}`;
 
 describe('DELETE /chat/:chatid/member/:userid', () => {
   describe('who may remove whom', () => {
@@ -102,8 +101,7 @@ describe('DELETE /chat/:chatid/member/:userid', () => {
       expect(aliceLeaves.status).toBe(204);
       expect(bobLeaves.status).toBe(409);
       expect(bobLeaves.body).toEqual({
-        error:
-          'The only admin cannot be removed while other members remain; promote another member to admin first',
+        error: 'The only admin cannot be removed while other members remain; promote another member to admin first',
       });
       expect(await memberIdsOf(room.id)).toEqual([bob.id, carol.id]);
     });

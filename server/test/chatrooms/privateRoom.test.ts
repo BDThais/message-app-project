@@ -95,10 +95,19 @@ describe('the private room', () => {
     const members = await agent.get(`/api/chat/${room.id}/member`);
 
     expect(detail.status).toBe(200);
-    expect(detail.body.chatRoom).toMatchObject({ id: room.id, type: 'private', name: null, avatarUrl: null, role: 'admin' });
+    expect(detail.body.chatRoom).toMatchObject({
+      id: room.id,
+      type: 'private',
+      name: null,
+      avatarUrl: null,
+      role: 'admin',
+    });
     expect(members.status).toBe(200);
     expect(members.body.members).toHaveLength(1);
-    expect(members.body.members[0]).toMatchObject({ role: 'admin', member: { id: alice.id, name: 'Alice', avatarUrl: null } });
+    expect(members.body.members[0]).toMatchObject({
+      role: 'admin',
+      member: { id: alice.id, name: 'Alice', avatarUrl: null },
+    });
   });
 
   it('takes messages like any room, and never has anything unread: nobody else writes in it', async () => {
@@ -112,7 +121,12 @@ describe('the private room', () => {
     expect(sent.status).toBe(201);
     const list = (await agent.get('/api/chat')).body.chatRooms;
     expect(list).toHaveLength(1);
-    expect(list[0]).toMatchObject({ type: 'private', name: null, unreadCount: 0, lastMessage: { content: 'Call mum' } });
+    expect(list[0]).toMatchObject({
+      type: 'private',
+      name: null,
+      unreadCount: 0,
+      lastMessage: { content: 'Call mum' },
+    });
     const messages = (await agent.get(`/api/chat/${room.id}/message`)).body.messages;
     expect(messages.map(({ content }: { content: string }) => content)).toEqual(['Call mum', 'Buy milk']);
   });
@@ -177,7 +191,10 @@ describe('the private room', () => {
       expect(res.status).toBe(403);
       expect(res.body).toEqual(refused);
     }
-    expect(await prisma.chatRoom.findUniqueOrThrow({ where: { id: room.id } })).toMatchObject({ type: 'private', name: null });
+    expect(await prisma.chatRoom.findUniqueOrThrow({ where: { id: room.id } })).toMatchObject({
+      type: 'private',
+      name: null,
+    });
     expect(await prisma.chatMember.findMany({ where: { chatId: room.id } })).toMatchObject([
       { memberId: alice.id, role: 'admin' },
     ]);
@@ -243,7 +260,7 @@ describe('deleting the account', () => {
     await prisma.message.createMany({
       data: [
         { chatId: privateRoom.id, senderId: alice.id, content: 'note to self' },
-        { chatId: beasPrivateRoom.id, senderId: bea.id, content: 'Bea\'s note' },
+        { chatId: beasPrivateRoom.id, senderId: bea.id, content: "Bea's note" },
         { chatId: direct.id, senderId: alice.id, content: 'hi Bea' },
       ],
     });

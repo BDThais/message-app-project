@@ -152,8 +152,12 @@ describe('the room list', () => {
 });
 
 describe('a conversation', () => {
-  it('shows the messages oldest first, with actions only on the person\'s own', async () => {
-    roomWithBea({ from: 'bea', content: 'first' }, { from: 'john', content: 'second' }, { from: 'bea', content: 'third' });
+  it("shows the messages oldest first, with actions only on the person's own", async () => {
+    roomWithBea(
+      { from: 'bea', content: 'first' },
+      { from: 'john', content: 'second' },
+      { from: 'bea', content: 'third' },
+    );
     renderApp('/chat/1');
 
     await findMessage('third');
@@ -171,7 +175,7 @@ describe('a conversation', () => {
     expect(within(items[1]!).queryByRole('button', { name: 'Delete' })).toBeNull();
   });
 
-  it('keeps the time of every message, the person\'s own and the others\', in the page for when it is asked for', async () => {
+  it("keeps the time of every message, the person's own and the others', in the page for when it is asked for", async () => {
     roomWithBea({ from: 'bea', content: 'first' }, { from: 'john', content: 'second' });
     renderApp('/chat/1');
 
@@ -203,7 +207,7 @@ describe('a conversation', () => {
     expect(sideOf('theirs').className).toContain('opacity-0');
   });
 
-  it('names the sender in a group, and gives a deleted account\'s messages a placeholder and no actions', async () => {
+  it("names the sender in a group, and gives a deleted account's messages a placeholder and no actions", async () => {
     const state = stubApi({ signedIn: true });
     state.addRoom({ id: 1, name: 'Project chat', type: 'group' });
     state.addMessage({ chatId: 1, sender: carl, content: 'from Carl' });
@@ -235,7 +239,7 @@ describe('a conversation', () => {
     expect(textOf(messageNamed('changed'))).toContain('edited');
   });
 
-  it('gives the person\'s own deleted message a placeholder with its time, and no menu', async () => {
+  it("gives the person's own deleted message a placeholder with its time, and no menu", async () => {
     const state = roomWithBea({ from: 'john', content: 'gone' });
     state.messages[0]!.content = '';
     state.messages[0]!.deletedAt = '2026-10-20T10:00:00.000Z';
@@ -285,7 +289,11 @@ describe('sending', () => {
     renderApp('/chat/1');
     const nav = await screen.findByRole('navigation', { name: 'Chats' });
     await screen.findByText('No messages yet. Say hello!');
-    expect(within(nav).getAllByRole('link').map((link) => textOf(link).includes('Carl'))).toEqual([true, false]);
+    expect(
+      within(nav)
+        .getAllByRole('link')
+        .map((link) => textOf(link).includes('Carl')),
+    ).toEqual([true, false]);
 
     const box = screen.getByRole('textbox', { name: 'Message' });
     await user.type(box, '  Hello there  ');
@@ -295,7 +303,11 @@ describe('sending', () => {
     expect((box as HTMLTextAreaElement).value).toBe('');
     expect(state.count('POST /api/chat/1/message')).toBe(1);
     expect(state.count('GET /api/chat/1/message')).toBe(1);
-    expect(within(nav).getAllByRole('link').map((link) => textOf(link).includes('Bea'))).toEqual([true, false]);
+    expect(
+      within(nav)
+        .getAllByRole('link')
+        .map((link) => textOf(link).includes('Bea')),
+    ).toEqual([true, false]);
     expect(textOf(within(nav).getAllByRole('link')[0]!)).toContain('Hello there');
   });
 
@@ -327,7 +339,7 @@ describe('sending', () => {
     expect(state.count('POST /api/chat/1/message')).toBe(0);
   });
 
-  it('shows the server\'s answer when it refuses, and keeps what was typed', async () => {
+  it("shows the server's answer when it refuses, and keeps what was typed", async () => {
     const state = roomWithBea({ from: 'bea', content: 'hi' });
     state.messageWriteError = 'content must be 4000 characters or fewer';
     const user = userEvent.setup();
@@ -398,7 +410,7 @@ describe('editing and deleting', () => {
     expect(state.count('PATCH /api/chat/1/message/1')).toBe(0);
   });
 
-  it('shows the server\'s answer when an edit is refused, and keeps the box open', async () => {
+  it("shows the server's answer when an edit is refused, and keeps the box open", async () => {
     const state = roomWithBea({ from: 'john', content: 'mine' });
     state.messageWriteError = 'content must be a non-empty string';
     const user = userEvent.setup();
@@ -422,7 +434,9 @@ describe('editing and deleting', () => {
 
     await chooseAction(user, 'Oops', 'Delete');
     expect(state.count('DELETE /api/chat/1/message/2')).toBe(0);
-    await user.click(within(screen.getByRole('group', { name: 'Confirm delete' })).getByRole('button', { name: 'Delete' }));
+    await user.click(
+      within(screen.getByRole('group', { name: 'Confirm delete' })).getByRole('button', { name: 'Delete' }),
+    );
 
     expect(await findMessage('Message deleted')).toBeTruthy();
     expect(within(messageList()).queryByText('Oops')).toBeNull();
@@ -441,7 +455,9 @@ describe('editing and deleting', () => {
     await findMessage('mine');
 
     await chooseAction(user, 'mine', 'Delete');
-    await user.click(within(screen.getByRole('group', { name: 'Confirm delete' })).getByRole('button', { name: 'Delete' }));
+    await user.click(
+      within(screen.getByRole('group', { name: 'Confirm delete' })).getByRole('button', { name: 'Delete' }),
+    );
 
     expect(await findMessage('Message deleted')).toBeTruthy();
     expect(textOf(screen.getByRole('link', { name: /Bea/ }))).toContain('last word');
@@ -461,7 +477,9 @@ describe('editing and deleting', () => {
     await findMessage('message 60');
 
     await chooseAction(user, 'message 60', 'Delete');
-    await user.click(within(screen.getByRole('group', { name: 'Confirm delete' })).getByRole('button', { name: 'Delete' }));
+    await user.click(
+      within(screen.getByRole('group', { name: 'Confirm delete' })).getByRole('button', { name: 'Delete' }),
+    );
 
     await waitFor(() => expect(state.count('GET /api/chat')).toBe(2));
     await waitFor(() => expect(textOf(screen.getByRole('link', { name: /Bea/ }))).toContain('message 10'));
@@ -505,7 +523,9 @@ describe('older messages', () => {
 
     await findMessage('message 10');
     expect(state.requests).toContain('GET /api/chat/1/message?before=11');
-    const shown = within(messageList()).getAllByRole('listitem').map((item) => textOf(item).match(/message \d+/)?.[0]);
+    const shown = within(messageList())
+      .getAllByRole('listitem')
+      .map((item) => textOf(item).match(/message \d+/)?.[0]);
     expect(shown).toEqual(Array.from({ length: 60 }, (_, index) => `message ${index + 1}`));
     expect(screen.queryByRole('button', { name: 'Load earlier messages' })).toBeNull();
   });
@@ -524,7 +544,9 @@ describe('older messages', () => {
     await findMessage('message 111');
     await vi.advanceTimersByTimeAsync(1_000); // time for a refetch of the older page to finish, if there were one
     expect(within(messageList()).getByText('message 11')).toBeTruthy(); // refetching both pages would have dropped it
-    expect(state.requests.filter((request) => request.includes('before='))).toEqual(['GET /api/chat/1/message?before=61']);
+    expect(state.requests.filter((request) => request.includes('before='))).toEqual([
+      'GET /api/chat/1/message?before=61',
+    ]);
   });
 
   it('catches up with the after cursor when more arrived than a page holds, and does not load the conversation again', async () => {
@@ -540,7 +562,9 @@ describe('older messages', () => {
 
     await findMessage('message 90');
     await vi.advanceTimersByTimeAsync(500);
-    const shown = within(messageList()).getAllByRole('listitem').map((item) => textOf(item).match(/message \d+/)?.[0]);
+    const shown = within(messageList())
+      .getAllByRole('listitem')
+      .map((item) => textOf(item).match(/message \d+/)?.[0]);
     expect(shown).toEqual(Array.from({ length: 90 }, (_, index) => `message ${index + 1}`));
     expect(state.requests).toContain('GET /api/chat/1/message?after=10');
     expect(state.requests).toContain('GET /api/chat/1/message?after=60');
@@ -581,7 +605,9 @@ describe('older messages', () => {
     vi.stubGlobal('fetch', (url: string, init?: RequestInit) =>
       // A 4xx: a 5xx would be retried twice with a pause, and the test would wait for that.
       url.includes('before=')
-        ? Promise.resolve(new Response(JSON.stringify({ error: 'Too many requests, try again later' }), { status: 429 }))
+        ? Promise.resolve(
+            new Response(JSON.stringify({ error: 'Too many requests, try again later' }), { status: 429 }),
+          )
         : realFetch(url, init),
     );
 
@@ -642,7 +668,8 @@ describe('the read marker', () => {
     stubScrollLayout();
     const state = stubApi({ signedIn: true });
     state.addRoom({ id: 1, name: 'Bea' });
-    for (let number = 1; number <= 10; number += 1) state.addMessage({ chatId: 1, sender: john, content: `mine ${number}` });
+    for (let number = 1; number <= 10; number += 1)
+      state.addMessage({ chatId: 1, sender: john, content: `mine ${number}` });
     const { queryClient } = renderApp('/chat/1');
     const log = await screen.findByRole('log', { name: 'Messages' });
     await within(log).findByText('mine 10');

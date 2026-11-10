@@ -19,7 +19,7 @@ export function TextArea({ label, hideLabel = false, ...textareaProps }: TextAre
       <textarea
         id={id}
         rows={1}
-        className="max-h-40 min-h-11 w-full resize-none rounded-lg border border-edge bg-surface px-3 py-2.5 text-base text-fg field-sizing-content placeholder:text-muted focus-visible:border-accent focus-visible:outline-offset-0"
+        className="field-sizing-content max-h-40 min-h-11 w-full resize-none rounded-lg border border-edge bg-surface px-3 py-2.5 text-base text-fg placeholder:text-muted focus-visible:border-accent focus-visible:outline-offset-0"
         {...textareaProps}
       />
     </div>

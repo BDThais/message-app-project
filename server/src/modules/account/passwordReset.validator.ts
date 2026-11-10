@@ -3,9 +3,7 @@ import { bodyFields } from '../../lib/validation';
 import type { PasswordResetRequestBody, ResetPasswordBody } from '../../contract/requests';
 import { validatePassword } from './signup.validator';
 
-type ResetRequestValidation =
-  | { valid: true; data: { email: string } }
-  | { valid: false; message: string };
+type ResetRequestValidation = { valid: true; data: { email: string } } | { valid: false; message: string };
 
 /**
  * Validates the body of POST /api/account/password/reset-request: { email }, a
@@ -29,8 +27,7 @@ export function validatePasswordResetRequestBody(body: unknown): ResetRequestVal
 }
 
 type ResetPasswordValidation =
-  | { valid: true; data: { token: string; newPassword: string } }
-  | { valid: false; message: string };
+  { valid: true; data: { token: string; newPassword: string } } | { valid: false; message: string };
 
 /**
  * Validates the body of POST /api/account/password/reset: { token, new_password }.
@@ -43,10 +40,7 @@ type ResetPasswordValidation =
 export function validateResetPasswordBody(body: unknown): ResetPasswordValidation {
   const { token, new_password } = bodyFields<ResetPasswordBody>(body);
 
-  if (
-    typeof token !== 'string' || token === '' ||
-    typeof new_password !== 'string' || new_password === ''
-  ) {
+  if (typeof token !== 'string' || token === '' || typeof new_password !== 'string' || new_password === '') {
     return { valid: false, message: 'Token and new password are required' };
   }
 

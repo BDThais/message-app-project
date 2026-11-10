@@ -7,7 +7,9 @@ import { createUser, countUsers } from '../helpers/users';
 describe('User.email (schema)', () => {
   it('refuses an address with capital letters, on insert and on update', async () => {
     const data = { name: 'Alice', tel: '+14155552671', passwordHash: 'not-a-real-hash' };
-    await expect(prisma.user.create({ data: { ...data, email: 'Alice@Example.com' } })).rejects.toThrow(/users_email_lowercase_check/);
+    await expect(prisma.user.create({ data: { ...data, email: 'Alice@Example.com' } })).rejects.toThrow(
+      /users_email_lowercase_check/,
+    );
 
     const alice = await createUser('Alice');
     await expect(prisma.user.update({ where: { id: alice.id }, data: { email: 'Alice@Example.com' } })).rejects.toThrow(
@@ -20,7 +22,11 @@ describe('User.email (schema)', () => {
     const alice = await createUser('Alice');
     const data = { name: 'Bob', tel: '+14155552672', passwordHash: 'not-a-real-hash' };
 
-    await expect(prisma.user.create({ data: { ...data, email: alice.email } })).rejects.toMatchObject({ code: 'P2002' });
-    await expect(prisma.user.create({ data: { ...data, email: 'bob@example.com' } })).resolves.toMatchObject({ email: 'bob@example.com' });
+    await expect(prisma.user.create({ data: { ...data, email: alice.email } })).rejects.toMatchObject({
+      code: 'P2002',
+    });
+    await expect(prisma.user.create({ data: { ...data, email: 'bob@example.com' } })).resolves.toMatchObject({
+      email: 'bob@example.com',
+    });
   });
 });

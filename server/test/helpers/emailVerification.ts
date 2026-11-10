@@ -18,7 +18,7 @@ export function tokenFromMail(mail: MailMessage): string {
  */
 export async function createVerificationLink(
   user: { id: number; email: string },
-  options: { email?: string; createdAt?: Date; expiresAt?: Date } = {}
+  options: { email?: string; createdAt?: Date; expiresAt?: Date } = {},
 ): Promise<string> {
   const token = generateToken();
 

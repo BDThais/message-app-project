@@ -56,7 +56,7 @@ export type IssueVerificationResult =
 export function issueEmailVerification(
   userId: number,
   now: Date = new Date(),
-  existingTx?: Prisma.TransactionClient
+  existingTx?: Prisma.TransactionClient,
 ): Promise<IssueVerificationResult> {
   const issue = async (tx: Prisma.TransactionClient): Promise<IssueVerificationResult> => {
     const locked = await tx.$queryRaw<{ id: number }[]>`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;

@@ -41,8 +41,10 @@ const config: Config = {
   RESEND_API_KEY: process.env.RESEND_API_KEY || '', // Required when MAIL_TRANSPORT=resend.
   MAIL_FROM: process.env.MAIL_FROM || '', // Sender of every mail, e.g. 'Message App <no-reply@yourdomain.com>'. Required when MAIL_TRANSPORT=resend.
   EMAIL_VERIFICATION_TTL_MS: numberSetting('EMAIL_VERIFICATION_TTL_MS', 86400000), // How long an emailed verification link works. Default: 24 hours. Validated at startup by checkEmailVerificationSettings.
-  EMAIL_VERIFICATION_URL: process.env.EMAIL_VERIFICATION_URL || (NODE_ENV === 'production' ? '' : 'http://localhost:5173/verify-email'), // The frontend page the mailed link opens (the token is appended as #token=...). Required when NODE_ENV=production, so a mail can never point at localhost. Validated at startup by checkEmailVerificationSettings.
+  EMAIL_VERIFICATION_URL:
+    process.env.EMAIL_VERIFICATION_URL || (NODE_ENV === 'production' ? '' : 'http://localhost:5173/verify-email'), // The frontend page the mailed link opens (the token is appended as #token=...). Required when NODE_ENV=production, so a mail can never point at localhost. Validated at startup by checkEmailVerificationSettings.
   PASSWORD_RESET_TTL_MS: numberSetting('PASSWORD_RESET_TTL_MS', 1800000), // How long an emailed password reset link works. Default: 30 minutes. Validated at startup by checkPasswordResetSettings.
-  PASSWORD_RESET_URL: process.env.PASSWORD_RESET_URL || (NODE_ENV === 'production' ? '' : 'http://localhost:5173/reset-password'), // The frontend page the mailed reset link opens (the token is appended as #token=...). Required when NODE_ENV=production, so a mail can never point at localhost. Validated at startup by checkPasswordResetSettings.
+  PASSWORD_RESET_URL:
+    process.env.PASSWORD_RESET_URL || (NODE_ENV === 'production' ? '' : 'http://localhost:5173/reset-password'), // The frontend page the mailed reset link opens (the token is appended as #token=...). Required when NODE_ENV=production, so a mail can never point at localhost. Validated at startup by checkPasswordResetSettings.
 };
 export default config;

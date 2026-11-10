@@ -8,8 +8,7 @@ import { createDirectRoom, createGroupRoom } from '../helpers/chatRooms';
 // in chatRoom.permissions.test.ts; the ':message_id' format check and the full
 // list of bad bodies are in chatRoom.validator.unit.test.ts.
 
-const messageUrl = (chatId: number, messageId: number | string) =>
-  `/api/chat/${chatId}/message/${messageId}`;
+const messageUrl = (chatId: number, messageId: number | string) => `/api/chat/${chatId}/message/${messageId}`;
 
 describe('PATCH /chat/:chatid/message/:message_id', () => {
   it('lets the sender edit their own message in a group room', async () => {
@@ -19,9 +18,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
     const agent = await loginAs(member);
     const sent = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Helo!' });
 
-    const res = await agent
-      .patch(messageUrl(room.id, sent.body.message.id))
-      .send({ content: '  Hello!  ' });
+    const res = await agent.patch(messageUrl(room.id, sent.body.message.id)).send({ content: '  Hello!  ' });
 
     expect(res.status).toBe(200);
     expect(res.body.message).toMatchObject({
@@ -46,9 +43,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
     const agent = await loginAs(bob);
     const sent = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Hi Alcie' });
 
-    const res = await agent
-      .patch(messageUrl(room.id, sent.body.message.id))
-      .send({ content: 'Hi Alice' });
+    const res = await agent.patch(messageUrl(room.id, sent.body.message.id)).send({ content: 'Hi Alice' });
 
     expect(res.status).toBe(200);
     expect(res.body.message).toMatchObject({ content: 'Hi Alice', editedAt: expect.any(String) });
@@ -67,10 +62,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
     const rooms = await agent.get('/api/chat');
 
     // Still oldest, and it reports its new content plus the edited stamp.
-    expect(messages.body.messages.map((m: { content: string }) => m.content)).toEqual([
-      'Second',
-      'First (fixed)',
-    ]);
+    expect(messages.body.messages.map((m: { content: string }) => m.content)).toEqual(['Second', 'First (fixed)']);
     expect(messages.body.messages[1].editedAt).toEqual(expect.any(String));
     // The room summary's last-message preview follows the edit; createdAt is untouched.
     expect(rooms.body.chatRooms[0].lastMessage).toMatchObject({ content: 'Second (fixed)' });
@@ -82,15 +74,11 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
     const agent = await loginAs(user);
     const sent = await agent.post(`/api/chat/${room.id}/message`).send({ content: 'Same' });
 
-    const res = await agent
-      .patch(messageUrl(room.id, sent.body.message.id))
-      .send({ content: ' Same ' });
+    const res = await agent.patch(messageUrl(room.id, sent.body.message.id)).send({ content: ' Same ' });
 
     expect(res.status).toBe(200);
     expect(res.body.message).toMatchObject({ content: 'Same', editedAt: null });
-    expect(
-      (await prisma.message.findUniqueOrThrow({ where: { id: sent.body.message.id } })).editedAt
-    ).toBeNull();
+    expect((await prisma.message.findUniqueOrThrow({ where: { id: sent.body.message.id } })).editedAt).toBeNull();
   });
 
   it('rejects a non-sender, including an admin, with 403 and leaves the message untouched', async () => {
@@ -101,9 +89,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
     const sent = await memberAgent.post(`/api/chat/${room.id}/message`).send({ content: 'Mine' });
     const adminAgent = await loginAs(admin);
 
-    const res = await adminAgent
-      .patch(messageUrl(room.id, sent.body.message.id))
-      .send({ content: 'Not yours' });
+    const res = await adminAgent.patch(messageUrl(room.id, sent.body.message.id)).send({ content: 'Not yours' });
 
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: 'You can only edit your own messages' });
@@ -144,9 +130,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
 
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Message not found in this chat room' });
-    expect(
-      (await prisma.message.findUniqueOrThrow({ where: { id: sent.body.message.id } })).content
-    ).toBe('In room A');
+    expect((await prisma.message.findUniqueOrThrow({ where: { id: sent.body.message.id } })).content).toBe('In room A');
   });
 
   it('rejects a blank content with 400 and leaves the message untouched', async () => {
@@ -159,9 +143,7 @@ describe('PATCH /chat/:chatid/message/:message_id', () => {
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "'content' must be a non-empty string" });
-    expect(
-      (await prisma.message.findUniqueOrThrow({ where: { id: sent.body.message.id } })).content
-    ).toBe('Keep me');
+    expect((await prisma.message.findUniqueOrThrow({ where: { id: sent.body.message.id } })).content).toBe('Keep me');
   });
 });
 

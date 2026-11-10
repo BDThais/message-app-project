@@ -11,9 +11,7 @@ function clientErrorStatus(err: unknown): number | null {
   const { status, statusCode } = err as { status?: unknown; statusCode?: unknown };
   const code = typeof status === 'number' ? status : statusCode;
 
-  return typeof code === 'number' && Number.isInteger(code) && code >= 400 && code <= 499
-    ? code
-    : null;
+  return typeof code === 'number' && Number.isInteger(code) && code >= 400 && code <= 499 ? code : null;
 }
 
 // Registered in app.ts after every route and right before `errorHandler`: a request no

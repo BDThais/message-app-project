@@ -6,7 +6,7 @@ import { createDirectRoom, createGroupRoom, promoteToAdmin } from '../helpers/ch
 // in chatRoom.permissions.test.ts.
 
 describe('GET /chat/:chatid/member', () => {
-  it('lists the room\'s members, admins first and then by name, without anyone from another room', async () => {
+  it("lists the room's members, admins first and then by name, without anyone from another room", async () => {
     // Created out of name order on purpose, so the order can't be the id order.
     const zoe = await createUser('Zoe');
     const carl = await createUser('Carl');
@@ -25,10 +25,30 @@ describe('GET /chat/:chatid/member', () => {
     // `member`. 'bea' sorts before 'Carl' because the name order ignores case.
     expect(res.body).toEqual({
       members: [
-        { chatId: room.id, role: 'admin', lastReadMessageId: null, member: { id: mia.id, name: 'Mia', avatarUrl: null } },
-        { chatId: room.id, role: 'admin', lastReadMessageId: null, member: { id: zoe.id, name: 'Zoe', avatarUrl: null } },
-        { chatId: room.id, role: 'member', lastReadMessageId: null, member: { id: bea.id, name: 'bea', avatarUrl: null } },
-        { chatId: room.id, role: 'member', lastReadMessageId: null, member: { id: carl.id, name: 'Carl', avatarUrl: null } },
+        {
+          chatId: room.id,
+          role: 'admin',
+          lastReadMessageId: null,
+          member: { id: mia.id, name: 'Mia', avatarUrl: null },
+        },
+        {
+          chatId: room.id,
+          role: 'admin',
+          lastReadMessageId: null,
+          member: { id: zoe.id, name: 'Zoe', avatarUrl: null },
+        },
+        {
+          chatId: room.id,
+          role: 'member',
+          lastReadMessageId: null,
+          member: { id: bea.id, name: 'bea', avatarUrl: null },
+        },
+        {
+          chatId: room.id,
+          role: 'member',
+          lastReadMessageId: null,
+          member: { id: carl.id, name: 'Carl', avatarUrl: null },
+        },
       ],
     });
   });
@@ -42,9 +62,7 @@ describe('GET /chat/:chatid/member', () => {
     const res = await agent.get(`/api/chat/${room.id}/member`);
 
     expect(res.status).toBe(200);
-    expect(
-      res.body.members.map((m: { role: string; member: { name: string } }) => [m.member.name, m.role])
-    ).toEqual([
+    expect(res.body.members.map((m: { role: string; member: { name: string } }) => [m.member.name, m.role])).toEqual([
       ['Alice', 'admin'],
       ['Bob', 'admin'],
     ]);

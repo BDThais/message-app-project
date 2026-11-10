@@ -6,7 +6,7 @@ import { createGroupRoom } from '../helpers/chatRooms';
 // Admin-only and group-only rules are in chatRoom.permissions.test.ts.
 
 describe('PATCH /chat/:chatid/member/:userid', () => {
-  it('changes a member\'s role and returns the updated member', async () => {
+  it("changes a member's role and returns the updated member", async () => {
     const admin = await createUser('Alice');
     const bob = await createUser('Bob');
     const room = await createGroupRoom(admin.id, [bob.id]);
@@ -27,7 +27,7 @@ describe('PATCH /chat/:chatid/member/:userid', () => {
     expect(
       await prisma.chatMember.findUnique({
         where: { memberId_chatId: { memberId: bob.id, chatId: room.id } },
-      })
+      }),
     ).toMatchObject({ role: 'admin' });
   });
 });

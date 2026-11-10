@@ -99,7 +99,7 @@ describe(`DELETE ${route}`, () => {
       expect.arrayContaining([
         { userId: bob.id, friendId: carol.id },
         { userId: carol.id, friendId: bob.id },
-      ])
+      ]),
     );
     expect(await prisma.friendListMember.count()).toBe(2);
     expect(await prisma.pendingFriendRequest.findMany({ select: { senderId: true, receiverId: true } })).toEqual([

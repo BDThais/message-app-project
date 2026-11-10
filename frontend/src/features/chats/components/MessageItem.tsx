@@ -76,14 +76,14 @@ export function MessageItem({
             onClick={() => setPinned((value) => !value)}
             className={
               isDeleted
-                ? 'min-w-0 rounded-2xl border border-line px-3.5 py-2 text-base italic text-muted'
-                : `min-w-0 max-w-md whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-base ${mine ? 'bg-accent text-on-accent' : 'bg-sunken text-fg'}`
+                ? 'min-w-0 rounded-2xl border border-line px-3.5 py-2 text-base text-muted italic'
+                : `max-w-md min-w-0 rounded-2xl px-3.5 py-2 text-base break-words whitespace-pre-wrap ${mine ? 'bg-accent text-on-accent' : 'bg-sunken text-fg'}`
             }
           >
             {isDeleted ? 'Message deleted' : message.content}
           </p>
           <div
-            className={`flex shrink-0 items-center gap-1 whitespace-nowrap text-xs text-muted transition-opacity ${pinned ? 'pointer-events-auto opacity-100' : `${hidden} ${shownBy}`}`}
+            className={`flex shrink-0 items-center gap-1 text-xs whitespace-nowrap text-muted transition-opacity ${pinned ? 'pointer-events-auto opacity-100' : `${hidden} ${shownBy}`}`}
           >
             {message.editedAt && !isDeleted && <span>edited</span>}
             <time dateTime={message.createdAt} title={new Date(message.createdAt).toLocaleString()}>

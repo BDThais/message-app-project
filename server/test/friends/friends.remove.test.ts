@@ -23,26 +23,29 @@ describe('DELETE /friend/:id', () => {
   it.each([
     ['the user who accepted', 'alice'],
     ['the user who sent the request', 'bob'],
-  ] as const)('removes both friend-list rows when %s unfriends, answers 204 with no body and keeps every other friendship', async (_label, caller) => {
-    const alice = await createUser('Alice');
-    const bob = await createUser('Bob');
-    const carol = await createUser('Carol');
-    await makeFriends(alice.id, bob.id);
-    await makeFriends(alice.id, carol.id);
-    await makeFriends(bob.id, carol.id);
-    const [agent, other] = caller === 'alice' ? [await loginAs(alice), bob] : [await loginAs(bob), alice];
+  ] as const)(
+    'removes both friend-list rows when %s unfriends, answers 204 with no body and keeps every other friendship',
+    async (_label, caller) => {
+      const alice = await createUser('Alice');
+      const bob = await createUser('Bob');
+      const carol = await createUser('Carol');
+      await makeFriends(alice.id, bob.id);
+      await makeFriends(alice.id, carol.id);
+      await makeFriends(bob.id, carol.id);
+      const [agent, other] = caller === 'alice' ? [await loginAs(alice), bob] : [await loginAs(bob), alice];
 
-    const res = await agent.delete(unfriendUrl(other.id));
+      const res = await agent.delete(unfriendUrl(other.id));
 
-    expect(res.status).toBe(204);
-    expect(res.text).toBe('');
-    expect(await friendPairs()).toEqual([
-      [alice.id, carol.id],
-      [bob.id, carol.id],
-      [carol.id, alice.id],
-      [carol.id, bob.id],
-    ]);
-  });
+      expect(res.status).toBe(204);
+      expect(res.text).toBe('');
+      expect(await friendPairs()).toEqual([
+        [alice.id, carol.id],
+        [bob.id, carol.id],
+        [carol.id, alice.id],
+        [carol.id, bob.id],
+      ]);
+    },
+  );
 
   it('leaves an existing direct room, its members and its messages untouched', async () => {
     const alice = await createUser('Alice');
@@ -147,8 +150,8 @@ describe('DELETE /friend/:id', () => {
       ]);
 
       const statuses = responses.map((r) => r.status);
-      expect(statuses, `round ${round + 1}`).toSatisfy((s: number[]) =>
-        s.every((status) => status === 204 || status === 404) && s.includes(204)
+      expect(statuses, `round ${round + 1}`).toSatisfy(
+        (s: number[]) => s.every((status) => status === 204 || status === 404) && s.includes(204),
       );
       expect(await friendPairs(), `round ${round + 1}`).toEqual([]);
     }

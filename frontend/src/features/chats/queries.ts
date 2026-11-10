@@ -7,7 +7,15 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
-import { createDirectChatRoom, deleteMessage, editMessage, getChatRooms, getMessages, markRead, sendMessage } from './api';
+import {
+  createDirectChatRoom,
+  deleteMessage,
+  editMessage,
+  getChatRooms,
+  getMessages,
+  markRead,
+  sendMessage,
+} from './api';
 import {
   addMessageToCache,
   addRoomToCache,
@@ -41,7 +49,8 @@ export function useChatRooms() {
 export function messagesQueryOptions(chatId: number) {
   return infiniteQueryOptions({
     queryKey: chatKeys.messages(chatId),
-    queryFn: ({ pageParam, signal }) => getMessages(chatId, pageParam === undefined ? {} : { before: pageParam }, signal),
+    queryFn: ({ pageParam, signal }) =>
+      getMessages(chatId, pageParam === undefined ? {} : { before: pageParam }, signal),
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.messages.at(-1)?.id : undefined),
   });

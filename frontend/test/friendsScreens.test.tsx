@@ -47,7 +47,10 @@ function newsLine() {
   return { text: region?.querySelector('span')?.textContent ?? null, isLiveRegion: region !== null };
 }
 
-const namesIn = (list: HTMLElement) => within(list).getAllByRole('listitem').map((item) => item.querySelector('span.font-medium')?.textContent);
+const namesIn = (list: HTMLElement) =>
+  within(list)
+    .getAllByRole('listitem')
+    .map((item) => item.querySelector('span.font-medium')?.textContent);
 
 describe('the friends page', () => {
   it('lists the friends by name, the requests that came in and the ones that were sent', async () => {
@@ -90,7 +93,9 @@ describe('the friends page', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) =>
-        broken && url === '/api/friend' ? new Response(JSON.stringify({ error: 'Something broke' }), { status: 400 }) : stubbed(url, init),
+        broken && url === '/api/friend'
+          ? new Response(JSON.stringify({ error: 'Something broke' }), { status: 400 })
+          : stubbed(url, init),
       ),
     );
     renderApp('/friends');
@@ -129,7 +134,9 @@ describe('finding someone', () => {
 
     expect(await result.findByText('Request sent')).toBeTruthy();
     expect(result.getByRole('button', { name: 'Cancel' })).toBeTruthy();
-    expect(state.calls.find((call) => call.request === 'POST /api/friend/requests')?.body).toEqual({ receiver_id: bea.id });
+    expect(state.calls.find((call) => call.request === 'POST /api/friend/requests')?.body).toEqual({
+      receiver_id: bea.id,
+    });
     const sent = await section('Requests you sent');
     expect(sent.getByText('Bea')).toBeTruthy();
     // From the answer: neither list was asked for again.
@@ -152,7 +159,9 @@ describe('finding someone', () => {
 
     await searchFor(user, '0912345678');
     const result = await section('Add a friend');
-    expect((await result.findByRole('alert')).textContent).toContain("'tel' must be a valid phone number in E.164 format");
+    expect((await result.findByRole('alert')).textContent).toContain(
+      "'tel' must be a valid phone number in E.164 format",
+    );
 
     state.searchLimited = true;
     await searchFor(user, tels.bea);
@@ -165,7 +174,9 @@ describe('finding someone', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) =>
-        url.startsWith('/api/friend/search/') ? new Response(JSON.stringify({ error: 'Something broke' }), { status: 500 }) : stubbed(url, init),
+        url.startsWith('/api/friend/search/')
+          ? new Response(JSON.stringify({ error: 'Something broke' }), { status: 500 })
+          : stubbed(url, init),
       ),
     );
     renderApp('/friends');
@@ -175,7 +186,9 @@ describe('finding someone', () => {
 
     // A 5xx is retried by default, with a delay of seconds, which would keep "Searching…" on screen.
     expect((await (await section('Add a friend')).findByRole('alert')).textContent).toBe('Something broke');
-    expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith('/api/friend/search/'))).toHaveLength(1);
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith('/api/friend/search/'))).toHaveLength(
+      1,
+    );
     expect(state.requests.length).toBeGreaterThan(0);
   });
 
@@ -501,7 +514,9 @@ describe('the friends', () => {
 
     expect(await friends.findByText(/You have no friends yet/)).toBeTruthy();
     expect(state.count('GET /api/friend')).toBe(2);
-    await waitFor(() => expect(newsLine()).toEqual({ text: 'Bea: You are not friends with this user', isLiveRegion: true }));
+    await waitFor(() =>
+      expect(newsLine()).toEqual({ text: 'Bea: You are not friends with this user', isLiveRegion: true }),
+    );
   });
 });
 
@@ -515,9 +530,14 @@ describe('"Message"', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Bea' })).toBeTruthy();
     expect(router.state.location.pathname).toBe('/chat/1');
-    expect(state.calls.find((call) => call.request === 'POST /api/chat')?.body).toEqual({ type: 'direct', member_ids: [bea.id] });
+    expect(state.calls.find((call) => call.request === 'POST /api/chat')?.body).toEqual({
+      type: 'direct',
+      member_ids: [bea.id],
+    });
     // The room is in the list beside the conversation.
-    expect(within(await screen.findByRole('navigation', { name: 'Chats' })).getByRole('link', { name: /Bea/ })).toBeTruthy();
+    expect(
+      within(await screen.findByRole('navigation', { name: 'Chats' })).getByRole('link', { name: /Bea/ }),
+    ).toBeTruthy();
   });
 
   it('opens the room that already exists instead of making a second one', async () => {

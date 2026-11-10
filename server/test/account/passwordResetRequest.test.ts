@@ -46,7 +46,9 @@ describe(`POST ${route}`, () => {
     expect(outbox.sent[0]!.text).toContain(`${config.PASSWORD_RESET_URL}#token=`);
     const token = tokenFromMail(outbox.sent[0]!);
     expect(await prisma.passwordResetToken.count()).toBe(1);
-    expect((await prisma.passwordResetToken.findUniqueOrThrow({ where: { userId: alice.id } })).tokenHash).toBe(hashToken(token));
+    expect((await prisma.passwordResetToken.findUniqueOrThrow({ where: { userId: alice.id } })).tokenHash).toBe(
+      hashToken(token),
+    );
     expect(await resetPasswordWithToken(token, 'new-hash')).toEqual({ status: 'reset', email: alice.email });
   });
 
@@ -86,7 +88,10 @@ describe(`POST ${route}`, () => {
     expect(second.status).toBe(202);
     expect(second.body).toEqual(first.body);
     expect(outbox.sent).toHaveLength(1);
-    expect(await resetPasswordWithToken(tokenFromMail(outbox.sent[0]!), 'new-hash')).toEqual({ status: 'reset', email: alice.email });
+    expect(await resetPasswordWithToken(tokenFromMail(outbox.sent[0]!), 'new-hash')).toEqual({
+      status: 'reset',
+      email: alice.email,
+    });
   });
 
   it('still answers 202 when the mail cannot be sent, and does not wait for it', async () => {

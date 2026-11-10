@@ -48,7 +48,10 @@ describe('ListState', () => {
   });
 
   it('shows the error with a way to try again, and the items when the retry works', async () => {
-    const queryFn = vi.fn<() => Promise<string[]>>().mockRejectedValueOnce(new Error('The server is down')).mockResolvedValue(['Bea']);
+    const queryFn = vi
+      .fn<() => Promise<string[]>>()
+      .mockRejectedValueOnce(new Error('The server is down'))
+      .mockResolvedValue(['Bea']);
     renderList(queryFn);
 
     expect((await screen.findByRole('alert')).textContent).toBe('The server is down');
@@ -59,7 +62,10 @@ describe('ListState', () => {
   });
 
   it('keeps the items on screen when a refetch in the background fails', async () => {
-    const queryFn = vi.fn<() => Promise<string[]>>().mockResolvedValueOnce(['Bea']).mockRejectedValue(new Error('The server is down'));
+    const queryFn = vi
+      .fn<() => Promise<string[]>>()
+      .mockResolvedValueOnce(['Bea'])
+      .mockRejectedValue(new Error('The server is down'));
     const { queryClient } = renderList(queryFn);
     await screen.findByText('Bea');
 

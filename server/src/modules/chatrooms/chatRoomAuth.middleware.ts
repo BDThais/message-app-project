@@ -48,7 +48,7 @@ export async function loadChatMembership(
   req: Request,
   res: Response<ApiErrorBody>,
   next: NextFunction,
-  rawChatId: string
+  rawChatId: string,
 ) {
   if (!hasUser(req)) {
     return next(new Error('loadChatMembership was mounted without requireUserAuth before it'));

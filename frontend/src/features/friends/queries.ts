@@ -1,6 +1,21 @@
-import { queryOptions, skipToken, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import {
+  queryOptions,
+  skipToken,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
 import { isApiError } from '@/lib/http';
-import { acceptFriendRequest, deleteFriendRequest, getFriendRequests, getFriends, searchUserByTel, sendFriendRequest, unfriend } from './api';
+import {
+  acceptFriendRequest,
+  deleteFriendRequest,
+  getFriendRequests,
+  getFriends,
+  searchUserByTel,
+  sendFriendRequest,
+  unfriend,
+} from './api';
 import {
   addFriendToCache,
   addRequestToCache,

@@ -45,7 +45,7 @@ describe.each(numericSettings)('$name', ({ name, fallback }) => {
       vi.stubEnv(name, value);
 
       expect((await loadConfig())[name]).toBeNaN();
-    }
+    },
   );
 
   it('keeps a value of 0 (it is not mistaken for "not set")', async () => {

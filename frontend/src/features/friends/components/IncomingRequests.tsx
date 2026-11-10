@@ -33,7 +33,13 @@ function IncomingRow({ request, onNews }: { request: FriendRequest; onNews: (tex
 
   return (
     <PersonRow person={request.user} error={(accept.error ?? reject.error)?.message}>
-      <Button type="button" size="sm" aria-label={`Accept ${name}`} disabled={busy} onClick={() => accept.mutate(request.id)}>
+      <Button
+        type="button"
+        size="sm"
+        aria-label={`Accept ${name}`}
+        disabled={busy}
+        onClick={() => accept.mutate(request.id)}
+      >
         Accept
       </Button>
       <Button

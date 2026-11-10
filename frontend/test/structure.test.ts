@@ -43,7 +43,7 @@ describe('the layout of src/', () => {
   });
 });
 
-describe('the way into the server\'s folder', () => {
+describe("the way into the server's folder", () => {
   // Only the API's shapes (server/src/contract/) are shared with the server, through the @contract/
   // alias. Anything else from server/ would pull the database client or Express into the browser bundle.
   const everyFile = { ...sourceFiles, ...testFiles };
@@ -65,6 +65,6 @@ describe('the way into the server\'s folder', () => {
     const offenders = Object.entries(everyFile)
       .filter(([, source]) => valueImport.test(source) || sideEffectImport.test(source))
       .map(([file]) => file);
-    expect(offenders, 'write `import type { ... } from \'@contract/...\'`').toEqual([]);
+    expect(offenders, "write `import type { ... } from '@contract/...'`").toEqual([]);
   });
 });

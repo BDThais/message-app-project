@@ -22,7 +22,7 @@ export function checkFrontendPageUrl(options: {
     // Only reachable in production: elsewhere config.ts supplies the development page.
     throw new Error(
       `${name} is required${nodeEnv === 'production' ? ' when NODE_ENV=production' : ''}: ` +
-        `the address of the frontend page that ${purpose} (for example "${example}")`
+        `the address of the frontend page that ${purpose} (for example "${example}")`,
     );
   }
   // The token is added as the fragment, so the base must not have one already.

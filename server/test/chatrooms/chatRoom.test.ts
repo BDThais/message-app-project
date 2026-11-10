@@ -26,9 +26,26 @@ describe('POST /chat', () => {
     expect(res.status).toBe(201);
     expect(Object.keys(res.body)).toEqual(['chatRoom']);
     const { chatRoom } = res.body;
-    expect(chatRoom).toMatchObject({ type: 'group', name: 'Project chat', avatarUrl: null, role: 'admin', lastMessage: null, unreadCount: 0 });
+    expect(chatRoom).toMatchObject({
+      type: 'group',
+      name: 'Project chat',
+      avatarUrl: null,
+      role: 'admin',
+      lastMessage: null,
+      unreadCount: 0,
+    });
     // The whole shape, so a column added to the table does not leak into the response by accident (`emptiedAt` did once).
-    expect(Object.keys(chatRoom).sort()).toEqual(['avatarUrl', 'createdAt', 'id', 'lastMessage', 'members', 'name', 'role', 'type', 'unreadCount']);
+    expect(Object.keys(chatRoom).sort()).toEqual([
+      'avatarUrl',
+      'createdAt',
+      'id',
+      'lastMessage',
+      'members',
+      'name',
+      'role',
+      'type',
+      'unreadCount',
+    ]);
     // Each entry is exactly this: the user is only under `member`, with no separate `memberId`.
     const members = [...chatRoom.members].sort((a, b) => a.member.id - b.member.id);
     expect(members).toEqual([
@@ -72,13 +89,23 @@ describe('POST /chat', () => {
     expect(first.status).toBe(201);
     expect(second.status).toBe(200);
     expect(second.body.chatRoom.id).toBe(first.body.chatRoom.id);
-    expect(Object.keys(first.body.chatRoom).sort()).toEqual(['avatarUrl', 'createdAt', 'id', 'lastMessage', 'members', 'name', 'role', 'type', 'unreadCount']);
+    expect(Object.keys(first.body.chatRoom).sort()).toEqual([
+      'avatarUrl',
+      'createdAt',
+      'id',
+      'lastMessage',
+      'members',
+      'name',
+      'role',
+      'type',
+      'unreadCount',
+    ]);
     expect(Object.keys(second.body.chatRoom).sort()).toEqual(Object.keys(first.body.chatRoom).sort());
     expect(await prisma.chatRoom.count()).toBe(1);
     expect(await prisma.chatMember.count()).toBe(2);
   });
 
-  it('returns a direct room as its creator sees it: the other member\'s name, and what the room already holds when it is reused', async () => {
+  it("returns a direct room as its creator sees it: the other member's name, and what the room already holds when it is reused", async () => {
     const user = await createUser('Alice');
     const otherUser = await createUser('Bob');
     await makeFriends(user.id, otherUser.id);
@@ -86,7 +113,9 @@ describe('POST /chat', () => {
     const body = { type: 'direct', member_ids: [otherUser.id] };
 
     const first = await agent.post('/api/chat').send(body);
-    await prisma.message.create({ data: { chatId: first.body.chatRoom.id, senderId: otherUser.id, content: 'Hi Alice' } });
+    await prisma.message.create({
+      data: { chatId: first.body.chatRoom.id, senderId: otherUser.id, content: 'Hi Alice' },
+    });
     const second = await agent.post('/api/chat').send(body);
 
     // The stored room has no name of its own: Alice sees Bob's, as in the room list.
@@ -141,7 +170,7 @@ describe('POST /chat', () => {
     expect(await prisma.chatRoom.count()).toBe(0);
   });
 
-  it('only counts the requester\'s own friend-list row as a friendship', async () => {
+  it("only counts the requester's own friend-list row as a friendship", async () => {
     const user = await createUser('Alice');
     const other = await createUser('Bob');
     // Half a friendship: Bob's row names Alice, Alice's row does not name Bob.
@@ -210,10 +239,7 @@ describe('GET /chat', () => {
     const res = await agent.get('/api/chat');
 
     expect(res.status).toBe(200);
-    expect(res.body.chatRooms.map((room: { id: number }) => room.id)).toEqual([
-      directRoom.id,
-      groupRoom.id,
-    ]);
+    expect(res.body.chatRooms.map((room: { id: number }) => room.id)).toEqual([directRoom.id, groupRoom.id]);
     expect(res.body.chatRooms[0]).toMatchObject({
       name: 'Bob',
       lastMessage: { content: 'Hello' },
@@ -261,7 +287,16 @@ describe('PATCH /chat/:chatid', () => {
       lastMessage: null,
       unreadCount: 0,
     });
-    expect(Object.keys(res.body.chatRoom).sort()).toEqual(['avatarUrl', 'createdAt', 'id', 'lastMessage', 'name', 'role', 'type', 'unreadCount']);
+    expect(Object.keys(res.body.chatRoom).sort()).toEqual([
+      'avatarUrl',
+      'createdAt',
+      'id',
+      'lastMessage',
+      'name',
+      'role',
+      'type',
+      'unreadCount',
+    ]);
     expect(await prisma.chatRoom.findUnique({ where: { id: room.id } })).toMatchObject({
       name: 'Updated project chat',
       avatarUrl: 'https://example.com/project.png',

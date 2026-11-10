@@ -7,8 +7,7 @@ import { createDirectRoom, createGroupRoom } from '../helpers/chatRooms';
 // in chatRoom.permissions.test.ts; the ':message_id' format check is in
 // chatRoom.validator.unit.test.ts.
 
-const messageUrl = (chatId: number, messageId: number | string) =>
-  `/api/chat/${chatId}/message/${messageId}`;
+const messageUrl = (chatId: number, messageId: number | string) => `/api/chat/${chatId}/message/${messageId}`;
 
 describe('DELETE /chat/:chatid/message/:message_id', () => {
   it('lets the sender delete their own message in a group room', async () => {
@@ -37,9 +36,7 @@ describe('DELETE /chat/:chatid/message/:message_id', () => {
     const res = await agent.delete(messageUrl(room.id, sent.body.message.id));
 
     expect(res.status).toBe(204);
-    expect(
-      (await prisma.message.findUniqueOrThrow({ where: { id: sent.body.message.id } })).deletedAt
-    ).not.toBeNull();
+    expect((await prisma.message.findUniqueOrThrow({ where: { id: sent.body.message.id } })).deletedAt).not.toBeNull();
   });
 
   it('is reflected in a later GET as a deleted, content-less message', async () => {
@@ -70,9 +67,7 @@ describe('DELETE /chat/:chatid/message/:message_id', () => {
 
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: 'You can only delete your own messages' });
-    expect(
-      (await prisma.message.findUniqueOrThrow({ where: { id: sent.body.message.id } })).deletedAt
-    ).toBeNull();
+    expect((await prisma.message.findUniqueOrThrow({ where: { id: sent.body.message.id } })).deletedAt).toBeNull();
   });
 
   it('returns 404 for a message that does not exist or was already deleted', async () => {

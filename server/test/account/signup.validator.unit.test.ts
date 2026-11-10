@@ -24,17 +24,28 @@ describe('validateAccountBody', () => {
     expect(validateAccountBody(input)).toEqual(required);
   });
 
-  it.each(['name', 'email', 'tel', 'password'] as const)('counts %s as missing when it is empty, or not a string', (field) => {
-    for (const value of ['', 123, true, null, ['x'], { a: 1 }]) {
-      expect(validateAccountBody({ ...body, [field]: value }), `${field}: ${JSON.stringify(value)}`).toEqual(required);
-    }
-  });
+  it.each(['name', 'email', 'tel', 'password'] as const)(
+    'counts %s as missing when it is empty, or not a string',
+    (field) => {
+      for (const value of ['', 123, true, null, ['x'], { a: 1 }]) {
+        expect(validateAccountBody({ ...body, [field]: value }), `${field}: ${JSON.stringify(value)}`).toEqual(
+          required,
+        );
+      }
+    },
+  );
 
   it('checks the fields in the order name, email, phone number, password: the first rule that fails is the answer', () => {
     const allBad = { name: 'john doe', email: 'nope', tel: '123', password: 'weak' };
 
-    expect(validateAccountBody(allBad)).toEqual({ valid: false, message: 'Name must contain only letters and numbers' });
-    expect(validateAccountBody({ ...allBad, name: 'johndoe' })).toEqual({ valid: false, message: 'Invalid email format' });
+    expect(validateAccountBody(allBad)).toEqual({
+      valid: false,
+      message: 'Name must contain only letters and numbers',
+    });
+    expect(validateAccountBody({ ...allBad, name: 'johndoe' })).toEqual({
+      valid: false,
+      message: 'Invalid email format',
+    });
     expect(validateAccountBody({ ...allBad, name: 'johndoe', email: body.email })).toEqual({
       valid: false,
       message: 'Invalid phone number format',

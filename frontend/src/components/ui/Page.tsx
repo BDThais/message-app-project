@@ -6,20 +6,12 @@ import { Logo } from './Logo';
  * forms and short notices. `column` is a centered column that scrolls with the signed-in layout.
  * `fill` takes all the room that is left, for a screen that scrolls inside itself (the chat).
  */
-export function Page({
-  layout = 'column',
-  children,
-}: {
-  layout?: 'narrow' | 'column' | 'fill';
-  children: ReactNode;
-}) {
+export function Page({ layout = 'column', children }: { layout?: 'narrow' | 'column' | 'fill'; children: ReactNode }) {
   if (layout === 'narrow') {
     return (
       <main className="flex min-h-dvh flex-col items-center justify-center gap-6 p-4">
         <Logo />
-        <div
-          className="flex w-full max-w-sm flex-col gap-5 rounded-2xl border border-line bg-surface p-6 shadow-sm sm:p-8"
-        >
+        <div className="flex w-full max-w-sm flex-col gap-5 rounded-2xl border border-line bg-surface p-6 shadow-sm sm:p-8">
           {children}
         </div>
       </main>

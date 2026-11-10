@@ -3,8 +3,7 @@ import type { ChangePasswordBody } from '../../contract/requests';
 import { validatePassword } from './signup.validator';
 
 type ChangePasswordValidation =
-  | { valid: true; data: { currentPassword: string; newPassword: string } }
-  | { valid: false; message: string };
+  { valid: true; data: { currentPassword: string; newPassword: string } } | { valid: false; message: string };
 
 /**
  * Validates the body of POST /api/account/password: { current_password,
@@ -17,8 +16,10 @@ export function validateChangePasswordBody(body: unknown): ChangePasswordValidat
   const { current_password, new_password } = bodyFields<ChangePasswordBody>(body);
 
   if (
-    typeof current_password !== 'string' || current_password === '' ||
-    typeof new_password !== 'string' || new_password === ''
+    typeof current_password !== 'string' ||
+    current_password === '' ||
+    typeof new_password !== 'string' ||
+    new_password === ''
   ) {
     return { valid: false, message: 'Current password and new password are required' };
   }

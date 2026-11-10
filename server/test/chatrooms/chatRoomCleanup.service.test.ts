@@ -30,8 +30,7 @@ async function createRoom(options: { emptiedAt?: Date; withMember?: boolean } = 
   return room;
 }
 
-const roomExists = async (id: number) =>
-  (await prisma.chatRoom.findUnique({ where: { id } })) !== null;
+const roomExists = async (id: number) => (await prisma.chatRoom.findUnique({ where: { id } })) !== null;
 
 describe('purgeExpiredEmptyChatRooms', () => {
   it('deletes a room that has been empty longer than the retention period, with its messages', async () => {

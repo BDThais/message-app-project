@@ -69,7 +69,7 @@ describe('POST /friend/requests/:id/accept', () => {
     ]);
   });
 
-  it("answers 404 when the request does not exist or is not addressed to the requester, changing nothing", async () => {
+  it('answers 404 when the request does not exist or is not addressed to the requester, changing nothing', async () => {
     const alice = await createUser('Alice');
     const bob = await createUser('Bob');
     const carol = await createUser('Carol');
@@ -158,10 +158,7 @@ describe('POST /friend/requests/:id/accept', () => {
 
     // Whether the second call finds the request already gone (404) or waits
     // for the first one and skips the existing rows (201) depends on timing.
-    const responses = await Promise.all([
-      agent.post(acceptUrl(pending.id)),
-      agent.post(acceptUrl(pending.id)),
-    ]);
+    const responses = await Promise.all([agent.post(acceptUrl(pending.id)), agent.post(acceptUrl(pending.id))]);
 
     const statuses = responses.map((r) => r.status).sort();
     expect(statuses[0]).toBe(201);
@@ -190,8 +187,8 @@ describe('POST /friend/requests/:id/accept', () => {
       ]);
 
       const statuses = responses.map((r) => r.status);
-      expect(statuses, `round ${round + 1}`).toSatisfy((s: number[]) =>
-        s.every((status) => status === 201 || status === 404) && s.includes(201)
+      expect(statuses, `round ${round + 1}`).toSatisfy(
+        (s: number[]) => s.every((status) => status === 201 || status === 404) && s.includes(201),
       );
       expect(await friendPairs(), `round ${round + 1}`).toEqual([
         [alice.id, bob.id],

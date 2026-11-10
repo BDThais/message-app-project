@@ -23,7 +23,7 @@ describe(`POST ${route}`, () => {
     expect(outbox.sent).toEqual([]);
   });
 
-  it('mails a working link to the account\'s own address, for an account that has no link yet', async () => {
+  it("mails a working link to the account's own address, for an account that has no link yet", async () => {
     // Accounts that existed before email verification start like this: unverified, no link.
     const alice = await createUser('Alice');
     const agent = await loginAs(alice);
@@ -44,7 +44,9 @@ describe(`POST ${route}`, () => {
 
   it('replaces the old link once the cooldown is over: only the newest works', async () => {
     const alice = await createUser('Alice');
-    const oldToken = await createVerificationLink(alice, { createdAt: new Date(Date.now() - RESEND_COOLDOWN_MS - 1000) });
+    const oldToken = await createVerificationLink(alice, {
+      createdAt: new Date(Date.now() - RESEND_COOLDOWN_MS - 1000),
+    });
     const agent = await loginAs(alice);
 
     const res = await agent.post(route).send();
@@ -95,7 +97,7 @@ describe(`POST ${route}`, () => {
     expect(outbox.sent).toHaveLength(1); // signup's mail, and nothing from this request
   });
 
-  it('only ever writes the requester\'s own link', async () => {
+  it("only ever writes the requester's own link", async () => {
     const alice = await createUser('Alice');
     const bob = await createUser('Bob');
     const bobsToken = await createVerificationLink(bob, { createdAt: new Date(Date.now() - 2 * RESEND_COOLDOWN_MS) });
@@ -105,7 +107,7 @@ describe(`POST ${route}`, () => {
 
     expect(outbox.sent.map((mail) => mail.to)).toEqual([alice.email]);
     expect((await prisma.emailVerificationToken.findUniqueOrThrow({ where: { userId: bob.id } })).tokenHash).toBe(
-      hashToken(bobsToken)
+      hashToken(bobsToken),
     );
   });
 

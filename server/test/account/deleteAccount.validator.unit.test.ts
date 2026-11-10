@@ -7,7 +7,10 @@ import { validateDeleteAccountBody } from '../../src/modules/account/deleteAccou
 describe('validateDeleteAccountBody', () => {
   it.each([
     { desc: 'a password', body: { password: 'Str0ng!Pass' } },
-    { desc: 'a password and unknown fields, which are ignored', body: { password: 'Str0ng!Pass', email: 'x@example.com' } },
+    {
+      desc: 'a password and unknown fields, which are ignored',
+      body: { password: 'Str0ng!Pass', email: 'x@example.com' },
+    },
   ])('accepts $desc', ({ body }) => {
     expect(validateDeleteAccountBody(body)).toEqual({ valid: true, data: { password: 'Str0ng!Pass' } });
   });

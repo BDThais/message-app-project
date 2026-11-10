@@ -7,7 +7,7 @@ const lastWeek = new Date(2026, 9, 18, 8, 5).toISOString();
 const lastYear = new Date(2025, 11, 31, 23, 59).toISOString();
 
 describe('roomTitle', () => {
-  it('is the room\'s name, and a stand-in once the other member (direct) or the name (group) is gone', () => {
+  it("is the room's name, and a stand-in once the other member (direct) or the name (group) is gone", () => {
     expect(roomTitle({ type: 'direct', name: 'Bea' })).toBe('Bea');
     expect(roomTitle({ type: 'direct', name: null })).toBe('Deleted user');
     expect(roomTitle({ type: 'group', name: 'Project chat' })).toBe('Project chat');

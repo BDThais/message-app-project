@@ -53,7 +53,7 @@ describe('startEmptyChatRoomCleanup', () => {
   it('skips a tick while the previous sweep is still running', async () => {
     let finishSweep!: () => void;
     purge.mockImplementationOnce(
-      () => new Promise((resolve) => (finishSweep = () => resolve({ stamped: 0, deleted: 0 })))
+      () => new Promise((resolve) => (finishSweep = () => resolve({ stamped: 0, deleted: 0 }))),
     );
 
     const stop = startEmptyChatRoomCleanup(options);

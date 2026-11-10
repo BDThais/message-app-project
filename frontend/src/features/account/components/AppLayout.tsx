@@ -18,7 +18,10 @@ export function AppLayout() {
     <div className="flex h-dvh flex-col">
       <header className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-line bg-surface px-4 py-2.5 sm:px-6">
         <Logo />
-        <nav aria-label="Main" className="order-last -mx-2 flex basis-full items-center gap-1 sm:order-none sm:mx-0 sm:basis-auto">
+        <nav
+          aria-label="Main"
+          className="order-last -mx-2 flex basis-full items-center gap-1 sm:order-none sm:mx-0 sm:basis-auto"
+        >
           <NavLink to="/chat">Chats</NavLink>
           <NavLink to="/friends">Friends</NavLink>
           <NavLink to="/settings">Settings</NavLink>

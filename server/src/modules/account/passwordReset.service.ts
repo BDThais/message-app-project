@@ -124,7 +124,7 @@ export type ResetPasswordResult =
 export function resetPasswordWithToken(
   token: string,
   newPasswordHash: string,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): Promise<ResetPasswordResult> {
   const tokenHash = hashToken(token);
 
@@ -134,7 +134,9 @@ export function resetPasswordWithToken(
     if (!row) return { status: 'invalid' };
 
     // The user row before the token row (see the lock order at the top of the file).
-    const [locked] = await tx.$queryRaw<{ email: string }[]>`SELECT email FROM users WHERE id = ${row.userId} FOR UPDATE`;
+    const [locked] = await tx.$queryRaw<
+      { email: string }[]
+    >`SELECT email FROM users WHERE id = ${row.userId} FOR UPDATE`;
     if (!locked) return { status: 'invalid' };
 
     const claimed = await tx.passwordResetToken.deleteMany({ where: { tokenHash, expiresAt: { gt: now } } });

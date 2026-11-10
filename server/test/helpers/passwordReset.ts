@@ -29,7 +29,7 @@ export async function createVerifiedUser(name: string, password?: string) {
  */
 export async function createResetLink(
   user: { id: number },
-  options: { createdAt?: Date; expiresAt?: Date } = {}
+  options: { createdAt?: Date; expiresAt?: Date } = {},
 ): Promise<string> {
   const token = generateToken();
 

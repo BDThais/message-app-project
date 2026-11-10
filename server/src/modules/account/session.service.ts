@@ -23,7 +23,9 @@ export interface SessionSettings {
 export function checkSessionSettings(settings: SessionSettings): void {
   const ttl = settings.SESSION_TTL_MS;
   if (!Number.isInteger(ttl) || ttl < 1 || Number.isNaN(new Date(Date.now() + ttl).getTime())) {
-    throw new Error('SESSION_TTL_MS must be a whole number of milliseconds, at least 1 (the default is 604800000, 7 days)');
+    throw new Error(
+      'SESSION_TTL_MS must be a whole number of milliseconds, at least 1 (the default is 604800000, 7 days)',
+    );
   }
 }
 
@@ -56,10 +58,7 @@ export function deleteSession(sessionId: string) {
  * caller can react differently: an expired session is deleted here, but only
  * the HTTP layer can tell the browser to drop its cookie.
  */
-export type SessionLookup =
-  | { status: 'valid'; user: User }
-  | { status: 'expired' }
-  | { status: 'missing' };
+export type SessionLookup = { status: 'valid'; user: User } | { status: 'expired' } | { status: 'missing' };
 
 export async function findSessionUser(sessionId: string): Promise<SessionLookup> {
   const session = await prisma.session.findUnique({

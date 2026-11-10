@@ -93,10 +93,13 @@ describe('addMessageToCache', () => {
 
     addMessageToCache(queryClient, message(6));
 
-    expect(idsOf(queryClient)).toEqual([[6, 5, 4], [3, 2, 1]]);
+    expect(idsOf(queryClient)).toEqual([
+      [6, 5, 4],
+      [3, 2, 1],
+    ]);
   });
 
-  it('stores a message that arrives twice once (the sender\'s own answer, then the socket event)', () => {
+  it("stores a message that arrives twice once (the sender's own answer, then the socket event)", () => {
     queryClient.setQueryData(chatKeys.messages(1), twoPages());
     queryClient.setQueryData(chatKeys.list(), [room(1)]);
 
@@ -104,7 +107,10 @@ describe('addMessageToCache', () => {
     const afterFirst = queryClient.getQueryData(chatKeys.messages(1));
     addMessageToCache(queryClient, message(6));
 
-    expect(idsOf(queryClient)).toEqual([[6, 5, 4], [3, 2, 1]]);
+    expect(idsOf(queryClient)).toEqual([
+      [6, 5, 4],
+      [3, 2, 1],
+    ]);
     expect(queryClient.getQueryData(chatKeys.messages(1))).toBe(afterFirst); // not even a new object
   });
 
@@ -114,7 +120,7 @@ describe('addMessageToCache', () => {
     expect(queryClient.getQueryData(chatKeys.messages(1))).toBeUndefined();
   });
 
-  it('updates the room\'s preview and moves it to the top, and leaves its unread count alone', () => {
+  it("updates the room's preview and moves it to the top, and leaves its unread count alone", () => {
     queryClient.setQueryData(chatKeys.list(), [
       room(2, { lastMessage: preview(20, 'other', '2026-10-20T10:00:00.000Z') }),
       room(1, { unreadCount: 3, lastMessage: preview(5, 'before', '2026-10-20T09:00:00.000Z') }),
@@ -172,7 +178,8 @@ describe('markMessageDeletedInCache', () => {
 
     markMessageDeletedInCache(queryClient, 1, 4, '2026-10-20T10:00:00.000Z');
 
-    const deleted = queryClient.getQueryData<InfiniteData<MessageListResponse>>(chatKeys.messages(1))?.pages[0]?.messages[1];
+    const deleted = queryClient.getQueryData<InfiniteData<MessageListResponse>>(chatKeys.messages(1))?.pages[0]
+      ?.messages[1];
     expect(deleted).toMatchObject({ id: 4, content: '', deletedAt: '2026-10-20T10:00:00.000Z' });
   });
 
@@ -182,18 +189,21 @@ describe('markMessageDeletedInCache', () => {
     markMessageDeletedInCache(queryClient, 1, 4, '2026-10-20T10:00:00.000Z');
     markMessageDeletedInCache(queryClient, 1, 4, '2026-10-20T10:00:09.000Z');
 
-    const deleted = queryClient.getQueryData<InfiniteData<MessageListResponse>>(chatKeys.messages(1))?.pages[0]?.messages[1];
+    const deleted = queryClient.getQueryData<InfiniteData<MessageListResponse>>(chatKeys.messages(1))?.pages[0]
+      ?.messages[1];
     expect(deleted?.deletedAt).toBe('2026-10-20T10:00:00.000Z');
   });
 });
 
 describe('markRoomReadInCache', () => {
-  it('sets that room\'s unread count to 0 and touches no other room', () => {
+  it("sets that room's unread count to 0 and touches no other room", () => {
     queryClient.setQueryData(chatKeys.list(), [room(1, { unreadCount: 3 }), room(2, { unreadCount: 5 })]);
 
     markRoomReadInCache(queryClient, 1);
 
-    expect(queryClient.getQueryData<ChatRoomSummary[]>(chatKeys.list())?.map(({ unreadCount }) => unreadCount)).toEqual([0, 5]);
+    expect(queryClient.getQueryData<ChatRoomSummary[]>(chatKeys.list())?.map(({ unreadCount }) => unreadCount)).toEqual(
+      [0, 5],
+    );
   });
 
   it('does nothing when the room list was never loaded', () => {
@@ -214,7 +224,10 @@ describe('mergeNewestPageIntoCache', () => {
 
     expect(result).toBe('merged');
     const pages = queryClient.getQueryData<InfiniteData<MessageListResponse>>(chatKeys.messages(1))?.pages;
-    expect(pages?.map((page) => page.messages.map(({ id }) => id))).toEqual([[6, 5, 4], [3, 2, 1]]);
+    expect(pages?.map((page) => page.messages.map(({ id }) => id))).toEqual([
+      [6, 5, 4],
+      [3, 2, 1],
+    ]);
     expect(pages?.[0]?.messages[2]?.content).toBe('changed');
   });
 
@@ -253,7 +266,10 @@ describe('mergeNewestPageIntoCache', () => {
   });
 
   it('is a gap when nothing is loaded and there is more behind the page: there is nothing to catch up from', () => {
-    queryClient.setQueryData(chatKeys.messages(1), { pages: [{ messages: [], hasMore: false }], pageParams: [undefined] });
+    queryClient.setQueryData(chatKeys.messages(1), {
+      pages: [{ messages: [], hasMore: false }],
+      pageParams: [undefined],
+    });
 
     const result = mergeNewestPageIntoCache(queryClient, 1, { messages: [message(60), message(59)], hasMore: true });
 
@@ -262,7 +278,10 @@ describe('mergeNewestPageIntoCache', () => {
   });
 
   it('adds the whole page to a conversation with nothing loaded when nothing is behind it', () => {
-    queryClient.setQueryData(chatKeys.messages(1), { pages: [{ messages: [], hasMore: false }], pageParams: [undefined] });
+    queryClient.setQueryData(chatKeys.messages(1), {
+      pages: [{ messages: [], hasMore: false }],
+      pageParams: [undefined],
+    });
 
     const result = mergeNewestPageIntoCache(queryClient, 1, { messages: [message(2), message(1)], hasMore: false });
 
@@ -283,12 +302,15 @@ describe('mergeNewestPageIntoCache', () => {
 });
 
 describe('refreshPreviewAfterChange', () => {
-  const previewIn = (rooms: ChatRoomSummary[] | undefined, id = 1) => rooms?.find((each) => each.id === id)?.lastMessage;
+  const previewIn = (rooms: ChatRoomSummary[] | undefined, id = 1) =>
+    rooms?.find((each) => each.id === id)?.lastMessage;
   const list = () => queryClient.getQueryData<ChatRoomSummary[]>(chatKeys.list());
 
   it('shows the new text when the edited message is the preview', () => {
     queryClient.setQueryData(chatKeys.messages(1), twoPages());
-    queryClient.setQueryData(chatKeys.list(), [room(1, { lastMessage: preview(5, 'message 5', message(5).createdAt) })]);
+    queryClient.setQueryData(chatKeys.list(), [
+      room(1, { lastMessage: preview(5, 'message 5', message(5).createdAt) }),
+    ]);
     replaceMessageInCache(queryClient, message(5, { content: 'fixed', editedAt: '2026-10-20T10:00:00.000Z' }));
 
     expect(refreshPreviewAfterChange(queryClient, 1, 5)).toBe('updated');
@@ -313,7 +335,9 @@ describe('refreshPreviewAfterChange', () => {
 
   it('leaves the cache alone when the changed message is not the preview', () => {
     queryClient.setQueryData(chatKeys.messages(1), twoPages());
-    queryClient.setQueryData(chatKeys.list(), [room(1, { lastMessage: preview(5, 'message 5', message(5).createdAt) })]);
+    queryClient.setQueryData(chatKeys.list(), [
+      room(1, { lastMessage: preview(5, 'message 5', message(5).createdAt) }),
+    ]);
     markMessageDeletedInCache(queryClient, 1, 4, '2026-10-20T10:00:00.000Z');
     const before = list();
 
@@ -328,7 +352,15 @@ describe('refreshPreviewAfterChange', () => {
 
   it('has no preview when everything is loaded and everything is deleted', () => {
     queryClient.setQueryData(chatKeys.messages(1), {
-      pages: [{ messages: [message(2, { content: '', deletedAt: '2026-10-20T10:00:00.000Z' }), message(1, { content: '', deletedAt: '2026-10-20T10:00:00.000Z' })], hasMore: false }],
+      pages: [
+        {
+          messages: [
+            message(2, { content: '', deletedAt: '2026-10-20T10:00:00.000Z' }),
+            message(1, { content: '', deletedAt: '2026-10-20T10:00:00.000Z' }),
+          ],
+          hasMore: false,
+        },
+      ],
       pageParams: [undefined],
     });
     queryClient.setQueryData(chatKeys.list(), [room(1, { lastMessage: preview(2, 'two', message(2).createdAt) })]);
@@ -352,7 +384,7 @@ describe('refreshPreviewAfterChange', () => {
     expect(list()).toBe(before);
   });
 
-  it('cannot say when the room\'s messages were never loaded', () => {
+  it("cannot say when the room's messages were never loaded", () => {
     queryClient.setQueryData(chatKeys.list(), [room(1, { lastMessage: preview(5, 'five', message(5).createdAt) })]);
 
     expect(refreshPreviewAfterChange(queryClient, 1, 5)).toBe('unknown');

@@ -8,7 +8,14 @@ import type {
   VerifyEmailBody,
 } from '@contract/requests';
 import type { LogoutResponse, MeResponse, MessageResponse, UserResponse } from '@contract/responses';
-import type { ChangePasswordInput, LoginInput, ResetPasswordInput, SignupInput, UpdateProfileInput, User } from './types';
+import type {
+  ChangePasswordInput,
+  LoginInput,
+  ResetPasswordInput,
+  SignupInput,
+  UpdateProfileInput,
+  User,
+} from './types';
 
 // One function per endpoint; no React and no caching in here (see queries.ts for that).
 
@@ -63,7 +70,10 @@ export async function updateProfile({ name, avatarUrl }: UpdateProfileInput): Pr
 
 /** Every other session of the account is signed out; the one that asks stays. */
 export async function changePassword({ currentPassword, newPassword }: ChangePasswordInput): Promise<void> {
-  await api.post<void>('/account/password', { current_password: currentPassword, new_password: newPassword } satisfies ChangePasswordBody);
+  await api.post<void>('/account/password', {
+    current_password: currentPassword,
+    new_password: newPassword,
+  } satisfies ChangePasswordBody);
 }
 
 export async function deleteAccount(password: string): Promise<void> {

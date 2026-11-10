@@ -37,7 +37,7 @@ describe('errorHandler', () => {
     expect(logged).toHaveBeenCalledOnce();
   });
 
-  it('answers with the error\'s own 4xx status and message when it is safe to expose', () => {
+  it("answers with the error's own 4xx status and message when it is safe to expose", () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
     const res = fakeRes();
 

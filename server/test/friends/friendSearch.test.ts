@@ -84,7 +84,7 @@ describe('GET /friend/search/:tel', () => {
       });
     });
 
-    it('is friend for someone in the requester\'s friend list, from either side', async () => {
+    it("is friend for someone in the requester's friend list, from either side", async () => {
       const alice = await createUser('Alice');
       const bob = await createUser('Bob');
       await makeFriends(alice.id, bob.id);
@@ -122,7 +122,7 @@ describe('GET /friend/search/:tel', () => {
       });
     });
 
-    it('ignores the found user\'s friendships and requests with other users', async () => {
+    it("ignores the found user's friendships and requests with other users", async () => {
       const alice = await createUser('Alice');
       const bob = await createUser('Bob');
       const carol = await createUser('Carol');

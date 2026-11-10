@@ -28,7 +28,7 @@ export async function createChatRoom(
   requesterId: number,
   memberIds: number[],
   name: string | undefined,
-  avatarUrl: string | undefined
+  avatarUrl: string | undefined,
 ): Promise<CreateChatRoomResult> {
   return prisma.$transaction(async (tx) => {
     if ((await findNonFriendIds(tx, requesterId, memberIds)).length > 0) {
@@ -72,7 +72,7 @@ export function directRoomLockKey(userA: number, userB: number): bigint {
 export async function createDirectChatRoom(
   tx: Prisma.TransactionClient,
   requesterId: number,
-  otherUserId: number
+  otherUserId: number,
 ): Promise<{ room: ChatRoomWithMembers; created: boolean }> {
   // Nothing in the schema says that a pair of users has one direct room, so the look-up below and the
   // insert after it have to be one step: two simultaneous requests for the same pair would both find
@@ -88,10 +88,7 @@ export async function createDirectChatRoom(
   const existing = await tx.chatRoom.findFirst({
     where: {
       type: ChatRoomType.direct,
-      AND: [
-        { members: { some: { memberId: requesterId } } },
-        { members: { some: { memberId: otherUserId } } },
-      ],
+      AND: [{ members: { some: { memberId: requesterId } } }, { members: { some: { memberId: otherUserId } } }],
     },
     ...roomWithMembersArgs,
   });
@@ -114,7 +111,7 @@ export async function createGroupChatRoom(
   requesterId: number,
   memberIds: number[],
   name: string | undefined,
-  avatarUrl: string | undefined
+  avatarUrl: string | undefined,
 ): Promise<{ room: ChatRoomWithMembers; created: boolean }> {
   const newRoom = await tx.chatRoom.create({
     data: {
@@ -156,10 +153,7 @@ export type ChatRoomSummaryData = Omit<ChatRoomSummary, 'createdAt' | 'lastMessa
  * `IS NULL OR <>` (a plain `<>` would drop them). The (chat_id, id) index serves the lookup, and
  * `COUNT(*)::int` keeps the result a number rather than a BigInt.
  */
-export async function countUnreadMessages(
-  userId: number,
-  chatIds: number[]
-): Promise<Map<number, number>> {
+export async function countUnreadMessages(userId: number, chatIds: number[]): Promise<Map<number, number>> {
   if (chatIds.length === 0) {
     return new Map();
   }
@@ -177,15 +171,12 @@ export async function countUnreadMessages(
 
   return new Map(rows.map((row) => [row.chatId, row.unreadCount]));
 }
- 
+
 /**
  * Direct rooms of a user, or just one with `chatId`. name and avatarUrl come from the *other* member:
  * a direct room has none of its own.
  */
-export async function getDirectChatRoomsForUser(
-  userId: number,
-  chatId?: number
-): Promise<ChatRoomSummaryData[]> {
+export async function getDirectChatRoomsForUser(userId: number, chatId?: number): Promise<ChatRoomSummaryData[]> {
   const rooms = await prisma.chatRoom.findMany({
     where: {
       type: 'direct',
@@ -207,15 +198,18 @@ export async function getDirectChatRoomsForUser(
       },
     },
   });
-  const unreadCounts = await countUnreadMessages(userId, rooms.map((room) => room.id));
- 
+  const unreadCounts = await countUnreadMessages(
+    userId,
+    rooms.map((room) => room.id),
+  );
+
   return rooms.map((room) => {
     // otherMember can be missing if they've since left the room (a direct
     // room isn't deleted until it has zero members left, so a lone
     // remaining member can still list it).
     const otherMember = room.members[0]?.member;
     const lastMessage = room.messages[0] ?? null;
- 
+
     return {
       id: room.id,
       type: 'direct',
@@ -227,14 +221,14 @@ export async function getDirectChatRoomsForUser(
     };
   });
 }
- 
+
 /**
  * Group and private rooms of a user, or just one with `chatId`, with the room's own name and avatarUrl
  * (a private room has neither: both are null, and the client shows its own title).
  */
 export async function getGroupAndPrivateChatRoomsForUser(
   userId: number,
-  chatId?: number
+  chatId?: number,
 ): Promise<ChatRoomSummaryData[]> {
   const rooms = await prisma.chatRoom.findMany({
     where: {
@@ -251,8 +245,11 @@ export async function getGroupAndPrivateChatRoomsForUser(
       },
     },
   });
-  const unreadCounts = await countUnreadMessages(userId, rooms.map((room) => room.id));
- 
+  const unreadCounts = await countUnreadMessages(
+    userId,
+    rooms.map((room) => room.id),
+  );
+
   return rooms.map((room) => ({
     id: room.id,
     type: room.type,
@@ -263,17 +260,14 @@ export async function getGroupAndPrivateChatRoomsForUser(
     unreadCount: unreadCounts.get(room.id) ?? 0,
   }));
 }
- 
+
 // Most recent activity first: the time of the last message that has not been
 // deleted if there is one, otherwise the room's creation time.
 export function activityTimestamp(room: ChatRoomSummaryData): number {
   return (room.lastMessage?.createdAt ?? room.createdAt).getTime();
 }
 
-export async function updateChatRoomById(
-  chatId: number,
-  data: { name?: string; avatarUrl?: string | null }
-) {
+export async function updateChatRoomById(chatId: number, data: { name?: string; avatarUrl?: string | null }) {
   return prisma.chatRoom.update({
     where: { id: chatId },
     data,
@@ -293,7 +287,7 @@ export async function deleteChatRoomById(chatId: number) {
 export async function getChatRoomSummaryForUser(
   userId: number,
   chatId: number,
-  roomType: RoomType
+  roomType: RoomType,
 ): Promise<ChatRoomSummaryData | undefined> {
   const [room] =
     roomType === 'direct'

@@ -20,7 +20,7 @@ import { prisma } from '../../lib/prisma';
  */
 export async function purgeExpiredEmptyChatRooms(
   retentionMs: number,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): Promise<{ stamped: number; deleted: number }> {
   const stamped = await prisma.chatRoom.updateMany({
     where: { emptiedAt: null, members: { none: {} } },

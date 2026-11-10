@@ -24,10 +24,10 @@ export async function getChatRooms(signal?: AbortSignal): Promise<ChatRoomSummar
 
 /** The direct room with a friend: a new one (201) or the one that already exists (200). Two people who are not friends (any more) get a 403. */
 export async function createDirectChatRoom(userId: number): Promise<CreatedChatRoom> {
-  const { chatRoom } = await api.post<CreatedChatRoomResponse>(
-    '/chat',
-    { type: 'direct', member_ids: [userId] } satisfies CreateChatRoomBody,
-  );
+  const { chatRoom } = await api.post<CreatedChatRoomResponse>('/chat', {
+    type: 'direct',
+    member_ids: [userId],
+  } satisfies CreateChatRoomBody);
   return chatRoom;
 }
 
@@ -50,15 +50,16 @@ export function getMessages(
 }
 
 export async function sendMessage(chatId: number, content: string): Promise<Message> {
-  const { message } = await api.post<ChatMessageResponse>(`/chat/${chatId}/message`, { content } satisfies SendMessageBody);
+  const { message } = await api.post<ChatMessageResponse>(`/chat/${chatId}/message`, {
+    content,
+  } satisfies SendMessageBody);
   return message;
 }
 
 export async function editMessage(chatId: number, messageId: number, content: string): Promise<Message> {
-  const { message } = await api.patch<ChatMessageResponse>(
-    `/chat/${chatId}/message/${messageId}`,
-    { content } satisfies EditMessageBody,
-  );
+  const { message } = await api.patch<ChatMessageResponse>(`/chat/${chatId}/message/${messageId}`, {
+    content,
+  } satisfies EditMessageBody);
   return message;
 }
 
@@ -69,9 +70,8 @@ export async function deleteMessage(chatId: number, messageId: number): Promise<
 
 /** Moves the requester's read marker up to `messageId`; resolves to where the marker is afterwards. */
 export async function markRead(chatId: number, messageId: number): Promise<number> {
-  const { lastReadMessageId } = await api.put<MarkReadResponse>(
-    `/chat/${chatId}/read`,
-    { message_id: messageId } satisfies MarkReadBody,
-  );
+  const { lastReadMessageId } = await api.put<MarkReadResponse>(`/chat/${chatId}/read`, {
+    message_id: messageId,
+  } satisfies MarkReadBody);
   return lastReadMessageId;
 }

@@ -18,9 +18,7 @@ describe('POST /chat/:chatid/member', () => {
     const room = await createGroupRoom(admin.id);
     const agent = await loginAs(admin);
 
-    const res = await agent
-      .post(`/api/chat/${room.id}/member`)
-      .send({ member_ids: [bob.id, carol.id] });
+    const res = await agent.post(`/api/chat/${room.id}/member`).send({ member_ids: [bob.id, carol.id] });
 
     expect(res.status).toBe(201);
     expect(res.body).toEqual({
@@ -75,7 +73,7 @@ describe('POST /chat/:chatid/member', () => {
   // What was said before someone joined counts as read for them. The marker
   // is the newest message that is not deleted; a deleted one above it never
   // counted as unread anyway.
-  it('starts a new member with the existing messages counted as read, and leaves an existing member\'s marker alone', async () => {
+  it("starts a new member with the existing messages counted as read, and leaves an existing member's marker alone", async () => {
     const admin = await createUser('Alice');
     const bob = await createUser('Bob');
     const dave = await createUser('Dave');
@@ -156,9 +154,7 @@ describe('POST /chat/:chatid/member', () => {
     const room = await createGroupRoom(admin.id);
     const agent = await loginAs(admin);
 
-    const res = await agent
-      .post(`/api/chat/${room.id}/member`)
-      .send({ member_ids: [friend.id, stranger.id] });
+    const res = await agent.post(`/api/chat/${room.id}/member`).send({ member_ids: [friend.id, stranger.id] });
 
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: 'Only your friends can be added to a chat room' });
@@ -173,12 +169,8 @@ describe('POST /chat/:chatid/member', () => {
     const room = await createGroupRoom(admin.id);
     const agent = await loginAs(admin);
 
-    const forStranger = await agent
-      .post(`/api/chat/${room.id}/member`)
-      .send({ member_ids: [friend.id, stranger.id] });
-    const forMissing = await agent
-      .post(`/api/chat/${room.id}/member`)
-      .send({ member_ids: [friend.id, 999_999] });
+    const forStranger = await agent.post(`/api/chat/${room.id}/member`).send({ member_ids: [friend.id, stranger.id] });
+    const forMissing = await agent.post(`/api/chat/${room.id}/member`).send({ member_ids: [friend.id, 999_999] });
 
     expect(forMissing.status).toBe(forStranger.status);
     expect(forMissing.body).toEqual(forStranger.body);
@@ -186,7 +178,7 @@ describe('POST /chat/:chatid/member', () => {
     expect(await memberIdsOf(room.id)).toEqual([admin.id]);
   });
 
-  it('only counts the admin\'s own friend-list row, not the other user\'s', async () => {
+  it("only counts the admin's own friend-list row, not the other user's", async () => {
     const admin = await createUser('Alice');
     const other = await createUser('Bob');
     // Half a friendship: Bob's row names Alice, Alice's row does not name Bob.

@@ -67,7 +67,11 @@ export function SignupForm() {
           onChange={(event) => setPassword(event.target.value)}
           hint={PASSWORD_HINT}
         />
-        {signup.error && <Notice tone="error" role="alert">{signup.error.message}</Notice>}
+        {signup.error && (
+          <Notice tone="error" role="alert">
+            {signup.error.message}
+          </Notice>
+        )}
         <Button type="submit" fullWidth disabled={signup.isPending}>
           {signup.isPending ? 'Creating account…' : 'Create account'}
         </Button>

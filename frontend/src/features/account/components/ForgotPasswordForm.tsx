@@ -34,7 +34,11 @@ export function ForgotPasswordForm() {
           onChange={(event) => setEmail(event.target.value)}
           hint="The address you signed up with."
         />
-        {request.error && <Notice tone="error" role="alert">{request.error.message}</Notice>}
+        {request.error && (
+          <Notice tone="error" role="alert">
+            {request.error.message}
+          </Notice>
+        )}
         <Button type="submit" fullWidth disabled={request.isPending}>
           {request.isPending ? 'Sending…' : 'Send reset link'}
         </Button>
@@ -55,8 +59,8 @@ function ResetRequested({ email }: { email: string }) {
       </p>
       <p>
         It can take a few minutes. If nothing arrives, check your spam folder, wait a minute and try again. If that
-        address was never verified, the mail holds a verification link instead: verify it first, then ask for a new reset
-        link.
+        address was never verified, the mail holds a verification link instead: verify it first, then ask for a new
+        reset link.
       </p>
       <FormLinks>
         <Link to="/login">Back to sign in</Link>

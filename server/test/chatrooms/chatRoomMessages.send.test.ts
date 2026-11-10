@@ -14,9 +14,7 @@ describe('POST /chat/:chatid/message', () => {
     const room = await createGroupRoom(admin.id, [member.id]);
     const agent = await loginAs(member);
 
-    const res = await agent
-      .post(`/api/chat/${room.id}/message`)
-      .send({ content: '  Hello!  ' });
+    const res = await agent.post(`/api/chat/${room.id}/message`).send({ content: '  Hello!  ' });
 
     expect(res.status).toBe(201);
     expect(res.body.message).toMatchObject({
@@ -46,7 +44,7 @@ describe('POST /chat/:chatid/message', () => {
     });
   });
 
-  it('becomes the room\'s lastMessage on GET /chat', async () => {
+  it("becomes the room's lastMessage on GET /chat", async () => {
     const user = await createUser('Alice');
     const room = await createGroupRoom(user.id);
     const agent = await loginAs(user);

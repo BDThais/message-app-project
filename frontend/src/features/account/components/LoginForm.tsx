@@ -52,7 +52,11 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-        {login.error && <Notice tone="error" role="alert">{login.error.message}</Notice>}
+        {login.error && (
+          <Notice tone="error" role="alert">
+            {login.error.message}
+          </Notice>
+        )}
         <Button type="submit" fullWidth disabled={login.isPending}>
           {login.isPending ? 'Signing in…' : 'Sign in'}
         </Button>

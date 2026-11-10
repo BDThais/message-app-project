@@ -115,14 +115,16 @@ async function cleanup() {
   }
   const login = await call('POST', '/account/login', { body: { email, password: currentPassword } });
   if (login.status !== 200 || !login.cookie) {
-    console.log(`\nCould not log in to delete the throwaway account (${login.status}): delete the row for ${email} by hand.`);
+    console.log(
+      `\nCould not log in to delete the throwaway account (${login.status}): delete the row for ${email} by hand.`,
+    );
     return;
   }
   const del = await call('DELETE', '/account/me', { body: { password: currentPassword }, cookie: login.cookie });
   console.log(
     del.status === 204
       ? '\nDeleted the throwaway account.'
-      : `\nCould not delete the throwaway account (${del.status} ${del.text}): delete the row for ${email} by hand.`
+      : `\nCould not delete the throwaway account (${del.status} ${del.text}): delete the row for ${email} by hand.`,
   );
 }
 
@@ -138,7 +140,7 @@ try {
   const signup = await call('POST', '/account/signup', { body: account });
   if (signup.status === 409) {
     throw new Error(
-      `FAILED: signup answered 409 (${signup.text}). If an earlier run stopped halfway, delete the leftover row for ${email} and run again.`
+      `FAILED: signup answered 409 (${signup.text}). If an earlier run stopped halfway, delete the leftover row for ${email} and run again.`,
     );
   }
   expect(signup.status === 201, 'signup answered 201');
@@ -165,10 +167,14 @@ try {
   const resetToken = await pasteToken('Reset your password');
   const weak = await call('POST', '/account/password/reset', { body: { token: resetToken, new_password: 'weak' } });
   expect(weak.status === 400, 'a weak password is refused (400) without using up the link');
-  const reset = await call('POST', '/account/password/reset', { body: { token: resetToken, new_password: newPassword } });
+  const reset = await call('POST', '/account/password/reset', {
+    body: { token: resetToken, new_password: newPassword },
+  });
   expect(reset.status === 204, 'the link from the mail sets the new password (204)');
   currentPassword = newPassword;
-  const reuse = await call('POST', '/account/password/reset', { body: { token: resetToken, new_password: `${newPassword}z` } });
+  const reuse = await call('POST', '/account/password/reset', {
+    body: { token: resetToken, new_password: `${newPassword}z` },
+  });
   expect(reuse.status === 400, 'the same link a second time is refused (400)');
 
   step('4. after the reset');
