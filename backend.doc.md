@@ -794,5 +794,7 @@ HTTP request
 
 ## Notes
 
+Formatting and linting are one setup for the whole repository, in its root (`npm run format`, `npm run check`; see "Formatting and linting" in the README and the decision in `frontend.doc.md`). The server was reformatted by it at 120 columns, and ESLint's findings in `server/` were three unused imports in two tests (removed), the two `declare global { namespace Express }` blocks (now allowed) and one unused name that starts with `_` (the convention of `noUnusedParameters`, now ESLint's too).
+
 This document reflects the current state of the repository. The auth module and the core chat-room backend are in place and working;
 the remaining messaging feature set is planned as incremental extension work for the app.

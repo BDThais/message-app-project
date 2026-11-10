@@ -47,6 +47,7 @@ Next priorities:
 ## Repository Layout
 
 - Root project files: README.md, api.doc.md (the API specification), backend.doc.md (server plan and implementation notes), frontend.doc.md (frontend plan)
+- Formatting and linting for both workspaces: package.json, .prettierrc.json, .prettierignore, eslint.config.js
 - Frontend workspace: frontend/ (plan and conventions: frontend.doc.md)
 - Backend server: server/
 - App entry point: server/src/app.ts
@@ -143,6 +144,19 @@ The test setup brings up the `chatapp_test` container, applies Prisma migrations
 The tests never send a mail. To try a real delivery through Resend, put `MAIL_TRANSPORT=resend`, `RESEND_API_KEY` and `MAIL_FROM` in `server/.env`, start the server with `npm run dev`, and run `npm run try:email -- <address>` in a second terminal; it walks through email verification and password reset and asks you to paste the link from each mail. Until a domain is verified in Resend, the address has to be the Resend account's own.
 
 The test connections run in the `Asia/Ho_Chi_Minh` time zone, whatever the database server is set to, so code that depends on the database clock instead of the application's fails in the tests (see `backend.doc.md`, "Test database setup").
+
+## Formatting and linting
+
+Prettier and ESLint are installed once, in the repository root, and look at both `server/` and `frontend/`. They are not dependencies of either, so the two lockfiles are untouched, and the root has its own TypeScript for them, because typescript-eslint does not read TypeScript 7 yet.
+
+```powershell
+npm install
+npm run format
+npm run lint
+npm run check
+```
+
+`npm install` is run once, in the repository root. `format` rewrites the files with Prettier (single quotes, trailing commas, 120 columns, and the Tailwind classes of every `className` in one fixed order). `lint` runs ESLint: the recommended JavaScript and TypeScript rules, the two classic React hooks rules, and, for the frontend, Tailwind class checks (a class Tailwind does not know, two classes that set the same property, a class written twice). `check` is `format:check` and `lint` together, for before a commit. The markdown files are not formatted: they are wrapped by hand. A new Tailwind token in `frontend/src/styles/theme.css` is known to both tools at once.
 
 ## Running the frontend
 
