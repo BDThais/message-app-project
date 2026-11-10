@@ -14,7 +14,7 @@ export const DEFAULT_SIGNED_IN_PATH = '/chat';
 export function safeRedirectPath(target: unknown, fallback: string = DEFAULT_SIGNED_IN_PATH): string {
   if (typeof target !== 'string') return fallback;
   if (!target.startsWith('/') || target.startsWith('//') || target.startsWith('/\\')) return fallback;
-  if (/[\u0000-\u001f]/.test(target)) return fallback;
+  if (Array.from(target).some((char) => char.charCodeAt(0) < 0x20)) return fallback; // a control character
   return target;
 }
 

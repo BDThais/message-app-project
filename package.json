@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix --max-warnings 0",
+    "check": "npm run format:check && npm run lint"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

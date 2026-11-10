@@ -1,4 +1,4 @@
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import { describe, expect, it, vi } from 'vitest';
 
 // The controller alone, with the services replaced: only the part of getChatRoomById that the

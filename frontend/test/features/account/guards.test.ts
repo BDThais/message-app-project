@@ -55,6 +55,17 @@ describe('safeRedirectPath', () => {
   ])('falls back to /chat for %j', (target) => {
     expect(safeRedirectPath(target)).toBe('/chat');
   });
+
+  it.each(['\u0000', '\t', '\r', '\u001f'])(
+    'falls back to /chat for a path with the control character %j',
+    (character) => {
+      expect(safeRedirectPath(`/chat${character}x`)).toBe('/chat');
+    },
+  );
+
+  it('keeps a path with a space, the first character after the control characters', () => {
+    expect(safeRedirectPath('/chat x')).toBe('/chat x');
+  });
 });
 
 describe('requireUser', () => {

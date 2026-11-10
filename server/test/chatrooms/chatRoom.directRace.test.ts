@@ -1,7 +1,5 @@
 import pg from 'pg';
-import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import app from '../../src/app';
 import { prisma } from '../../src/lib/prisma';
 import { directRoomLockKey } from '../../src/modules/chatrooms/chatRoom.service';
 import { makeFriends } from '../helpers/friends';
