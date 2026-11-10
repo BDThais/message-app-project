@@ -1,6 +1,6 @@
 import { replaceEqualDeep, type InfiniteData, type QueryClient } from '@tanstack/react-query';
 import { chatKeys } from './keys';
-import type { ChatRoomSummary, CreatedChatRoom, Message, MessageListResponse } from './types';
+import type { ChatRoomDetail, ChatRoomSummary, CreatedChatRoom, Member, Message, MessageListResponse } from './types';
 
 // Every change to what the server told us goes through one of these functions: the mutations call
 // them with what the API answered, and the socket handlers of step 6 will call the same ones. So each
@@ -193,4 +193,52 @@ export function markRoomReadInCache(queryClient: QueryClient, chatId: number): v
   queryClient.setQueryData<ChatRoomSummary[]>(chatKeys.list(), (rooms) =>
     rooms?.map((room) => (room.id === chatId && room.unreadCount !== 0 ? { ...room, unreadCount: 0 } : room)),
   );
+}
+
+/** The order GET /api/chat/:chatid/member uses: admins first, then by name, case and accents ignored. */
+export function sortMembers(members: Member[]): Member[] {
+  const roleRank = (member: Member) => (member.role === 'admin' ? 0 : 1);
+  return [...members].sort(
+    (a, b) =>
+      roleRank(a) - roleRank(b) ||
+      a.member.name.localeCompare(b.member.name, undefined, { sensitivity: 'base' }) ||
+      a.member.id - b.member.id,
+  );
+}
+
+/** People the server added: into the member list if it is loaded (one already there is replaced, not doubled). */
+export function addMembersToCache(queryClient: QueryClient, chatId: number, added: Member[]): void {
+  queryClient.setQueryData<Member[]>(chatKeys.members(chatId), (members) => {
+    if (!members) return undefined;
+    const addedIds = new Set(added.map(({ member }) => member.id));
+    return sortMembers([...members.filter(({ member }) => !addedIds.has(member.id)), ...added]);
+  });
+}
+
+/** A member as PATCH answered with it (a new role), the list sorted again. */
+export function replaceMemberInCache(queryClient: QueryClient, member: Member): void {
+  queryClient.setQueryData<Member[]>(
+    chatKeys.members(member.chatId),
+    (members) => members && sortMembers(members.map((each) => (each.member.id === member.member.id ? member : each))),
+  );
+}
+
+export function removeMemberFromCache(queryClient: QueryClient, chatId: number, userId: number): void {
+  queryClient.setQueryData<Member[]>(chatKeys.members(chatId), (members) =>
+    members?.filter(({ member }) => member.id !== userId),
+  );
+}
+
+/** A room as PATCH /api/chat/:chatid answered with it: its new name and avatar in the room list. */
+export function updateRoomInCache(queryClient: QueryClient, room: ChatRoomDetail): void {
+  queryClient.setQueryData<ChatRoomSummary[]>(chatKeys.list(), (rooms) =>
+    rooms?.map((each) => (each.id === room.id ? { ...each, name: room.name, avatarUrl: room.avatarUrl } : each)),
+  );
+}
+
+/** A room the person left or deleted: out of the list, and nothing of it is kept (its messages and members would be stale and unreachable). */
+export function removeRoomFromCache(queryClient: QueryClient, chatId: number): void {
+  queryClient.setQueryData<ChatRoomSummary[]>(chatKeys.list(), (rooms) => rooms?.filter(({ id }) => id !== chatId));
+  queryClient.removeQueries({ queryKey: chatKeys.messages(chatId) });
+  queryClient.removeQueries({ queryKey: chatKeys.members(chatId) });
 }

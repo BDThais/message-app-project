@@ -20,8 +20,11 @@ export function RoomList({ roomOpen }: { roomOpen: boolean }) {
       aria-label="Chats"
       className={`${roomOpen ? 'hidden md:flex' : 'flex'} min-h-0 w-full flex-col border-r border-line bg-surface md:w-80 md:shrink-0`}
     >
-      <div className="px-4 py-3">
+      <div className="flex items-baseline justify-between gap-2 px-4 py-3">
         <Heading className={roomOpen ? 'text-2xl font-semibold tracking-tight' : undefined}>Chats</Heading>
+        <Link to="/chat/new" className="text-sm">
+          New group
+        </Link>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pb-3">
         <ListState query={rooms} empty="You have no chats yet." loading="Loading chats…" inset>

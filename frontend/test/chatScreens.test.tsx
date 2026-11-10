@@ -27,6 +27,11 @@ async function findMessage(text: Parameters<typeof screen.findByText>[0]) {
 }
 const messageNamed = (text: string) => within(messageList()).getByText(text).closest('li') as HTMLElement;
 const textOf = (element: HTMLElement) => element.textContent ?? '';
+/** The links of the rooms in the list, newest first: not "New group", which is a link of the list but not a room. */
+const roomLinks = (nav: HTMLElement) =>
+  within(nav)
+    .getAllByRole('listitem')
+    .map((item) => within(item).getByRole('link'));
 /** Opens the menu of a message and picks one of its actions: that is where Edit and Delete are. */
 async function chooseAction(user: ReturnType<typeof userEvent.setup>, messageText: string, action: 'Edit' | 'Delete') {
   await user.click(within(messageNamed(messageText)).getByRole('button', { name: 'Message actions' }));
@@ -53,7 +58,9 @@ describe('the room list', () => {
     state.addMessage({ chatId: 2, sender: carl, content: 'Who reviews?', createdAt: '2026-10-21T09:05:00.000Z' });
     renderApp('/chat');
 
-    const links = await within(await screen.findByRole('navigation', { name: 'Chats' })).findAllByRole('link');
+    const nav = await screen.findByRole('navigation', { name: 'Chats' });
+    await within(nav).findAllByRole('listitem');
+    const links = roomLinks(nav);
 
     expect(links).toHaveLength(2);
     expect(textOf(links[0]!)).toContain('Project chat');
@@ -109,7 +116,9 @@ describe('the room list', () => {
     renderApp('/chat/1');
 
     expect(await screen.findByRole('heading', { level: 1, name: 'My Documents' })).toBeTruthy();
-    const link = await within(await screen.findByRole('navigation', { name: 'Chats' })).findByRole('link');
+    const link = await within(await screen.findByRole('navigation', { name: 'Chats' })).findByRole('link', {
+      name: /My Documents/,
+    });
     expect(textOf(link)).toContain('My Documents');
     expect(textOf(link)).toContain('You: Buy milk');
   });
@@ -289,11 +298,7 @@ describe('sending', () => {
     renderApp('/chat/1');
     const nav = await screen.findByRole('navigation', { name: 'Chats' });
     await screen.findByText('No messages yet. Say hello!');
-    expect(
-      within(nav)
-        .getAllByRole('link')
-        .map((link) => textOf(link).includes('Carl')),
-    ).toEqual([true, false]);
+    expect(roomLinks(nav).map((link) => textOf(link).includes('Carl'))).toEqual([true, false]);
 
     const box = screen.getByRole('textbox', { name: 'Message' });
     await user.type(box, '  Hello there  ');
@@ -303,12 +308,8 @@ describe('sending', () => {
     expect((box as HTMLTextAreaElement).value).toBe('');
     expect(state.count('POST /api/chat/1/message')).toBe(1);
     expect(state.count('GET /api/chat/1/message')).toBe(1);
-    expect(
-      within(nav)
-        .getAllByRole('link')
-        .map((link) => textOf(link).includes('Bea')),
-    ).toEqual([true, false]);
-    expect(textOf(within(nav).getAllByRole('link')[0]!)).toContain('Hello there');
+    expect(roomLinks(nav).map((link) => textOf(link).includes('Bea'))).toEqual([true, false]);
+    expect(textOf(roomLinks(nav)[0]!)).toContain('Hello there');
   });
 
   it('sends on Enter and writes a new line on Shift+Enter', async () => {

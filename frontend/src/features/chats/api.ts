@@ -1,19 +1,26 @@
 import { api } from '@/lib/http';
 import type {
+  AddMembersBody,
+  ChangeMemberRoleBody,
   CreateChatRoomBody,
   EditMessageBody,
   GetMessagesQuery,
   MarkReadBody,
   SendMessageBody,
+  UpdateChatRoomBody,
 } from '@contract/requests';
 import type {
+  AddMembersResponse,
   ChatMessageResponse,
+  ChatRoomDetailResponse,
   ChatRoomListResponse,
   CreatedChatRoomResponse,
   MarkReadResponse,
+  MemberListResponse,
+  MemberResponse,
   MessageListResponse,
 } from '@contract/responses';
-import type { ChatRoomSummary, CreatedChatRoom, Message } from './types';
+import type { ChatRoomDetail, ChatRoomSummary, CreatedChatRoom, Member, Message, Role } from './types';
 
 // One function per endpoint; no React and no caching in here (see queries.ts and cache.ts for that).
 
@@ -74,4 +81,62 @@ export async function markRead(chatId: number, messageId: number): Promise<numbe
     message_id: messageId,
   } satisfies MarkReadBody);
   return lastReadMessageId;
+}
+
+/** What a new group room takes: `name` and `avatarUrl` can be left out, and `memberIds` can be empty (the creator is then alone in it). */
+export interface CreateGroupInput {
+  name?: string;
+  avatarUrl?: string;
+  memberIds: number[];
+}
+
+/** Every one of `memberIds` has to be a friend: one who is not refuses the whole request with a 403, and no room is made. */
+export async function createGroupChatRoom({ name, avatarUrl, memberIds }: CreateGroupInput): Promise<CreatedChatRoom> {
+  const body: CreateChatRoomBody = { type: 'group', member_ids: memberIds };
+  if (name !== undefined) body.name = name;
+  if (avatarUrl !== undefined) body.avatar_url = avatarUrl;
+  const { chatRoom } = await api.post<CreatedChatRoomResponse>('/chat', body);
+  return chatRoom;
+}
+
+/** What PATCH /api/chat/:chatid can change: `avatarUrl: null` clears the avatar, and a field that is left out stays. */
+export interface UpdateRoomInput {
+  name?: string;
+  avatarUrl?: string | null;
+}
+
+export async function updateChatRoom(chatId: number, { name, avatarUrl }: UpdateRoomInput): Promise<ChatRoomDetail> {
+  const body: UpdateChatRoomBody = {};
+  if (name !== undefined) body.name = name;
+  if (avatarUrl !== undefined) body.avatar_url = avatarUrl;
+  const { chatRoom } = await api.patch<ChatRoomDetailResponse>(`/chat/${chatId}`, body);
+  return chatRoom;
+}
+
+/** Deletes the room with its messages and memberships (admins of group rooms only). */
+export async function deleteChatRoom(chatId: number): Promise<void> {
+  await api.delete<void>(`/chat/${chatId}`);
+}
+
+/** Admins first, then by name: the order the server answers in. */
+export async function getMembers(chatId: number, signal?: AbortSignal): Promise<Member[]> {
+  const { members } = await api.get<MemberListResponse>(`/chat/${chatId}/member`, { signal });
+  return members;
+}
+
+/** Users who are already members are skipped by the server and come back in `alreadyMemberIds`. */
+export function addMembers(chatId: number, memberIds: number[]): Promise<AddMembersResponse> {
+  return api.post<AddMembersResponse>(`/chat/${chatId}/member`, { member_ids: memberIds } satisfies AddMembersBody);
+}
+
+/** Removes a member, or leaves the room when `userId` is the person's own id. */
+export async function removeMember(chatId: number, userId: number): Promise<void> {
+  await api.delete<void>(`/chat/${chatId}/member/${userId}`);
+}
+
+export async function changeMemberRole(chatId: number, userId: number, role: Role): Promise<Member> {
+  const { member } = await api.patch<MemberResponse>(`/chat/${chatId}/member/${userId}`, {
+    role,
+  } satisfies ChangeMemberRoleBody);
+  return member;
 }

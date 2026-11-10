@@ -7,16 +7,26 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
+import { isApiError } from '@/lib/http';
 import {
+  addMembers,
+  changeMemberRole,
   createDirectChatRoom,
+  createGroupChatRoom,
+  deleteChatRoom,
   deleteMessage,
   editMessage,
   getChatRooms,
+  getMembers,
   getMessages,
   markRead,
+  removeMember,
   sendMessage,
+  updateChatRoom,
+  type UpdateRoomInput,
 } from './api';
 import {
+  addMembersToCache,
   addMessageToCache,
   addRoomToCache,
   markMessageDeletedInCache,
@@ -24,9 +34,15 @@ import {
   mergeNewestPageIntoCache,
   newestLoadedMessageId,
   refreshPreviewAfterChange,
+  removeMemberFromCache,
+  removeRoomFromCache,
+  replaceMemberInCache,
   replaceMessageInCache,
+  sortMembers,
+  updateRoomInCache,
 } from './cache';
 import { chatKeys } from './keys';
+import type { Role } from './types';
 
 // Until step 6 the screens ask again every few seconds so that other people's messages show up; the
 // socket pushes them instead, and step 6 removes this, `useNewestMessagesPolling` and the
@@ -160,5 +176,93 @@ export function useMarkRead(chatId: number) {
   return useMutation({
     mutationFn: (messageId: number) => markRead(chatId, messageId),
     onSuccess: () => markRoomReadInCache(queryClient, chatId),
+  });
+}
+
+export function useMembers(chatId: number) {
+  return useQuery({
+    queryKey: chatKeys.members(chatId),
+    queryFn: ({ signal }) => getMembers(chatId, signal),
+  });
+}
+
+/**
+ * A refusal that means the room or its members are not what the screen shows (the member is gone, the room
+ * was deleted, the last admin cannot go): ask the server again, and the server's text says why.
+ */
+function refreshWhenOutOfDate(queryClient: QueryClient, chatId: number, error: unknown): void {
+  if (isApiError(error) && (error.status === 404 || error.status === 409)) {
+    void queryClient.invalidateQueries({ queryKey: chatKeys.members(chatId) });
+    void queryClient.invalidateQueries({ queryKey: chatKeys.list() });
+  }
+}
+
+/** Makes a group room; the room goes into the list and its members, which the answer has, into the member cache. The caller goes to `room.id`. */
+export function useCreateGroupChat() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createGroupChatRoom,
+    onSuccess: (room) => {
+      addRoomToCache(queryClient, room);
+      queryClient.setQueryData(chatKeys.members(room.id), sortMembers(room.members));
+    },
+  });
+}
+
+/** The new name and avatar are in the room list at once, from the answer. */
+export function useUpdateChatRoom(chatId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateRoomInput) => updateChatRoom(chatId, input),
+    onSuccess: (room) => updateRoomInCache(queryClient, room),
+    onError: (error) => refreshWhenOutOfDate(queryClient, chatId, error),
+  });
+}
+
+/** The room is out of the cache for good: the caller leaves for the room list. */
+export function useDeleteChatRoom(chatId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => deleteChatRoom(chatId),
+    onSuccess: () => removeRoomFromCache(queryClient, chatId),
+    onError: (error) => refreshWhenOutOfDate(queryClient, chatId, error),
+  });
+}
+
+export function useAddMembers(chatId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (memberIds: number[]) => addMembers(chatId, memberIds),
+    onSuccess: ({ addedMembers }) => addMembersToCache(queryClient, chatId, addedMembers),
+    onError: (error) => refreshWhenOutOfDate(queryClient, chatId, error),
+  });
+}
+
+/** Removes someone else; the variable is their user id. */
+export function useRemoveMember(chatId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: number) => removeMember(chatId, userId),
+    onSuccess: (_result, userId) => removeMemberFromCache(queryClient, chatId, userId),
+    onError: (error) => refreshWhenOutOfDate(queryClient, chatId, error),
+  });
+}
+
+/** The person removes themself: the room is gone for them, so it leaves the cache and the caller leaves for the room list. */
+export function useLeaveChatRoom(chatId: number, userId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => removeMember(chatId, userId),
+    onSuccess: () => removeRoomFromCache(queryClient, chatId),
+    onError: (error) => refreshWhenOutOfDate(queryClient, chatId, error),
+  });
+}
+
+export function useChangeMemberRole(chatId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, role }: { userId: number; role: Role }) => changeMemberRole(chatId, userId, role),
+    onSuccess: (member) => replaceMemberInCache(queryClient, member),
+    onError: (error) => refreshWhenOutOfDate(queryClient, chatId, error),
   });
 }

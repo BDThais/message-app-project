@@ -5,14 +5,16 @@ import type {
   MarkReadResponse,
   MessageListResponse,
 } from '@contract/responses';
-import type { ChatRoomSummary, CreatedChatRoom } from '@contract/types';
+import type { ChatRoomDetail, ChatRoomSummary, CreatedChatRoom } from '@contract/types';
 import { numberField, textField } from './body';
+import { createGroupRoom, memberEndpoints, membersOf, roomEndpoints } from './groups';
 import { json, noContent } from './responses';
 import { personById, type Body, type FakeRoom, type FakeServer } from './state';
 
 // /api/chat, /api/chat/:id/message, /api/chat/:id/message/:messageId and /api/chat/:id/read, with the
-// query string kept apart. Only a direct room can be created.
-const ROUTE = /^(GET|POST|PATCH|PUT|DELETE) \/api\/chat(?:\/(\d+)(?:\/(message|read)(?:\/(\d+))?)?)?(?:\?(.*))?$/;
+// query string kept apart; `/member` is in groups.ts with the rest of the group rooms.
+const ROUTE =
+  /^(GET|POST|PATCH|PUT|DELETE) \/api\/chat(?:\/(\d+)(?:\/(message|read|member)(?:\/(\d+))?)?)?(?:\?(.*))?$/;
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -35,6 +37,17 @@ function summaryOf(room: FakeRoom, state: FakeServer): ChatRoomSummary {
         message.id > (room.lastReadMessageId ?? 0) && message.senderId !== mine && message.deletedAt === null,
     ).length,
   };
+}
+
+/** The room as GET /api/chat/:chatid shows it: the summary and John's role. */
+function detailOf(room: FakeRoom, state: FakeServer): ChatRoomDetail {
+  const mine = membersOf(room, state).find(({ userId }) => userId === state.session!.id);
+  return { ...summaryOf(room, state), role: mine?.role ?? 'member' };
+}
+
+/** What POST /api/chat answers with for a group room: the detail, and the members are added by the caller. */
+function createdOf(room: FakeRoom, state: FakeServer): CreatedChatRoom {
+  return { ...detailOf(room, state), members: [] };
 }
 
 /** POST /api/chat for a direct room: the other user has to be a friend, and the room between the two is reused. */
@@ -80,7 +93,11 @@ export function chatEndpoints(request: string, body: Body, state: FakeServer): R
   if (!state.session) return json({ error: 'Unauthorized Access' }, 401);
 
   if (chatIdText === undefined) {
-    if (method === 'POST') return createDirectRoom(body, state);
+    if (method === 'POST') {
+      return body?.type === 'group'
+        ? createGroupRoom(body, state, (room) => createdOf(room, state))
+        : createDirectRoom(body, state);
+    }
     if (method !== 'GET') return undefined;
     const time = (summary: ChatRoomSummary) => summary.lastMessage?.createdAt ?? summary.createdAt;
     const chatRooms = state.rooms
@@ -101,6 +118,8 @@ export function chatEndpoints(request: string, body: Body, state: FakeServer): R
     return json({ lastReadMessageId: room.lastReadMessageId } satisfies MarkReadResponse);
   }
 
+  if (part === undefined) return roomEndpoints(method!, room, body, state, (found) => detailOf(found, state));
+  if (part === 'member') return memberEndpoints(method!, room, messageIdText, body, state);
   if (part !== 'message') return undefined;
   if (method !== 'GET' && state.messageWriteError) return json({ error: state.messageWriteError }, 400);
 

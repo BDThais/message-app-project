@@ -2,4 +2,5 @@
 export const chatKeys = {
   list: () => ['chats', 'list'] as const,
   messages: (chatId: number) => ['chats', 'messages', chatId] as const,
+  members: (chatId: number) => ['chats', 'members', chatId] as const,
 };

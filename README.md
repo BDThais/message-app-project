@@ -1,6 +1,6 @@
 ﻿# Message App
 
-A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a React frontend (account, chat, friends and settings screens done, room management next). The REST API is in place (accounts with email verification and password reset, chat rooms, messages and the friend flows), while real-time messaging and the remaining frontend screens remain next on the roadmap.
+A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a React frontend (account, chat, friends, settings and group room screens done, real-time updates next). The REST API is in place (accounts with email verification and password reset, chat rooms, messages and the friend flows), while real-time messaging and the remaining frontend screens remain next on the roadmap.
 
 ## Project Status
 
@@ -26,11 +26,11 @@ The server's REST API is in place and the frontend is the current milestone. Imp
 - Chat screens in the frontend: the room list, the conversation with sending, editing and deleting messages, older messages and a read marker, refreshed by polling until Socket.io arrives
 - Friends screen in the frontend: search by phone number, send, accept, reject and cancel requests, the friend list, unfriend, and a button that opens the direct chat with a friend
 - Settings screen in the frontend: change the name and the avatar URL, change the password, delete the account
+- Group rooms in the frontend: make a group from your friends, a members panel with roles (make admin, remove, add people), rename, leave and delete
 
 Next priorities:
 
 - Real-time communication with Socket.io, built together with the frontend
-- Frontend screens for room management: group rooms, members and roles (step 5b in `frontend.doc.md`)
 - Production deployment and environment hardening
 
 ## Tech Stack

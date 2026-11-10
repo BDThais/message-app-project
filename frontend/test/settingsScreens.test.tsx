@@ -253,6 +253,9 @@ describe('deleting the account', () => {
 
     await user.click(within(rooms).getByRole('link', { name: 'Project chat' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/chat/3'));
+    // The link opens the members panel, where the person can make someone else an admin or delete the room.
+    expect(router.state.location.search).toEqual({ members: true });
+    expect(await screen.findByRole('region', { name: 'Members' })).toBeTruthy();
   });
 });
 

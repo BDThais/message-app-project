@@ -1,5 +1,5 @@
 import type { User } from '@/features/account/types';
-import type { Message, PublicUser, RoomType } from '@contract/types';
+import type { Message, PublicUser, Role, RoomType } from '@contract/types';
 
 export const PASSWORD = 'Str0ng!Pass';
 export const NEW_PASSWORD = 'An0ther!Pass';
@@ -39,6 +39,12 @@ export interface FakeFriendRequest {
   createdAt: string;
 }
 
+/** Someone in a room, John included: by id, so a name comes from `personById`. */
+export interface FakeMember {
+  userId: number;
+  role: Role;
+}
+
 /** A room of John's, as his list shows it: `name` is the other member's for a direct room, like the server's list. */
 export interface FakeRoom {
   id: number;
@@ -50,6 +56,8 @@ export interface FakeRoom {
   lastReadMessageId: number | null;
   /** The other member of a direct room, for the room POST /api/chat finds again. */
   memberId?: number;
+  /** Who is in a group room (John too, with his role); a direct or private room does not list them. */
+  members?: FakeMember[];
 }
 
 export interface Account {

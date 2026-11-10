@@ -60,7 +60,7 @@ export function DeleteAccount({ roomName }: { roomName: (chatId: number) => stri
         <ul aria-label="Rooms to sort out first" className="grid gap-1 text-sm">
           {blockingRooms.map((chatId) => (
             <li key={chatId}>
-              <Link to="/chat/$chatId" params={{ chatId: String(chatId) }}>
+              <Link to="/chat/$chatId" params={{ chatId: String(chatId) }} search={{ members: true }}>
                 {roomName(chatId)}
               </Link>
             </li>

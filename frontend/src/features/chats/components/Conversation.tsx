@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -14,8 +14,12 @@ import { ChatNotFound } from './ChatNotFound';
 import { MessageEditor } from './MessageEditor';
 import { MessageItem } from './MessageItem';
 
-/** The open room: its title, its messages, and the box to write in. Render it with `key={chatId}` so nothing is carried from one room to the next. */
-export function Conversation({ chatId }: { chatId: number }) {
+/**
+ * The open room: its title, its messages, and the box to write in. Render it with `key={chatId}` so nothing is carried
+ * from one room to the next. With a `membersPanel` that is shown in place of the messages and the box, which stay
+ * mounted behind it, so the scroll position and a half-written message are still there when the panel is closed.
+ */
+export function Conversation({ chatId, membersPanel }: { chatId: number; membersPanel?: ReactNode }) {
   const { data: user } = useMe();
   const rooms = useChatRooms();
   const messagesQuery = useMessages(chatId);
@@ -54,66 +58,77 @@ export function Conversation({ chatId }: { chatId: number }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ConversationHeader room={room} />
-      <div
-        ref={scroll.containerRef}
-        onScroll={scroll.onScroll}
-        role="log"
-        aria-label="Messages"
-        tabIndex={0}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 [overflow-anchor:none]"
-      >
-        <div className="mt-auto flex flex-col gap-3">
-          {messagesQuery.isPending && (
-            <p role="status" className="text-center text-sm text-muted">
-              Loading messages…
-            </p>
-          )}
-          {messagesQuery.isError && (
-            <div className="flex flex-col items-start gap-2">
-              <Notice tone="error" role="alert">
-                {messagesQuery.error.message}
-              </Notice>
-              {!messagesQuery.data && (
-                <Button type="button" size="sm" variant="secondary" onClick={() => void messagesQuery.refetch()}>
-                  Try again
-                </Button>
-              )}
-            </div>
-          )}
-          {messagesQuery.hasNextPage && (
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              disabled={messagesQuery.isFetchingNextPage}
-              onClick={scroll.loadOlder}
-            >
-              {messagesQuery.isFetchingNextPage ? 'Loading…' : 'Load earlier messages'}
-            </Button>
-          )}
-          {messagesQuery.data && messages.length === 0 && (
-            <p className="text-center text-sm text-muted">No messages yet. Say hello!</p>
-          )}
-          <ol className="flex flex-col gap-3">
-            {messages.map((message) => (
-              <MessageItem
-                key={message.id}
-                message={message}
-                chatId={chatId}
-                mine={message.senderId === user.id}
-                showSender={room?.type === 'group'}
-              />
-            ))}
-          </ol>
+      <ConversationHeader room={room} chatId={chatId} membersOpen={membersPanel !== undefined} />
+      <div hidden={membersPanel !== undefined} className="flex min-h-0 flex-1 flex-col">
+        <div
+          ref={scroll.containerRef}
+          onScroll={scroll.onScroll}
+          role="log"
+          aria-label="Messages"
+          tabIndex={0}
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 [overflow-anchor:none]"
+        >
+          <div className="mt-auto flex flex-col gap-3">
+            {messagesQuery.isPending && (
+              <p role="status" className="text-center text-sm text-muted">
+                Loading messages…
+              </p>
+            )}
+            {messagesQuery.isError && (
+              <div className="flex flex-col items-start gap-2">
+                <Notice tone="error" role="alert">
+                  {messagesQuery.error.message}
+                </Notice>
+                {!messagesQuery.data && (
+                  <Button type="button" size="sm" variant="secondary" onClick={() => void messagesQuery.refetch()}>
+                    Try again
+                  </Button>
+                )}
+              </div>
+            )}
+            {messagesQuery.hasNextPage && (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={messagesQuery.isFetchingNextPage}
+                onClick={scroll.loadOlder}
+              >
+                {messagesQuery.isFetchingNextPage ? 'Loading…' : 'Load earlier messages'}
+              </Button>
+            )}
+            {messagesQuery.data && messages.length === 0 && (
+              <p className="text-center text-sm text-muted">No messages yet. Say hello!</p>
+            )}
+            <ol className="flex flex-col gap-3">
+              {messages.map((message) => (
+                <MessageItem
+                  key={message.id}
+                  message={message}
+                  chatId={chatId}
+                  mine={message.senderId === user.id}
+                  showSender={room?.type === 'group'}
+                />
+              ))}
+            </ol>
+          </div>
         </div>
+        <MessageComposer chatId={chatId} />
       </div>
-      <MessageComposer chatId={chatId} />
+      {membersPanel}
     </div>
   );
 }
 
-function ConversationHeader({ room }: { room: ChatRoomSummary | undefined }) {
+function ConversationHeader({
+  room,
+  chatId,
+  membersOpen,
+}: {
+  room: ChatRoomSummary | undefined;
+  chatId: number;
+  membersOpen: boolean;
+}) {
   // Until the room list has loaded (or when the room is not in it yet) there is no name to show.
   const title = room ? roomTitle(room) : 'Chat';
 
@@ -123,7 +138,18 @@ function ConversationHeader({ room }: { room: ChatRoomSummary | undefined }) {
         <span aria-hidden="true">← </span>Chats
       </Link>
       <Avatar name={title} url={room?.avatarUrl ?? null} />
-      <h1 className="min-w-0 truncate">{title}</h1>
+      <h1 className="min-w-0 flex-1 truncate">{title}</h1>
+      {(room?.type === 'group' || membersOpen) && (
+        <Link
+          to="/chat/$chatId"
+          params={{ chatId: String(chatId) }}
+          search={{ members: membersOpen ? undefined : true }}
+          aria-label={membersOpen ? 'Back to messages' : undefined}
+          className="shrink-0 text-sm"
+        >
+          {membersOpen ? 'Messages' : 'Members'}
+        </Link>
+      )}
     </header>
   );
 }
