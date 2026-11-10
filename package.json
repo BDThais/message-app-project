@@ -1,0 +1,22 @@
+{
+  "name": "message-app-project",
+  "private": true,
+  "description": "Formatting and linting for server/ and frontend/. The two have their own dependencies and lockfiles; this one only holds the tools that look at both.",
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0",
+    "eslint-plugin-better-tailwindcss": "^4.10.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "prettier": "^3.9.10",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "tailwindcss": "^4.3.5",
+    "typescript": "~6.0",
+    "typescript-eslint": "^8.72.1"
+  }
+}

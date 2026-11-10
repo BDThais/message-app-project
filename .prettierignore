@@ -1,0 +1,11 @@
+node_modules
+dist
+package-lock.json
+
+# Written by tools
+server/src/generated
+server/prisma/migrations
+frontend/src/routeTree.gen.ts
+
+# The docs are written by hand, with their own wrapping
+*.md
