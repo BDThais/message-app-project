@@ -3,7 +3,7 @@
 ## Overview
 
 This project is a real-time messaging application built with PostgreSQL, Prisma, TypeScript, Express.js, and a React frontend.
-The backend has grown beyond the original account/session MVP and now includes a working chat-room foundation with direct, group and private room support, while the realtime features are still planned work.
+The backend has grown beyond the original account/session MVP and now includes a working chat-room foundation with direct, group and private room support, and Socket.io real-time events (built together with the frontend's step 6).
 
 The project has three documents: `./api.doc.md` specifies the API (what a client sends and gets back), this one is the server's plan and how it is built, and `./frontend.doc.md` is the frontend's plan.
 
@@ -103,14 +103,15 @@ Completed:
 - Routes nothing serves answer `404 { "error": "Route not found" }` through `notFoundHandler` (in `middlewares/ErrorHandler.ts`, registered in `app.ts` after the routers and before `errorHandler`), so Express's own HTML 404 page no longer breaks the rule that every error body is `{ error }`
 - The API contract (`src/contract/`, see "API contract" in Conventions): the entity shapes of `api.doc.md` as TypeScript, every endpoint's request, response and error bodies, `bodyFields` for reading a request body through them, and the controllers and validators of the account, chat room and friends modules written against them (the chat room and friends ones through their serializers). The account module's own user type is the contract's `User` (it was `PublicUser` in `account.service.ts`, a second type of that name next to the friends module's, which is now the contract's `PublicUser`), and `toPublicUser` is `toUser`.
 
+- Real-time events over Socket.io (`src/modules/realtime/`, `src/contract/events.ts`, see "Real-time events (implemented)"): the handshake with the session cookie, rooms per person, session and chat room that follow membership, one event for each change a REST endpoint commits (messages, rooms, members, read markers, friend requests), typing, and sockets closed with the session they were opened with.
+
 Still planned or not yet implemented:
 
 - Changing the email address (optional, see "Changing the address" under "Email verification (implemented)")
-- Real-time socket communication
 - Frontend application screens and state management (the scaffold exists; the steps still to do are in `./frontend.doc.md`)
 - Production deployment hardening
 
-The room and auth systems are now acting as the current working backend foundation. The friend endpoints are all in place, so the frontend is the next milestone, with realtime (built together with the frontend's step 6) after it; both remain future work rather than a missing piece of the current baseline.
+The room and auth systems are now acting as the current working backend foundation. The friend endpoints are all in place and the real-time events are built, so what remains is production hardening (the `Origin` check, a second instance, see "Known limits" under "Real-time events (implemented)") and the frontend's last step.
 
 Note: In the database, the mutual friendship model stores two rows per friendship pair, one for each user, as described in the project requirements.
 
@@ -491,13 +492,19 @@ Every account has a private chat room, like "My Documents" in Zalo: a place to w
 - the conversion has no test: it reads `is_bot`, which does not exist once the migrations have run, so no test database can hold the old shape. It was tried by hand on 2026-11-01 on a database in the old shape (two accounts with a direct room, a group and messages between them, and private rooms made by the old backfill and by a later signup): the three private rooms became `private` with only their owners in them, the other rooms and all the messages stayed, and the trigger, its function, the bot and the column were gone
 - tests: `privateRoom.test.ts` (what signup creates, who sees it and how it is listed beside direct and group rooms, the refused signup, the member list, messages in the room, the group-only actions it refuses, `POST /api/chat` with the type, a direct room with a friend beside it, leaving, removing somebody else, deleting the account). The test setup empties `users` like every other table, and `createUser` in the helpers does not give a user a room, so existing tests are unchanged; `createPrivateRoom(userId)` does it where a test needs one
 
-### Real-time events (planned)
+### Real-time events (implemented)
 
-The events and the handshake are specified in `./api.doc.md` ("Real-time events"). The server side is meant to stay a notification layer on top of the REST endpoints rather than a second way to write data, so validation, permissions and tests are reused as they are:
+The events and the handshake are specified in `./api.doc.md` ("Real-time events"). The sockets are a notification layer on top of the REST endpoints and not a second way to write data, so validation, permissions and tests are reused as they are.
 
-- a controller (or a small `events` module) emits after the service call succeeds. Services keep returning a result the caller can inspect, like `editMessage`'s `edited` / `unchanged`, so only real changes are broadcast. Services still never import Socket.io
-- handshake: read the session cookie and resolve it with the same `getSessionUser` lookup; reject the connection without a valid session. In development the browser reaches Socket.io through the frontend's dev proxy (`/socket.io` with `ws: true`, to be added to `frontend/vite.config.ts` in step 6 of the frontend plan), so the handshake carries the same first-party cookie as the REST calls
-- leaving, being removed, or a deleted room must also remove the affected sockets from `chat:<chatId>` (`socketsLeave`), otherwise a removed member keeps receiving that room's messages
+- **Where it lives.** `src/modules/realtime/`: `realtime.server.ts` (`attachRealtime(httpServer)`: the handshake and the `typing` relay; `closeRealtime`), `realtime.emitter.ts` (one `emit...` function per event, plus `disconnectSession` and `disconnectUser`) and `realtime.rooms.ts` (the room names, `user:<id>`, `chat:<id>`, `session:<id>`, in one place). The event types are `src/contract/events.ts`, shared with the frontend. `server.ts` makes the HTTP server with `http.createServer(app)`, attaches Socket.io to it and listens on that; a failed listen is an `error` event of that server (the process logs it and exits with 1), where Express's `app.listen` would have passed it to its callback.
+- **Controllers emit, services do not.** A controller calls the emitter after the service answered with a change; the services still never import Socket.io. Without a registered server (every test of the REST endpoints) the emit functions do nothing. `publish` in the emitter catches anything an emission throws and logs it: the write has been committed, so a failed notification must not turn into a 500, and a client that missed it asks again.
+- **Only real changes are sent.** Three service results grew what the emission needs: `deleteMessage` answers `{ status: 'deleted', deletedAt }` (the stamp that was written), `markChatRoomRead` answers `moved` (`false` when the marker was already there, so `read:updated` is not sent), and `resetPasswordWithToken` answers the `userId` whose sessions it deleted. `editMessage` already told `edited` from `unchanged`; `addChatRoomMembers` already listed who was added; `createChatRoom` already says `created`.
+- **Handshake.** The cookie header is parsed with the `cookie` package and the session resolved with `findSessionUser`, the lookup REST requests use (an expired session is deleted there, as for a REST request). The rooms are joined inside the Socket.io middleware, so the client's `connect` always means "in my rooms". The socket joins `user:<id>` before the memberships are read (`getChatIdsOfMember`): a room the person is added to from then on reaches this socket through the user's room, and one added before the read is in the result. The other order could miss a room added in between.
+- **Rooms follow membership.** `emitMembersAdded` makes the people's sockets join `chat:<id>` before it emits, so the new members receive `member:added` and what follows; `emitMemberRemoved` makes the person's sockets leave first, then tells the room who went (`member:removed`) and the person that the room is gone for them (`chat:removed`, to `user:<id>`, so every tab hears it); `emitChatDeleted` tells the room and empties it.
+- **Ending a session ends its sockets.** The controllers of logout (`disconnectSession`), password change (`disconnectUser(userId, { exceptSessionId })`), password reset and account deletion (`disconnectUser(userId)`) close them. `disconnectSockets()` without `close`, so the client sees `io server disconnect` and does not reconnect by itself.
+- **Typing.** `typing` from a socket is relayed to the room's other sockets if the sender is in it, the payload is checked like a request body, and a socket is relayed at most once a second per room (every relay is a broadcast, so one socket must not be able to make the server send more). The name is the one the socket connected with.
+- **Tests.** `test/realtime/` runs the real HTTP server with Socket.io on a free port (`useRealtimeServer` in `test/helpers/realtime.ts`) and `socket.io-client` (a dev dependency; WebSocket only, with the session cookie in `extraHeaders`), and drives the REST endpoints with supertest: the handshake (no cookie, a made-up, an expired and a signed-out session; the rooms joined), every event with who receives it and who does not, what is not sent (a refused or unchanged request), membership following the rooms, typing, and the end of each kind of session. A negative check waits a short while (`settle`) because the network is involved. `realtime.emitter.unit.test.ts` needs no database. A mutation check on 2026-11-11 (28 changes to the emit calls, the room joins and leaves, the handshake, the typing guards and the session ends) was caught by a test each.
+- **Known limits.** One server instance (a second needs the Redis adapter, and `socketsJoin`/`socketsLeave` become asynchronous). The handshake does not check the `Origin` header: with `SameSite=Lax` a cross-site page cannot make the browser send the cookie, but a page on the same site and another origin could; the fix is an allow-list from a setting, once the production origin is known. A connected socket outlives its session's expiry (the session is checked at the handshake, and at the end calls above, not on a timer). A socket that reads its memberships just before a removal commits and joins after the removal's `socketsLeave` stays in the removed room's socket room until it reconnects (a window of a few milliseconds). Deleting an account sends no `member:removed` to the rooms the person was in.
 
 ## Project Structure
 
@@ -533,7 +540,8 @@ message-app/
     │   │   ├── types.ts             // Role, User, PublicUser, ChatRoomSummary/Detail, CreatedChatRoom, Member, Message, FriendRequest, Relationship, SearchResult
     │   │   ├── requests.ts          // request bodies and queries, snake_case as on the wire
     │   │   ├── responses.ts         // bodies of successful responses
-    │   │   └── errors.ts            // ApiErrorBody and the error bodies with an extra key
+    │   │   ├── errors.ts            // ApiErrorBody and the error bodies with an extra key
+    │   │   └── events.ts            // the Socket.io events and their payloads, in both directions
     │   ├── lib/
     │   │   ├── constants.ts
     │   │   ├── emailAddress.ts      // validateEmail (validator.isEmail) and normalizeEmail (lower case): the one place that decides what an address is and how it is spelled; used by signup, login and the password reset
@@ -579,6 +587,10 @@ message-app/
     │       │   ├── message.service.ts
     │       │   ├── chatRoomCleanup.service.ts
     │       │   └── chatRoomCleanup.job.ts
+    │       ├── realtime/
+    │       │   ├── realtime.server.ts           // attachRealtime (the handshake, the typing relay), closeRealtime
+    │       │   ├── realtime.emitter.ts          // emitMessageNew ... emitFriendAccepted, disconnectSession, disconnectUser; nothing happens without a registered server
+    │       │   └── realtime.rooms.ts            // userRoom, chatRoom, sessionRoom: the room names
     │       └── friends/
     │           ├── friend.routes.ts
     │           ├── friend.controller.ts
@@ -593,6 +605,7 @@ message-app/
         │   ├── chatRooms.ts                  // createGroupRoom, createDirectRoom, promoteToAdmin, memberIdsOf, createPrivateRoom
         │   ├── emailVerification.ts          // tokenFromMail (the token in a mailed link), createVerificationLink (stores a link in a chosen state)
         │   ├── friends.ts                    // makeFriends, createFriendRequest (optional createdAt)
+        │   ├── realtime.ts                   // useRealtimeServer (the HTTP server with Socket.io on a free port), openSession (a session and an agent with its cookie), connectSocket (a socket.io-client with the cookie; `received` keeps its events), eventually, payloadsOf, settle
         │   ├── passwordReset.ts              // createVerifiedUser (optionally with a real password), createResetLink (stores a link in a chosen state)
         │   └── mailer.ts                     // InMemoryMailer and the shared `outbox` (installed as the app's mailer and emptied before each test by setup.ts)
         ├── account/
@@ -663,6 +676,14 @@ message-app/
         │   ├── chatRoomAuth.unit.test.ts     // withChatMembership and the guard of loadChatMembership: an error for a route mounted without its middleware (no database)
         │   ├── chatRoomCleanup.service.test.ts
         │   └── chatRoomCleanup.job.unit.test.ts
+        ├── realtime/
+        │   ├── realtime.handshake.test.ts    // a socket without, with a made-up, an expired and a signed-out session is refused; the rooms a socket joins
+        │   ├── realtime.messages.test.ts     // message:new, message:updated, message:deleted and read:updated: who receives them, and nothing for a refused or unchanged request
+        │   ├── realtime.rooms.test.ts        // chat:updated, chat:removed, member:added, member:removed and member:role_changed, and the sockets joining and leaving the room
+        │   ├── realtime.friends.test.ts      // friend:request and friend:accepted
+        │   ├── realtime.typing.test.ts       // the relay, the room check, the checked payload and the one-a-second limit
+        │   ├── realtime.session.test.ts      // logout, a password change, a deletion and a reset close the right sockets, and a closed session is not let back in
+        │   └── realtime.emitter.unit.test.ts // nothing without a server, the room it addresses, a failure is logged and not thrown (no database)
         └── friends/
             ├── friendSearch.test.ts          // GET /api/friend/search/:tel
             ├── friendRequests.send.test.ts   // POST /api/friend/requests
@@ -682,7 +703,7 @@ Conventions:
 - A new feature gets its own folder under `src/modules/` with its routes, controller, validator(s) and service(s); its router is mounted in `app.ts` under `/api/<feature>`.
 - All database operations are kept in the `*.service.ts` files and go through the shared Prisma client from `src/lib/prisma.ts`. There is no separate repositories layer, so a transaction (room creation, member removal) stays inside one service function.
 - A fixed technical limit shared by more than one module (for example the Postgres INTEGER max, reused as both an ID ceiling and a `setInterval`/`setTimeout` delay ceiling) is declared once in `src/lib/constants.ts` and imported everywhere it's needed, instead of being redeclared per file.
-- Services never import Express (no `req`, `res` or cookies). HTTP concerns live in controllers and middleware, so other entry points, such as the future Socket.io handlers, can call the same services.
+- Services never import Express (no `req`, `res` or cookies). HTTP concerns live in controllers and middleware, so other entry points, such as the Socket.io handshake (`modules/realtime/`), can call the same services.
 - Middleware used by a single feature lives in that feature's folder (for example `chatRoomAuth.middleware.ts`, `accountRateLimit.middleware.ts`, `friendRateLimit.middleware.ts`); `src/middlewares/` only holds middleware shared across features. Rate limiters follow the same rule: each feature keeps its own limiters, keyed by IP where nobody is signed in yet (`loginLimiter`) and by user id after `requireUserAuth` (`friendSearchLimiter`, `passwordCheckLimiter`).
 - Error bodies: every `4xx` and `5xx` response has the shape `{ "error": "<text>" }`, whichever layer sends it (controller, feature middleware, rate limiter, `errorHandler`, `notFoundHandler`). `message` is not used for errors because it is already a success-body key for a chat message (`POST` and `PATCH /api/chat/:chatid/message` return `{ "message": { ... } }`), so a client could otherwise get a string and an object under the same key from one endpoint. Validators keep their own internal `{ valid: false, message }` result; the controller puts that text under `error`. A success body that only confirms an action (`201 { "message": "Account created successfully" }` from signup) is not an error body and is unchanged.
 - Typed requests: Express types `req.user` and `req.chatMembership` as optional, because only the middleware in front of a route makes them true. A handler that needs them is written against `AuthenticatedRequest` (`req.user` is there) or `ChatRoomRequest` (`req.user` and `req.chatMembership`) and is mounted with `withUser(handler)` or `withChatMembership(handler)`, which check at run time that the middleware ran. That is one check in one place instead of a `!` in every handler, and a route mounted without its middleware answers `500` through the error handler (and is logged) instead of failing on `req.user.id`. A per-user rate limiter keys on `userKey` (`UserSessionAuth.ts`), which checks the same thing: it throws instead of counting everybody under one key. Every module is done: there is no `req.user!` left in `src/`.
@@ -787,9 +808,9 @@ HTTP request
 
 ## Roadmap
 
-1. Build the React frontend and integrate it with TanStack Query, step by step (see `./frontend.doc.md`; step 1, the scaffold, is done)
-2. Implement real-time communication with Socket.io, server and client together (see "Real-time events" and step 6 of the frontend plan)
-3. Add authentication-aware UI states and protected routes (the route guards are in place; the sign-up, verification and reset screens are step 2 of the frontend plan)
+1. Build the React frontend and integrate it with TanStack Query, step by step (see `./frontend.doc.md`; steps 1 to 6 are done)
+2. Real-time communication with Socket.io, server and client together: done (see "Real-time events (implemented)")
+3. Add authentication-aware UI states and protected routes (the route guards, and the sign-up, verification and reset screens, are done)
 4. Add deployment configuration and production hardening, including the Resend account and verified domain that production mail needs (see "Email delivery", "Email verification (implemented)" and "Password reset (implemented)")
 
 ## Notes

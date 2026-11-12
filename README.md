@@ -1,10 +1,10 @@
 ﻿# Message App
 
-A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a React frontend (account, chat, friends, settings and group room screens done, real-time updates next). The REST API is in place (accounts with email verification and password reset, chat rooms, messages and the friend flows), while real-time messaging and the remaining frontend screens remain next on the roadmap.
+A TypeScript full-stack messaging application with an Express API, PostgreSQL database, Prisma ORM, and a React frontend (account, chat, friends, settings and group room screens done, with real-time updates over Socket.io). The REST API is in place (accounts with email verification and password reset, chat rooms, messages and the friend flows), and messages, rooms, members and friend requests reach the other people's screens as they happen; the design and deployment steps remain next on the roadmap.
 
 ## Project Status
 
-The server's REST API is in place and the frontend is the current milestone. Implemented features include:
+The server's REST API and its real-time events are in place and the frontend is the current milestone. Implemented features include:
 
 - User signup with validation and duplicate checks
 - Password hashing and credential verification
@@ -20,17 +20,17 @@ The server's REST API is in place and the frontend is the current milestone. Imp
 - Messages: send, list with pagination, edit, delete, and a read marker per member
 - Friends: search by phone number, friend requests (send, list, accept, reject, cancel), the friend list and unfriending; friendship is required to start a conversation
 - Profile update, password change and account deletion
+- Real-time events over Socket.io: the handshake uses the session cookie, and a message, an edit or a delete, a room or member change, a read marker, a friend request and typing reach the other people's open pages; the sockets of a session are closed when it ends
 - Prisma models for users, sessions, chat rooms, messages, and friendship flows
 - Vitest integration tests for the account, chat-room, message and friend endpoints
-- React frontend scaffold in `frontend/`: Vite dev server that proxies `/api` to the server, route guards for signed-in and signed-out pages, and the account screens: sign up, sign in and out, forgot and reset password, email verification (the plan and the next steps are in `frontend.doc.md`)
-- Chat screens in the frontend: the room list, the conversation with sending, editing and deleting messages, older messages and a read marker, refreshed by polling until Socket.io arrives
+- React frontend scaffold in `frontend/`: Vite dev server that proxies `/api` and `/socket.io` to the server, route guards for signed-in and signed-out pages, and the account screens: sign up, sign in and out, forgot and reset password, email verification (the plan and the next steps are in `frontend.doc.md`)
+- Chat screens in the frontend: the room list, the conversation with sending, editing and deleting messages, older messages, a read marker, and live updates (new, edited and deleted messages, unread counts, room and member changes, typing) over Socket.io
 - Friends screen in the frontend: search by phone number, send, accept, reject and cancel requests, the friend list, unfriend, and a button that opens the direct chat with a friend
 - Settings screen in the frontend: change the name and the avatar URL, change the password, delete the account
 - Group rooms in the frontend: make a group from your friends, a members panel with roles (make admin, remove, add people), rename, leave and delete
 
 Next priorities:
 
-- Real-time communication with Socket.io, built together with the frontend
 - Production deployment and environment hardening
 
 ## Tech Stack
@@ -42,7 +42,7 @@ Next priorities:
 - Email: Resend behind a replaceable `Mailer` (mails are only printed to the server log unless `MAIL_TRANSPORT=resend`)
 - Frontend: React + TypeScript + Vite (scaffolded; see `frontend.doc.md`)
 - Routing and data fetching: TanStack Router and TanStack Query
-- Real-time communication: Socket.io planned
+- Real-time communication: Socket.io (a notification layer over the REST API; see "Real-time events" in `api.doc.md`)
 
 ## Repository Layout
 
@@ -51,9 +51,9 @@ Next priorities:
 - Frontend workspace: frontend/ (plan and conventions: frontend.doc.md)
 - Backend server: server/
 - App entry point: server/src/app.ts
-- Feature modules (routes, controllers, services, validators per feature): server/src/modules/
+- Feature modules (routes, controllers, services, validators per feature): server/src/modules/ (the Socket.io handshake and event emitters are in server/src/modules/realtime/)
 - Middleware shared by several features: server/src/middlewares/
-- API shapes shared by the server and the frontend (request, response and error bodies): server/src/contract/
+- API shapes shared by the server and the frontend (request, response and error bodies, and the Socket.io events): server/src/contract/
 - Prisma schema and migrations: server/prisma/
 
 ## API
@@ -167,13 +167,12 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. The dev server forwards requests that start with `/api` to the server, so no CORS setup is needed and the session cookie works as it will in production. The port is fixed because the server's verification and password reset mails link to `http://localhost:5173/...`; if something else uses it, `npm run dev` stops instead of moving to another port.
+Open `http://localhost:5173`. The dev server forwards requests that start with `/api` (and the `/socket.io` connection) to the server, so no CORS setup is needed and the session cookie works as it will in production. The port is fixed because the server's verification and password reset mails link to `http://localhost:5173/...`; if something else uses it, `npm run dev` stops instead of moving to another port.
 
 `npm test` in `frontend/` runs the frontend tests (Vitest; no server and no database needed). `API_PROXY_TARGET` in `frontend/.env` changes where `/api` is forwarded to (see `frontend/.env.example`).
 
 ## Roadmap
 
-- Add Socket.io for realtime messaging (server and client together)
 - Build the React frontend step by step (scaffold, route guards, account, chat and friends screens done; settings and room management next)
 - Add deployment and environment configuration for production
 

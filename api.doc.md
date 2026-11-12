@@ -435,11 +435,37 @@ Every request that reaches a limiter counts, including the ones answered `400` o
 
 The other endpoints have no limiter.
 
-## Real-time events (planned)
+## Real-time events
 
-Not built yet: the server side and the client are written together (step 6 of `./frontend.doc.md`). The socket is a notification layer on top of the REST endpoints: it never writes data, and every event has the same effect as refetching the matching endpoint.
+A Socket.io socket on the API's own origin (`/socket.io`). It is a notification layer on top of the REST endpoints: it never writes data, and every event has the same effect as refetching the matching endpoint, so a client that missed one (it was offline) gets the same truth by asking again. The event names and payloads are typed in `server/src/contract/events.ts`, which the frontend imports like the rest of the contract.
 
-- The handshake uses the session cookie, and a connection without a valid session is refused. In development the browser reaches Socket.io through the dev proxy (`/socket.io`).
-- A socket joins `user:<id>` (friend events, being added to a room) and `chat:<chatId>` for every room the user is a member of. Leaving, being removed or a deleted room takes the sockets out of `chat:<chatId>`, so a removed member stops receiving that room.
-- Events: `message:new`, `message:updated`, `message:deleted`, `chat:updated`, `chat:removed`, `member:added`, `member:removed`, `member:role_changed`, `read:updated`, `friend:request`, `friend:accepted`. `message:updated` carries the same message as the `PATCH` response, and `message:deleted` is `{ chatId, messageId, deletedAt }`. The other payloads are fixed in step 6 and written here then.
-- Typing indicators are socket-only and never stored.
+### Connecting
+
+- The handshake carries the session cookie and resolves it with the same lookup as a REST request. A connection without a valid session is refused: the client gets a `connect_error` with the message `Unauthorized Access` and does not try again by itself. In development the browser reaches Socket.io through the dev proxy (`/socket.io`, with `ws: true`), so the cookie is first-party.
+- The handshake puts the socket into its rooms before the connection is announced: `user:<id>` (every socket of one person: friend events, and being added to a room), `chat:<chatId>` for every room the person is a member of, and `session:<sessionId>` (the sockets of one login session, so that ending the session can end them).
+- Being added to a room puts the person's sockets into `chat:<chatId>`. Leaving, being removed and a deleted room take them out, so a removed member stops receiving that room.
+- The server closes the sockets of a session when it ends: `POST /api/account/logout` (that session's), `POST /api/account/password` (every other session), a password reset and `DELETE /api/account/me` (all of the account's). The client sees the reason `io server disconnect` and does not reconnect by itself; a new handshake with the old cookie is refused.
+
+### Events from the server
+
+An event is sent after the write it reports was committed, to the sockets in the room named here. A request that is refused, or that changes nothing, sends nothing.
+
+| Event | Sent to | Payload | After |
+| --- | --- | --- | --- |
+| `message:new` | `chat:<id>`, the sender's own sockets included | `{ message }`, the message of the `201` | `POST /api/chat/:chatid/message` |
+| `message:updated` | `chat:<id>` | `{ message }`, the message of the `200` | `PATCH /api/chat/:chatid/message/:id`, only when the text changed (not for the `unchanged` answer) |
+| `message:deleted` | `chat:<id>` | `{ chatId, messageId, deletedAt }` | `DELETE /api/chat/:chatid/message/:id` |
+| `chat:updated` | `chat:<id>` | `{ chatId, name, avatarUrl }`, a group's own name and avatar | `PATCH /api/chat/:chatid` |
+| `chat:removed` | `chat:<id>` when the room was deleted; `user:<id>` of the person who left or was removed | `{ chatId }` | `DELETE /api/chat/:chatid`; `DELETE /api/chat/:chatid/member/:userid` |
+| `member:added` | `chat:<id>`, the new members' sockets joined first, so they get it too | `{ chatId, userIds }` | `POST /api/chat/:chatid/member`, when somebody was added; `POST /api/chat` when the room was made (every member, the creator included), not when a direct room was found again |
+| `member:removed` | `chat:<id>`, the removed person's sockets already out of it | `{ chatId, userId }` | `DELETE /api/chat/:chatid/member/:userid` (a removal or a leave) |
+| `member:role_changed` | `chat:<id>` | `{ chatId, userId, role }` | `PATCH /api/chat/:chatid/member/:userid` |
+| `read:updated` | `chat:<id>` | `{ chatId, userId, lastReadMessageId }` | `PUT /api/chat/:chatid/read`, only when the marker moved forward |
+| `friend:request` | `user:<receiverId>` | `{ request }`, as the receiver's `GET /api/friend/requests?direction=incoming` lists it: `user` is the sender | `POST /api/friend/requests` |
+| `friend:accepted` | `user:<senderId>`, the one who sent the request | `{ friend }`, the person who accepted | `POST /api/friend/requests/:id/accept` |
+
+Events that are not sent: cancelling or declining a request, removing a friend, a changed profile, and the account deletion's effect on the rooms the person was in (their memberships go with the account, and nobody is told). The client's friend lists are asked for again on every visit for the first two, and a room's members when its panel opens.
+
+### Events from the client
+
+- `typing` with `{ chatId }`: the person is typing in this room. The server ignores it when `chatId` is not a whole number or the socket is not in `chat:<chatId>`, and relays it to the room's other sockets as `typing` with `{ chatId, user }` (`user` is the sender's `{ id, name, avatarUrl }` as they were when the socket connected) at most once a second per socket and room. Typing is never stored, and nothing says it stopped: a client shows it for a few seconds after the last one.
