@@ -55,11 +55,12 @@ export async function getMessagesForChatRoom(
 }
 
 export type DeleteMessageResult =
-  | 'deleted'
+  // `deletedAt` is the stamp that was written, which the `message:deleted` event carries.
+  | { status: 'deleted'; deletedAt: Date }
   // No message with this id in this room, or it was already deleted.
-  | 'not_found'
+  | { status: 'not_found' }
   // The requester didn't send this message.
-  | 'forbidden';
+  | { status: 'forbidden' };
 
 /** Soft delete: the row stays, `content` is cleared and `deletedAt` stamped. Only the sender may. */
 export async function deleteMessage(
@@ -73,18 +74,19 @@ export async function deleteMessage(
   });
 
   if (!message || message.chatId !== chatId || message.deletedAt !== null) {
-    return 'not_found';
+    return { status: 'not_found' };
   }
   if (message.senderId !== requesterId) {
-    return 'forbidden';
+    return { status: 'forbidden' };
   }
 
+  const deletedAt = new Date();
   await prisma.message.update({
     where: { id: messageId },
-    data: { deletedAt: new Date(), content: '' },
+    data: { deletedAt, content: '' },
   });
 
-  return 'deleted';
+  return { status: 'deleted', deletedAt };
 }
 
 export type EditMessageResult =

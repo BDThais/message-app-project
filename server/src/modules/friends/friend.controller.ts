@@ -8,6 +8,7 @@ import type {
   SearchUserResponse,
 } from '../../contract/responses';
 import type { AuthenticatedRequest } from '../../middlewares/UserSessionAuth';
+import { emitFriendAccepted, emitFriendRequest } from '../realtime/realtime.emitter';
 import { toFriendRequest } from './friend.serializer';
 import {
   validateTelParam,
@@ -61,8 +62,16 @@ export async function sendFriendRequest(
     const result = await createFriendRequest(requesterId, validation.data.receiverId);
 
     switch (result.status) {
-      case 'created':
+      case 'created': {
+        // The receiver's own view of the request: `user` is whoever it is from, as in their GET /api/friend/requests.
+        const { id, name, avatarUrl } = req.user;
+        emitFriendRequest(validation.data.receiverId, {
+          id: result.request.id,
+          createdAt: result.request.createdAt.toISOString(),
+          user: { id, name, avatarUrl },
+        });
         return res.status(201).json({ request: toFriendRequest(result.request) });
+      }
       case 'receiver_not_found':
         return res.status(400).json({ error: 'receiver_id does not refer to an existing user' });
       case 'already_friends':
@@ -113,8 +122,12 @@ export async function acceptFriendRequest(
     const result = await acceptPendingFriendRequest(req.user.id, validation.data.requestId);
 
     switch (result.status) {
-      case 'accepted':
+      case 'accepted': {
+        // `friend` is the one who sent the request, who is told; the person who accepted has the answer.
+        const { id, name, avatarUrl } = req.user;
+        emitFriendAccepted(result.friend.id, { id, name, avatarUrl });
         return res.status(201).json({ friend: result.friend });
+      }
       case 'not_found':
         return res.status(404).json({ error: 'Friend request not found' });
     }

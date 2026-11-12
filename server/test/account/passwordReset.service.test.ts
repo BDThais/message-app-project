@@ -42,7 +42,11 @@ describe('issuePasswordReset', () => {
     expect(stored.tokenHash).toBe(hashToken(result.token));
     expect(stored.createdAt).toEqual(now);
     expect(stored.expiresAt.getTime()).toBe(now.getTime() + config.PASSWORD_RESET_TTL_MS);
-    expect(await resetPasswordWithToken(result.token, 'new-hash')).toEqual({ status: 'reset', email: alice.email });
+    expect(await resetPasswordWithToken(result.token, 'new-hash')).toEqual({
+      status: 'reset',
+      email: alice.email,
+      userId: alice.id,
+    });
   });
 
   it('replaces the old link (a new row is never added), which stops working', async () => {
@@ -177,7 +181,7 @@ describe('resetPasswordWithToken', () => {
 
     const result = await resetPasswordWithToken(token, 'the-new-hash');
 
-    expect(result).toEqual({ status: 'reset', email: alice.email });
+    expect(result).toEqual({ status: 'reset', email: alice.email, userId: alice.id });
     expect((await prisma.user.findUniqueOrThrow({ where: { id: alice.id } })).passwordHash).toBe('the-new-hash');
     expect(await prisma.session.count({ where: { userId: alice.id } })).toBe(0);
     expect(await prisma.passwordResetToken.count({ where: { userId: alice.id } })).toBe(0);

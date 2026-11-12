@@ -49,7 +49,11 @@ describe(`POST ${route}`, () => {
     expect((await prisma.passwordResetToken.findUniqueOrThrow({ where: { userId: alice.id } })).tokenHash).toBe(
       hashToken(token),
     );
-    expect(await resetPasswordWithToken(token, 'new-hash')).toEqual({ status: 'reset', email: alice.email });
+    expect(await resetPasswordWithToken(token, 'new-hash')).toEqual({
+      status: 'reset',
+      email: alice.email,
+      userId: alice.id,
+    });
   });
 
   it('does not care about the case of the address, like login: another spelling finds the account, and the mail goes to the stored address', async () => {
@@ -91,6 +95,7 @@ describe(`POST ${route}`, () => {
     expect(await resetPasswordWithToken(tokenFromMail(outbox.sent[0]!), 'new-hash')).toEqual({
       status: 'reset',
       email: alice.email,
+      userId: alice.id,
     });
   });
 

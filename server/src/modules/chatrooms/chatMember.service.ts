@@ -247,8 +247,9 @@ export async function getMembersForChatRoom(chatId: number): Promise<ChatMemberW
 
 export type MarkChatRoomReadResult =
   // `lastReadMessageId` is the marker as it stands after the call: the message
-  // that was asked for, or the later one that was already there.
-  | { outcome: 'marked'; lastReadMessageId: number }
+  // that was asked for, or the later one that was already there. `moved` is false when it was
+  // already there, so nothing changed (and the `read:updated` event is not sent).
+  | { outcome: 'marked'; lastReadMessageId: number; moved: boolean }
   // No message with this id in this room (a soft-deleted one still counts).
   | { outcome: 'message_not_found' }
   // The requester left the room between the membership check and this call.
@@ -288,7 +289,7 @@ export async function markChatRoomRead(
     data: { lastReadMessageId: messageId },
   });
   if (count > 0) {
-    return { outcome: 'marked', lastReadMessageId: messageId };
+    return { outcome: 'marked', lastReadMessageId: messageId, moved: true };
   }
 
   // Nothing moved: the marker is already at or past this message.
@@ -308,5 +309,11 @@ export async function markChatRoomRead(
     );
   }
 
-  return { outcome: 'marked', lastReadMessageId: current.lastReadMessageId };
+  return { outcome: 'marked', lastReadMessageId: current.lastReadMessageId, moved: false };
+}
+
+/** The ids of the rooms a user is in, which the real-time handshake puts their socket into. */
+export async function getChatIdsOfMember(memberId: number): Promise<number[]> {
+  const rows = await prisma.chatMember.findMany({ where: { memberId }, select: { chatId: true } });
+  return rows.map((row) => row.chatId);
 }

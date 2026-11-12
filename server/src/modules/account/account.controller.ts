@@ -26,6 +26,7 @@ import { sendVerificationEmail } from './emailVerification.mail';
 import { issuePasswordReset, resetPasswordWithToken } from './passwordReset.service';
 import { sendPasswordResetEmail, sendPasswordChangedEmail } from './passwordReset.mail';
 import { createSession, deleteSession } from './session.service';
+import { disconnectSession, disconnectUser } from '../realtime/realtime.emitter';
 import { getSessionUser, setSessionCookie, clearSessionCookie } from '../../middlewares/SessionCookie';
 import config from '../../config/config';
 
@@ -117,6 +118,7 @@ export async function logout(req: Request, res: Response<LogoutResponse>, next: 
 
     if (sessionId) {
       await deleteSession(sessionId);
+      disconnectSession(sessionId);
     }
 
     clearSessionCookie(res);
@@ -171,6 +173,8 @@ export async function updatePassword(req: AuthenticatedRequest, res: Response<Ap
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
 
+    // The sessions that were deleted take their sockets with them; this one stays.
+    disconnectUser(userId, { exceptSessionId: currentSessionId });
     res.status(204).end();
   } catch (error) {
     console.error('Error changing password:', error);
@@ -209,6 +213,7 @@ export async function deleteMe(
     }
 
     // The session row went with the user; the browser still holds the cookie.
+    disconnectUser(userId);
     clearSessionCookie(res);
     res.status(204).end();
   } catch (error) {
@@ -315,7 +320,9 @@ export async function resetPassword(req: Request, res: Response<ApiErrorBody>, n
       return res.status(400).json({ error: 'This reset link is invalid or has expired' });
     }
 
-    // No session is created: the user logs in with the new password.
+    // No session is created: the user logs in with the new password. Every session of the account
+    // was deleted, and the sockets opened with them are closed.
+    disconnectUser(result.userId);
     res.status(204).end();
 
     // After responding, as in signup.

@@ -98,9 +98,9 @@ export function issuePasswordReset(email: string, now: Date = new Date()): Promi
 }
 
 export type ResetPasswordResult =
-  // The password was replaced and every session of the account deleted. Mail the "your password
-  // was changed" notice to `email`.
-  | { status: 'reset'; email: string }
+  // The password was replaced and every session of the account deleted (`userId` is whose, so the
+  // sockets of those sessions can be closed). Mail the "your password was changed" notice to `email`.
+  | { status: 'reset'; email: string; userId: number }
   // Unknown, used, replaced or expired token. One result for all of them, so the answer says
   // nothing about which it was.
   | { status: 'invalid' };
@@ -145,6 +145,6 @@ export function resetPasswordWithToken(
     await tx.user.update({ where: { id: row.userId }, data: { passwordHash: newPasswordHash } });
     await tx.session.deleteMany({ where: { userId: row.userId } });
 
-    return { status: 'reset', email: locked.email };
+    return { status: 'reset', email: locked.email, userId: row.userId };
   });
 }

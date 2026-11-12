@@ -44,6 +44,17 @@ import {
 } from './chatRoom.service';
 import { createMessage, getMessagesForChatRoom, deleteMessage, editMessage } from './message.service';
 import { toChatRoomDetail, toChatRoomSummary, toCreatedChatRoom, toMessage } from './chatRoom.serializer';
+import {
+  emitChatDeleted,
+  emitChatUpdated,
+  emitMemberRemoved,
+  emitMemberRoleChanged,
+  emitMembersAdded,
+  emitMessageDeleted,
+  emitMessageNew,
+  emitMessageUpdated,
+  emitReadUpdated,
+} from '../realtime/realtime.emitter';
 
 // One body for every refusal of the friendship rule. It does not say which ID was refused or why, so
 // a stranger and a user who does not exist look the same.
@@ -73,6 +84,14 @@ export async function createChatRoom(req: AuthenticatedRequest, res: Response<Cr
     const summary = await getChatRoomSummaryForUser(requesterId, room.id, room.type);
     if (!me || !summary) {
       return res.status(404).json({ error: CHAT_ROOM_NOT_FOUND });
+    }
+
+    // A reused direct room has both members in it already, and their sockets with it.
+    if (created) {
+      emitMembersAdded(
+        room.id,
+        room.members.map((member) => member.member.id),
+      );
     }
 
     return res.status(created ? 201 : 200).json({ chatRoom: toCreatedChatRoom(summary, me.role, room.members) });
@@ -146,6 +165,8 @@ export async function updateChatRoom(
       return res.status(404).json({ error: CHAT_ROOM_NOT_FOUND });
     }
 
+    // A group's name and avatar are its own, so the same for every member.
+    emitChatUpdated(chatId, room);
     res.status(200).json({ chatRoom: toChatRoomDetail(room, role) });
   } catch (err) {
     next(err);
@@ -155,6 +176,7 @@ export async function updateChatRoom(
 export async function deleteChatRoom(req: ChatRoomRequest, res: Response<ApiErrorBody>, next: NextFunction) {
   try {
     await deleteChatRoomById(req.chatMembership.chatId);
+    emitChatDeleted(req.chatMembership.chatId);
     res.status(204).end();
   } catch (err) {
     next(err);
@@ -183,6 +205,13 @@ export async function addChatRoomMembers(
     }
 
     const { addedMembers, alreadyMemberIds } = result;
+
+    if (addedMembers.length > 0) {
+      emitMembersAdded(
+        req.chatMembership.chatId,
+        addedMembers.map((member) => member.member.id),
+      );
+    }
 
     return res.status(addedMembers.length > 0 ? 201 : 200).json({ addedMembers, alreadyMemberIds });
   } catch (err) {
@@ -220,6 +249,7 @@ export async function removeChatRoomMember(req: ChatRoomRequest, res: Response<A
 
     switch (result) {
       case 'removed':
+        emitMemberRemoved(chatId, targetId);
         return res.status(204).end();
       case 'not_a_member':
         return res.status(404).json({ error: 'Member not found in this chat room' });
@@ -257,6 +287,7 @@ export async function changeChatRoomMemberRole(
 
     switch (result.outcome) {
       case 'updated':
+        emitMemberRoleChanged(req.chatMembership.chatId, targetId, role);
         return res.status(200).json({ member: result.member });
       case 'not_a_member':
         return res.status(404).json({ error: 'Member not found in this chat room' });
@@ -281,9 +312,10 @@ export async function sendChatRoomMessage(
   }
 
   try {
-    const message = await createMessage(req.chatMembership.chatId, req.user.id, validation.data.content);
+    const message = toMessage(await createMessage(req.chatMembership.chatId, req.user.id, validation.data.content));
 
-    return res.status(201).json({ message: toMessage(message) });
+    emitMessageNew(message);
+    return res.status(201).json({ message });
   } catch (err) {
     next(err);
   }
@@ -318,8 +350,9 @@ export async function deleteChatRoomMessage(req: ChatRoomRequest, res: Response<
   try {
     const result = await deleteMessage(req.chatMembership.chatId, validation.data.messageId, req.user.id);
 
-    switch (result) {
+    switch (result.status) {
       case 'deleted':
+        emitMessageDeleted(req.chatMembership.chatId, validation.data.messageId, result.deletedAt);
         return res.status(204).end();
       case 'not_found':
         return res.status(404).json({ error: 'Message not found in this chat room' });
@@ -356,6 +389,8 @@ export async function editChatRoomMessage(
 
     switch (result.status) {
       case 'edited':
+        emitMessageUpdated(toMessage(result.message));
+        return res.status(200).json({ message: toMessage(result.message) });
       case 'unchanged':
         return res.status(200).json({ message: toMessage(result.message) });
       case 'not_found':
@@ -393,6 +428,9 @@ export async function markChatRoomAsRead(
 
     switch (result.outcome) {
       case 'marked':
+        if (result.moved) {
+          emitReadUpdated(req.chatMembership.chatId, req.user.id, result.lastReadMessageId);
+        }
         return res.status(200).json({ lastReadMessageId: result.lastReadMessageId });
       case 'message_not_found':
         return res.status(404).json({ error: 'Message not found in this chat room' });
