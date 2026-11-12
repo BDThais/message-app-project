@@ -2,7 +2,6 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { POLL_INTERVAL_MS } from '@/features/chats/queries';
 import { bea, carl, john, stubApi, type FakeServer } from './helpers/fakeApi';
 import { renderApp } from './helpers/renderApp';
 
@@ -275,16 +274,18 @@ describe('a conversation', () => {
     },
   );
 
-  it('asks the server for new messages every few seconds', async () => {
+  it('does not ask again on a timer: new messages come through the socket (see chatEvents.test.tsx)', async () => {
     const state = roomWithBea({ from: 'bea', content: 'first' });
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderApp('/chat/1');
     await findMessage('first');
+    const requestsSoFar = state.requests.length;
 
     state.addMessage({ chatId: 1, sender: bea, content: 'a little later' });
-    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS + 100);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
 
-    expect(await findMessage('a little later')).toBeTruthy();
+    expect(state.requests).toHaveLength(requestsSoFar);
+    expect(within(messageList()).queryByText('a little later')).toBeNull();
   });
 });
 
@@ -531,16 +532,17 @@ describe('older messages', () => {
     expect(screen.queryByRole('button', { name: 'Load earlier messages' })).toBeNull();
   });
 
-  it('asks again for the newest page only, so that new messages do not slide the loaded ones out from above', async () => {
+  it('after a reconnect asks for the newest page only, so that new messages do not slide the loaded ones out from above', async () => {
     const state = roomWithMessagesFromBea(110); // two full pages once the older one is loaded
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    renderApp('/chat/1');
+    const { socket } = renderApp('/chat/1');
     await findMessage('message 110');
     fireEvent.click(screen.getByRole('button', { name: 'Load earlier messages' }));
     await findMessage('message 11');
 
-    state.addMessage({ chatId: 1, sender: bea, content: 'message 111' });
-    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS + 100);
+    state.addMessage({ chatId: 1, sender: bea, content: 'message 111' }); // sent while the socket was down
+    socket.dropConnection();
+    socket.reconnect();
 
     await findMessage('message 111');
     await vi.advanceTimersByTimeAsync(1_000); // time for a refetch of the older page to finish, if there were one
@@ -550,16 +552,17 @@ describe('older messages', () => {
     ]);
   });
 
-  it('catches up with the after cursor when more arrived than a page holds, and does not load the conversation again', async () => {
+  it('after a reconnect catches up with the after cursor when more arrived than a page holds, and does not load the conversation again', async () => {
     const state = roomWithMessagesFromBea(10);
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    renderApp('/chat/1');
+    const { socket } = renderApp('/chat/1');
     await findMessage('message 10');
 
     for (let number = 11; number <= 90; number += 1) {
       state.addMessage({ chatId: 1, sender: bea, content: `message ${number}` });
     }
-    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS + 100);
+    socket.dropConnection();
+    socket.reconnect();
 
     await findMessage('message 90');
     await vi.advanceTimersByTimeAsync(500);
@@ -569,19 +572,20 @@ describe('older messages', () => {
     expect(shown).toEqual(Array.from({ length: 90 }, (_, index) => `message ${index + 1}`));
     expect(state.requests).toContain('GET /api/chat/1/message?after=10');
     expect(state.requests).toContain('GET /api/chat/1/message?after=60');
-    expect(state.count('GET /api/chat/1/message')).toBe(2); // the first load and the poll, no reload
+    expect(state.count('GET /api/chat/1/message')).toBe(2); // the first load and the reconnect's newest page, no reload
   });
 
-  it('loads the conversation again when there is nothing to catch up from', async () => {
+  it('after a reconnect loads the conversation again when there is nothing to catch up from', async () => {
     const state = roomWithMessagesFromBea(0);
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    renderApp('/chat/1');
+    const { socket } = renderApp('/chat/1');
     await screen.findByText('No messages yet. Say hello!');
 
     for (let number = 1; number <= 60; number += 1) {
       state.addMessage({ chatId: 1, sender: bea, content: `message ${number}` });
     }
-    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS + 100);
+    socket.dropConnection();
+    socket.reconnect();
 
     await findMessage('message 60');
     expect(within(messageList()).getAllByRole('listitem')).toHaveLength(50); // the newest page, and the rest on request

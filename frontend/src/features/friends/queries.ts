@@ -27,8 +27,9 @@ import { friendKeys } from './keys';
 import type { FriendRequestDirection } from './types';
 
 // The lists are asked for again each time the page opens or the tab comes back to the front (a stale
-// time of 0): a request can arrive or be answered while nobody is looking, and until step 6 nothing
-// pushes it. The mutations below change the cache from the server's answers, so they need no refetch.
+// time of 0): a request can be cancelled, declined or a friendship ended while nobody is looking, and
+// the socket (events.ts) only says that a request arrived or was accepted. The mutations below change
+// the cache from the server's answers, so they need no refetch.
 
 export function friendsQueryOptions() {
   return queryOptions({

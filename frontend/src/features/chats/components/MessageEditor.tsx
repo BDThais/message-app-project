@@ -17,6 +17,8 @@ interface MessageEditorProps {
   autoFocus?: boolean;
   /** Empty the box once the message went through: for a new message, not for an edit. */
   clearOnSubmit?: boolean;
+  /** Called as the person types, with something in the box. */
+  onTyping?: () => void;
 }
 
 /** The box for writing a message or changing one: Enter sends, Shift+Enter starts a new line, Escape cancels an edit. */
@@ -31,6 +33,7 @@ export function MessageEditor({
   error,
   autoFocus = false,
   clearOnSubmit = false,
+  onTyping,
 }: MessageEditorProps) {
   const [value, setValue] = useState(initialValue);
   const content = value.trim();
@@ -73,7 +76,10 @@ export function MessageEditor({
             value={value}
             maxLength={MAX_MESSAGE_LENGTH}
             autoFocus={autoFocus}
-            onChange={(event) => setValue(event.target.value)}
+            onChange={(event) => {
+              setValue(event.target.value);
+              if (onTyping && event.target.value.trim() !== '') onTyping();
+            }}
             onKeyDown={onKeyDown}
           />
         </div>

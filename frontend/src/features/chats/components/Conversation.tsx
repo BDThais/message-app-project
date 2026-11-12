@@ -5,11 +5,12 @@ import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
 import { useMe } from '@/features/account/queries';
 import { isApiError } from '@/lib/http';
-import { roomTitle } from '../format';
+import { roomTitle, typingText } from '../format';
 import { useChatRooms, useMessages, useSendMessage } from '../queries';
 import type { ChatRoomSummary } from '../types';
 import { useMarkRoomRead } from '../useMarkRoomRead';
 import { useMessageScroll } from '../useMessageScroll';
+import { useTypingNotifier, useTypingUsers } from '../useTyping';
 import { ChatNotFound } from './ChatNotFound';
 import { MessageEditor } from './MessageEditor';
 import { MessageItem } from './MessageItem';
@@ -156,14 +157,21 @@ function ConversationHeader({
 
 function MessageComposer({ chatId }: { chatId: number }) {
   const send = useSendMessage(chatId);
+  const notifyTyping = useTypingNotifier(chatId);
+  const typing = useTypingUsers(chatId);
 
   return (
     <div className="border-t border-line bg-surface p-3 sm:p-4">
+      {/* Always in the page, so that a screen reader announces the text put into it, and a fixed height, so the list above does not jump. */}
+      <p role="status" className="mb-1 h-5 truncate text-xs text-muted">
+        {typingText(typing)}
+      </p>
       <MessageEditor
         label="Message"
         placeholder="Write a message…"
         submitLabel="Send"
         clearOnSubmit
+        onTyping={notifyTyping}
         onSubmit={(content) => send.mutateAsync(content)}
         isPending={send.isPending}
         error={send.error?.message}

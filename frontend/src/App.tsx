@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
+import { SocketContext } from '@/lib/useSocket';
+import type { AppSocket } from '@/lib/socket';
 import type { createAppRouter } from './router';
 
 /**
@@ -11,16 +13,20 @@ import type { createAppRouter } from './router';
 export function App({
   queryClient,
   router,
+  socket,
   children,
 }: {
   queryClient: QueryClient;
   router: ReturnType<typeof createAppRouter>;
+  socket: AppSocket;
   children?: ReactNode;
 }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-      {children}
+      <SocketContext.Provider value={socket}>
+        <RouterProvider router={router} />
+        {children}
+      </SocketContext.Provider>
     </QueryClientProvider>
   );
 }

@@ -1,17 +1,23 @@
 import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  addIncomingMessageToCache,
   addMessageToCache,
   addRoomToCache,
+  applyDeletedMessage,
+  applyEditedMessage,
   markMessageDeletedInCache,
   markRoomReadInCache,
+  markRoomReadUpToInCache,
   mergeNewestPageIntoCache,
   refreshPreviewAfterChange,
   replaceMessageInCache,
+  setMemberReadMarkerInCache,
   sortRooms,
+  updateRoomInCache,
 } from '@/features/chats/cache';
 import { chatKeys } from '@/features/chats/keys';
-import type { ChatRoomSummary, CreatedChatRoom, Message, MessageListResponse } from '@/features/chats/types';
+import type { ChatRoomSummary, CreatedChatRoom, Member, Message, MessageListResponse } from '@/features/chats/types';
 
 function message(id: number, overrides: Partial<Message> = {}): Message {
   return {
@@ -427,5 +433,163 @@ describe('addRoomToCache', () => {
     addRoomToCache(queryClient, created(1));
 
     expect(listOf(queryClient)).toBeUndefined();
+  });
+});
+
+describe('addIncomingMessageToCache', () => {
+  const ME = 1;
+  const unreadOf = (id: number) =>
+    queryClient.getQueryData<ChatRoomSummary[]>(chatKeys.list())?.find((each) => each.id === id)?.unreadCount;
+
+  it("adds somebody else's message to the room, its preview and its unread count", () => {
+    queryClient.setQueryData(chatKeys.list(), [
+      room(1, { lastMessage: preview(4, 'message 4', '2026-10-20T09:00:04.000Z') }),
+    ]);
+    queryClient.setQueryData(chatKeys.messages(1), twoPages());
+
+    expect(addIncomingMessageToCache(queryClient, message(6), ME)).toBe('applied');
+
+    expect(idsOf(queryClient)?.[0]).toEqual([6, 5, 4]);
+    expect(queryClient.getQueryData<ChatRoomSummary[]>(chatKeys.list())?.[0]?.lastMessage?.id).toBe(6);
+    expect(unreadOf(1)).toBe(1);
+  });
+
+  it('counts a message once however often it arrives, because the preview is what it is judged against', () => {
+    queryClient.setQueryData(chatKeys.list(), [room(1)]);
+
+    addIncomingMessageToCache(queryClient, message(6), ME);
+    addIncomingMessageToCache(queryClient, message(6), ME);
+
+    expect(unreadOf(1)).toBe(1);
+  });
+
+  it("does not count the person's own message, and does put it in the room", () => {
+    queryClient.setQueryData(chatKeys.list(), [room(1)]);
+
+    addIncomingMessageToCache(queryClient, message(6, { senderId: ME }), ME);
+
+    expect(unreadOf(1)).toBe(0);
+    expect(queryClient.getQueryData<ChatRoomSummary[]>(chatKeys.list())?.[0]?.lastMessage?.id).toBe(6);
+  });
+
+  it("counts a message whose sender's account is gone: it is nobody's own", () => {
+    queryClient.setQueryData(chatKeys.list(), [room(1)]);
+
+    addIncomingMessageToCache(queryClient, message(6, { senderId: null, sender: null }), ME);
+
+    expect(unreadOf(1)).toBe(1);
+  });
+
+  it("does not count a message that is not newer than the room preview (the sender's own answer set it already)", () => {
+    queryClient.setQueryData(chatKeys.list(), [
+      room(1, { lastMessage: preview(6, 'message 6', '2026-10-20T09:00:06.000Z') }),
+    ]);
+
+    addIncomingMessageToCache(queryClient, message(6), ME);
+
+    expect(unreadOf(1)).toBe(0);
+  });
+
+  it("answers 'unknown_room' for a room the loaded list does not have, and 'applied' while no list is loaded", () => {
+    queryClient.setQueryData(chatKeys.list(), [room(2)]);
+    expect(addIncomingMessageToCache(queryClient, message(6), ME)).toBe('unknown_room');
+
+    queryClient.removeQueries({ queryKey: chatKeys.list() });
+    expect(addIncomingMessageToCache(queryClient, message(7), ME)).toBe('applied');
+    expect(queryClient.getQueryData(chatKeys.list())).toBeUndefined();
+  });
+});
+
+describe('applyEditedMessage and applyDeletedMessage', () => {
+  it('say whether they asked for the room list: only when the loaded messages could not say what the preview is now', () => {
+    queryClient.setQueryData(chatKeys.list(), [
+      room(1, { lastMessage: preview(5, 'message 5', '2026-10-20T09:00:05.000Z') }),
+    ]);
+    // Not loaded: the preview was the message, and nothing can say what it is now.
+    expect(applyEditedMessage(queryClient, message(5, { content: 'edited' }))).toBe(true);
+    expect(applyDeletedMessage(queryClient, 1, 5, '2026-10-20T10:00:00.000Z')).toBe(true);
+
+    queryClient.setQueryData(chatKeys.messages(1), twoPages());
+    expect(applyEditedMessage(queryClient, message(5, { content: 'edited' }))).toBe(false);
+    expect(applyDeletedMessage(queryClient, 1, 4, '2026-10-20T10:00:00.000Z')).toBe(false); // not the preview
+    expect(queryClient.getQueryData<ChatRoomSummary[]>(chatKeys.list())?.[0]?.lastMessage?.content).toBe('edited');
+  });
+});
+
+describe('markRoomReadUpToInCache', () => {
+  const list = (unreadCount: number) =>
+    queryClient.setQueryData(chatKeys.list(), [
+      room(1, { unreadCount, lastMessage: preview(5, 'message 5', '2026-10-20T09:00:05.000Z') }),
+    ]);
+  const unread = () => queryClient.getQueryData<ChatRoomSummary[]>(chatKeys.list())?.[0]?.unreadCount;
+
+  it('clears the count when the marker reached the preview, or went past it', () => {
+    list(2);
+    expect(markRoomReadUpToInCache(queryClient, 1, 5)).toBe('applied');
+    expect(unread()).toBe(0);
+
+    list(2);
+    expect(markRoomReadUpToInCache(queryClient, 1, 9)).toBe('applied');
+    expect(unread()).toBe(0);
+  });
+
+  it("answers 'unknown' and keeps the count when the marker stopped short: the server counts what is left", () => {
+    list(2);
+
+    expect(markRoomReadUpToInCache(queryClient, 1, 3)).toBe('unknown');
+    expect(unread()).toBe(2);
+  });
+
+  it('has nothing to do for a room with nothing unread or one that is not in the list', () => {
+    list(0);
+    expect(markRoomReadUpToInCache(queryClient, 1, 1)).toBe('applied');
+    expect(markRoomReadUpToInCache(queryClient, 9, 1)).toBe('applied');
+  });
+});
+
+describe('setMemberReadMarkerInCache', () => {
+  const member = (id: number, lastReadMessageId: number | null): Member => ({
+    chatId: 1,
+    role: 'member',
+    lastReadMessageId,
+    member: { id, name: `User ${id}`, avatarUrl: null },
+  });
+  const markers = () => queryClient.getQueryData<Member[]>(chatKeys.members(1))?.map((each) => each.lastReadMessageId);
+
+  it("moves one member's marker forward and never backwards", () => {
+    queryClient.setQueryData(chatKeys.members(1), [member(2, 3), member(3, null)]);
+
+    setMemberReadMarkerInCache(queryClient, 1, 2, 7);
+    setMemberReadMarkerInCache(queryClient, 1, 3, 4);
+    expect(markers()).toEqual([7, 4]);
+
+    setMemberReadMarkerInCache(queryClient, 1, 2, 5);
+    expect(markers()).toEqual([7, 4]);
+  });
+
+  it('leaves a member list that is not loaded alone', () => {
+    setMemberReadMarkerInCache(queryClient, 1, 2, 7);
+
+    expect(queryClient.getQueryData(chatKeys.members(1))).toBeUndefined();
+  });
+});
+
+describe('updateRoomInCache', () => {
+  it("changes a room's name and avatar and nothing else, from the whole room or from the socket's three fields", () => {
+    queryClient.setQueryData(chatKeys.list(), [
+      room(1, { name: 'Old', unreadCount: 2, lastMessage: preview(5, 'message 5', '2026-10-20T09:00:05.000Z') }),
+      room(2),
+    ]);
+
+    updateRoomInCache(queryClient, { id: 1, name: 'New', avatarUrl: 'https://example.com/a.png' });
+
+    expect(
+      queryClient
+        .getQueryData<ChatRoomSummary[]>(chatKeys.list())
+        ?.map(({ name, avatarUrl, unreadCount }) => [name, avatarUrl, unreadCount]),
+    ).toEqual([
+      ['New', 'https://example.com/a.png', 2],
+      ['Room 2', null, 0],
+    ]);
   });
 });

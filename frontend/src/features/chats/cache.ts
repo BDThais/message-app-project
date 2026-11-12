@@ -1,9 +1,9 @@
 import { replaceEqualDeep, type InfiniteData, type QueryClient } from '@tanstack/react-query';
 import { chatKeys } from './keys';
-import type { ChatRoomDetail, ChatRoomSummary, CreatedChatRoom, Member, Message, MessageListResponse } from './types';
+import type { ChatRoomSummary, CreatedChatRoom, Member, Message, MessageListResponse } from './types';
 
 // Every change to what the server told us goes through one of these functions: the mutations call
-// them with what the API answered, and the socket handlers of step 6 will call the same ones. So each
+// them with what the API answered, and the socket handlers (events.ts) call the same ones. So each
 // must be idempotent by id: a message that arrives twice (the sender's own response and the socket
 // event) is stored once.
 
@@ -84,7 +84,7 @@ export function newestLoadedMessageId(queryClient: QueryClient, chatId: number):
   return queryClient.getQueryData<MessagePages>(chatKeys.messages(chatId))?.pages[0]?.messages[0]?.id;
 }
 
-/** A message the person sent (or, from step 6, one that arrived): into its room's messages and its room's preview. */
+/** A message the person sent, or one that arrived: into its room's messages and its room's preview. */
 export function addMessageToCache(queryClient: QueryClient, message: Message): void {
   updatePages(queryClient, message.chatId, (pages) => {
     if (pages.some((page) => page.messages.some(({ id }) => id === message.id))) return pages;
@@ -104,6 +104,32 @@ export function addMessageToCache(queryClient: QueryClient, message: Message): v
       ),
     );
   });
+}
+
+/**
+ * A message that arrived through the socket: `addMessageToCache`, and when it is somebody else's and
+ * newer than the room's preview, one more unread message in the list. It is judged by the preview's id,
+ * so a message that arrives twice (or that this tab sent itself, whose answer set the preview) counts once.
+ * Answers 'unknown_room' when the room list is loaded and the room is not in it (a room the person was
+ * just added to): the caller asks the server for the list.
+ */
+export function addIncomingMessageToCache(
+  queryClient: QueryClient,
+  message: Message,
+  userId: number,
+): 'applied' | 'unknown_room' {
+  const rooms = queryClient.getQueryData<ChatRoomSummary[]>(chatKeys.list());
+  const room = rooms?.find(({ id }) => id === message.chatId);
+  const isNewerThanPreview = (room?.lastMessage?.id ?? 0) < message.id;
+
+  addMessageToCache(queryClient, message);
+
+  if (room && isNewerThanPreview && message.senderId !== userId) {
+    queryClient.setQueryData<ChatRoomSummary[]>(chatKeys.list(), (current) =>
+      current?.map((each) => (each.id === message.chatId ? { ...each, unreadCount: each.unreadCount + 1 } : each)),
+    );
+  }
+  return rooms && !room ? 'unknown_room' : 'applied';
 }
 
 /** An edited message, as the API returned it. A message that did not change stays the very same object, so nothing re-renders. */
@@ -139,6 +165,35 @@ export function mergeNewestPageIntoCache(
     else addMessageToCache(queryClient, message);
   }
   return 'merged';
+}
+
+/**
+ * An edit, from the answer of PATCH or from the socket: the message in its place, and the room's preview
+ * when it was the preview. True when the loaded messages could not say what the preview is now and the
+ * room list was asked for instead.
+ */
+export function applyEditedMessage(queryClient: QueryClient, message: Message): boolean {
+  replaceMessageInCache(queryClient, message);
+  if (refreshPreviewAfterChange(queryClient, message.chatId, message.id) !== 'unknown') return false;
+  void queryClient.invalidateQueries({ queryKey: chatKeys.list() });
+  return true;
+}
+
+/**
+ * A delete, from the answer of DELETE or from the socket: the message made a deleted one, and the room's
+ * preview when it was the preview. If it was, the room falls back to the message before it: the loaded ones
+ * say which, unless there are none to say, and then the room list is asked for (the answer is true).
+ */
+export function applyDeletedMessage(
+  queryClient: QueryClient,
+  chatId: number,
+  messageId: number,
+  deletedAt: string,
+): boolean {
+  markMessageDeletedInCache(queryClient, chatId, messageId, deletedAt);
+  if (refreshPreviewAfterChange(queryClient, chatId, messageId) !== 'unknown') return false;
+  void queryClient.invalidateQueries({ queryKey: chatKeys.list() });
+  return true;
 }
 
 /** DELETE answers 204 with no message, so the cache makes the deleted one: no content and a `deletedAt`. */
@@ -195,6 +250,40 @@ export function markRoomReadInCache(queryClient: QueryClient, chatId: number): v
   );
 }
 
+/**
+ * The person's own marker moved, in another tab: the room has nothing unread here either when the
+ * marker reached its preview. Answers 'unknown', and changes nothing, when it did not: what is left
+ * unread is for the server to count, and the caller asks for the room list.
+ */
+export function markRoomReadUpToInCache(
+  queryClient: QueryClient,
+  chatId: number,
+  lastReadMessageId: number,
+): 'applied' | 'unknown' {
+  const room = queryClient.getQueryData<ChatRoomSummary[]>(chatKeys.list())?.find(({ id }) => id === chatId);
+  if (!room || room.unreadCount === 0) return 'applied';
+  if (room.lastMessage !== null && lastReadMessageId < room.lastMessage.id) return 'unknown';
+
+  markRoomReadInCache(queryClient, chatId);
+  return 'applied';
+}
+
+/** Somebody else's marker moved: into the member list, if it is loaded. Never backwards. */
+export function setMemberReadMarkerInCache(
+  queryClient: QueryClient,
+  chatId: number,
+  userId: number,
+  lastReadMessageId: number,
+): void {
+  queryClient.setQueryData<Member[]>(chatKeys.members(chatId), (members) =>
+    members?.map((each) =>
+      each.member.id === userId && (each.lastReadMessageId ?? 0) < lastReadMessageId
+        ? { ...each, lastReadMessageId }
+        : each,
+    ),
+  );
+}
+
 /** The order GET /api/chat/:chatid/member uses: admins first, then by name, case and accents ignored. */
 export function sortMembers(members: Member[]): Member[] {
   const roleRank = (member: Member) => (member.role === 'admin' ? 0 : 1);
@@ -229,8 +318,11 @@ export function removeMemberFromCache(queryClient: QueryClient, chatId: number, 
   );
 }
 
-/** A room as PATCH /api/chat/:chatid answered with it: its new name and avatar in the room list. */
-export function updateRoomInCache(queryClient: QueryClient, room: ChatRoomDetail): void {
+/** A room's new name and avatar into the room list, from the answer of PATCH /api/chat/:chatid or from the socket. */
+export function updateRoomInCache(
+  queryClient: QueryClient,
+  room: Pick<ChatRoomSummary, 'id' | 'name' | 'avatarUrl'>,
+): void {
   queryClient.setQueryData<ChatRoomSummary[]>(chatKeys.list(), (rooms) =>
     rooms?.map((each) => (each.id === room.id ? { ...each, name: room.name, avatarUrl: room.avatarUrl } : each)),
   );

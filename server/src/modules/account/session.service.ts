@@ -6,7 +6,7 @@ import type { User } from '../../contract/types';
 
 // Database side of sessions. Nothing in this file knows about Express
 // (no req, res or cookies), so it can be reused by other entry points such as
-// the Socket.io handshake later. The cookie side lives in
+// the Socket.io handshake (modules/realtime/realtime.server.ts). The cookie side lives in
 // middlewares/SessionCookie.ts.
 
 /** The settings (a subset of config.ts) that sessions depend on. */

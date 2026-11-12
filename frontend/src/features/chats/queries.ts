@@ -29,31 +29,27 @@ import {
   addMembersToCache,
   addMessageToCache,
   addRoomToCache,
-  markMessageDeletedInCache,
+  applyDeletedMessage,
+  applyEditedMessage,
   markRoomReadInCache,
   mergeNewestPageIntoCache,
   newestLoadedMessageId,
-  refreshPreviewAfterChange,
   removeMemberFromCache,
   removeRoomFromCache,
   replaceMemberInCache,
-  replaceMessageInCache,
   sortMembers,
   updateRoomInCache,
 } from './cache';
 import { chatKeys } from './keys';
 import type { Role } from './types';
 
-// Until step 6 the screens ask again every few seconds so that other people's messages show up; the
-// socket pushes them instead, and step 6 removes this, `useNewestMessagesPolling` and the
-// `refetchInterval` below. A background tab does not poll (TanStack Query's default).
-export const POLL_INTERVAL_MS = 5_000;
+// Nothing here asks again on a timer: the socket (events.ts) tells the cache what changed, and asks
+// again for what it may have missed when it reconnects.
 
 export function chatRoomsQueryOptions() {
   return queryOptions({
     queryKey: chatKeys.list(),
     queryFn: ({ signal }) => getChatRooms(signal),
-    refetchInterval: POLL_INTERVAL_MS,
   });
 }
 
@@ -73,17 +69,15 @@ export function messagesQueryOptions(chatId: number) {
 }
 
 export function useMessages(chatId: number) {
-  const query = useInfiniteQuery(messagesQueryOptions(chatId));
-  useNewestMessagesPolling(chatId, query.isSuccess);
-  return query;
+  return useInfiniteQuery(messagesQueryOptions(chatId));
 }
 
 /**
  * Fetches everything newer than the newest message loaded, a page at a time with the `after` cursor
- * (step 6's reconnect will do the same), and adds it, oldest first. False when it cannot: nothing is
- * loaded to start from, or a page did not move the newest message on.
+ * (what a reconnect does for a conversation that is open), and adds it, oldest first. False when it
+ * cannot: nothing is loaded to start from, or a page did not move the newest message on.
  */
-async function catchUp(queryClient: QueryClient, chatId: number, signal: AbortSignal): Promise<boolean> {
+async function catchUp(queryClient: QueryClient, chatId: number, signal?: AbortSignal): Promise<boolean> {
   for (;;) {
     const newestLoaded = newestLoadedMessageId(queryClient, chatId);
     if (newestLoaded === undefined) return false;
@@ -95,35 +89,26 @@ async function catchUp(queryClient: QueryClient, chatId: number, signal: AbortSi
 }
 
 /**
- * Asks for the newest page only and merges it into the loaded messages. The messages' own query is
- * not given a `refetchInterval` because an infinite query refetches every page it holds, one request
- * for each, and derives each page's cursor from the page before it: with a new message the loaded
- * window slides by one, and the oldest message on screen disappears from above the person's eyes.
+ * Brings a loaded conversation up to date: the newest page is fetched and merged into the loaded
+ * messages (what is new is added, what is loaded is replaced, so an edit or a delete that was missed shows),
+ * and a hole, more messages than a page holds, is closed with the `after` cursor. Only a conversation with
+ * nothing loaded to start from is loaded again. It is not the messages' own query refetched, because an
+ * infinite query refetches every page it holds, one request for each, and derives each page's cursor from
+ * the page before it: with a new message the loaded window slides by one, and the oldest message on
+ * screen disappears from above the person's eyes (seen in a real browser).
  */
-function useNewestMessagesPolling(chatId: number, enabled: boolean): void {
-  const queryClient = useQueryClient();
-  useQuery({
-    queryKey: [...chatKeys.messages(chatId), 'newest'],
-    queryFn: async ({ signal }) => {
-      const page = await getMessages(chatId, {}, signal);
-      if (mergeNewestPageIntoCache(queryClient, chatId, page) === 'gap') {
-        // The catch-up fetches every message of the page again (they are all newer than what is loaded).
-        if (!(await catchUp(queryClient, chatId, signal))) {
-          void queryClient.invalidateQueries({ queryKey: chatKeys.messages(chatId), exact: true });
-        }
-      }
-      return null;
-    },
-    enabled,
-    refetchInterval: POLL_INTERVAL_MS,
-    // It has no data of its own: what it fetches goes into the messages' cache entry. `initialData` and
-    // `refetchOnMount: false` keep it from asking at once for the page that was just loaded.
-    initialData: null,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    gcTime: 0,
-  });
+export async function syncNewestMessages(
+  queryClient: QueryClient,
+  chatId: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  const page = await getMessages(chatId, {}, signal);
+  if (mergeNewestPageIntoCache(queryClient, chatId, page) === 'gap') {
+    // The catch-up fetches every message of the page again (they are all newer than what is loaded).
+    if (!(await catchUp(queryClient, chatId, signal))) {
+      void queryClient.invalidateQueries({ queryKey: chatKeys.messages(chatId), exact: true });
+    }
+  }
 }
 
 /** Makes the direct room with a friend, or finds the one that exists; the caller goes to `room.id`. */
@@ -148,12 +133,7 @@ export function useEditMessage(chatId: number) {
   return useMutation({
     mutationFn: ({ messageId, content }: { messageId: number; content: string }) =>
       editMessage(chatId, messageId, content),
-    onSuccess: (message) => {
-      replaceMessageInCache(queryClient, message);
-      if (refreshPreviewAfterChange(queryClient, message.chatId, message.id) === 'unknown') {
-        void queryClient.invalidateQueries({ queryKey: chatKeys.list() });
-      }
-    },
+    onSuccess: (message) => applyEditedMessage(queryClient, message),
   });
 }
 
@@ -161,13 +141,7 @@ export function useDeleteMessage(chatId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (messageId: number) => deleteMessage(chatId, messageId),
-    onSuccess: (_result, messageId) => {
-      markMessageDeletedInCache(queryClient, chatId, messageId, new Date().toISOString());
-      // If it was the preview, the room falls back to the message before it: the loaded ones say which, unless there are none to say.
-      if (refreshPreviewAfterChange(queryClient, chatId, messageId) === 'unknown') {
-        void queryClient.invalidateQueries({ queryKey: chatKeys.list() });
-      }
-    },
+    onSuccess: (_result, messageId) => applyDeletedMessage(queryClient, chatId, messageId, new Date().toISOString()),
   });
 }
 

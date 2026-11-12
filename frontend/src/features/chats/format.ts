@@ -1,4 +1,4 @@
-import type { ChatRoomSummary } from './types';
+import type { ChatRoomSummary, PublicUser } from './types';
 
 /**
  * A direct room's name is the other member's; it is null once that account is gone. A group's may be null too.
@@ -33,4 +33,13 @@ export function formatListTime(iso: string, now = new Date()): string {
 export function formatSentAt(iso: string, now = new Date()): string {
   const date = new Date(iso);
   return sameDay(date, now) ? timeFormat.format(date) : `${dayOf(date, now)}, ${timeFormat.format(date)}`;
+}
+
+/** The line under the messages for the people who are typing: "" for nobody, their names for one or two, then "Several people". */
+export function typingText(users: Pick<PublicUser, 'name'>[]): string {
+  const [first, second] = users;
+  if (!first) return '';
+  if (!second) return `${first.name} is typing…`;
+  if (users.length === 2) return `${first.name} and ${second.name} are typing…`;
+  return 'Several people are typing…';
 }

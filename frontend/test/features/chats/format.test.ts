@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatListTime, formatSentAt, roomTitle } from '@/features/chats/format';
+import { formatListTime, formatSentAt, roomTitle, typingText } from '@/features/chats/format';
 
 const now = new Date(2026, 9, 25, 15, 30); // 25 October 2026, 15:30 local time
 const earlierToday = new Date(2026, 9, 25, 8, 5).toISOString();
@@ -35,5 +35,14 @@ describe('formatSentAt', () => {
   it('is the time today, and the date and the time on another day', () => {
     expect(formatSentAt(earlierToday, now)).toMatch(/^[^,]*:[^,]*$/);
     expect(formatSentAt(lastWeek, now)).toMatch(/,.*:/);
+  });
+});
+
+describe('typingText', () => {
+  it('is empty for nobody, names one or two people, and says several for more', () => {
+    expect(typingText([])).toBe('');
+    expect(typingText([{ name: 'Bea' }])).toBe('Bea is typing…');
+    expect(typingText([{ name: 'Bea' }, { name: 'Carl' }])).toBe('Bea and Carl are typing…');
+    expect(typingText([{ name: 'Bea' }, { name: 'Carl' }, { name: 'Dana' }])).toBe('Several people are typing…');
   });
 });

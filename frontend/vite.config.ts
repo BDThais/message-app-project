@@ -36,8 +36,13 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: true,
         },
-        // Added with the Socket.io milestone:
-        // '/socket.io': { target: apiTarget, ws: true },
+        // Socket.io, on the same origin for the same reason: the handshake carries the session cookie.
+        // `ws: true` lets the upgrade from long polling to a WebSocket through.
+        '/socket.io': {
+          target: apiTarget,
+          changeOrigin: true,
+          ws: true,
+        },
       },
     },
   };

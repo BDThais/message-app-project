@@ -2,9 +2,10 @@ import type { QueryClient } from '@tanstack/react-query';
 import { friendKeys } from './keys';
 import type { FriendRequest, FriendRequestDirection, PublicUser, Relationship, SearchResult } from './types';
 
-// Every change to what the server told us about friends goes through one of these functions: the
-// mutations call them with what the API answered, and the socket handlers of step 6 will call the same
-// ones, so each is idempotent by id. A list that is not loaded is left alone (it will ask the server).
+// Every change to what the server told us about friends goes through one of these functions, with what the
+// API answered to the person's own request. (The socket events do not use them: one carries a single request,
+// and the lists are cheap to ask for, so events.ts marks them stale instead.) A list that is not loaded is left
+// alone (it will ask the server).
 
 const DIRECTIONS = ['incoming', 'outgoing'] as const satisfies readonly FriendRequestDirection[];
 
