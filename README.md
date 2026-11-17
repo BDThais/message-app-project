@@ -31,7 +31,7 @@ The server's REST API and its real-time events are in place and the frontend is 
 
 Next priorities:
 
-- Production deployment and environment hardening
+- The first real deployment, following `deployment.doc.md` (the hardening it depends on is done: trust proxy, socket origin check, security headers, health endpoints, graceful shutdown, the server serving the built frontend)
 
 ## Tech Stack
 
@@ -43,13 +43,15 @@ Next priorities:
 - Frontend: React + TypeScript + Vite (scaffolded; see `frontend.doc.md`)
 - Routing and data fetching: TanStack Router and TanStack Query
 - Real-time communication: Socket.io (a notification layer over the REST API; see "Real-time events" in `api.doc.md`)
+- Deployment: one Docker image (`Dockerfile`) that serves the API, the sockets and the built frontend; a Render Blueprint (`render.yaml`); see `deployment.doc.md`
 
 ## Repository Layout
 
-- Root project files: README.md, api.doc.md (the API specification), backend.doc.md (server plan and implementation notes), frontend.doc.md (frontend plan)
+- Root project files: README.md, api.doc.md (the API specification), backend.doc.md (server plan and implementation notes), frontend.doc.md (frontend plan), deployment.doc.md (hosting decision, settings, first-deployment runbook, operations)
 - Formatting and linting for both workspaces: package.json, .prettierrc.json, .prettierignore, eslint.config.js
 - Frontend workspace: frontend/ (plan and conventions: frontend.doc.md)
 - Backend server: server/
+- Deployment files: Dockerfile, .dockerignore, render.yaml, server/.env.production.example, server/scripts/smoke-test.mjs
 - App entry point: server/src/app.ts
 - Feature modules (routes, controllers, services, validators per feature): server/src/modules/ (the Socket.io handshake and event emitters are in server/src/modules/realtime/)
 - Middleware shared by several features: server/src/middlewares/
@@ -171,10 +173,14 @@ Open `http://localhost:5173`. The dev server forwards requests that start with `
 
 `npm test` in `frontend/` runs the frontend tests (Vitest; no server and no database needed). `API_PROXY_TARGET` in `frontend/.env` changes where `/api` is forwarded to (see `frontend/.env.example`).
 
+## Running in production
+
+One Docker image runs everything (`docker build -t message-app .` from the repository root; the settings are in `server/.env.production.example`). The server refuses to start in production without `DATABASE_URL`, `APP_ORIGIN` and `TRUST_PROXY`, and serves the built frontend, the API and the sockets from one origin. `node server/scripts/smoke-test.mjs https://your-domain` checks a running deployment from outside. `deployment.doc.md` has the hosting decision (Render, with Resend for mail), the step-by-step first deployment and the operations notes.
+
 ## Roadmap
 
 - Build the React frontend step by step (scaffold, route guards, account, chat and friends screens done; settings and room management next)
-- Add deployment and environment configuration for production
+- Deploy it for the first time by following `deployment.doc.md`, then the polish of the chat and friends screens
 
 ## License
 

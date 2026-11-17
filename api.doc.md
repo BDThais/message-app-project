@@ -435,16 +435,25 @@ Every request that reaches a limiter counts, including the ones answered `400` o
 
 The other endpoints have no limiter.
 
+## Operations
+
+Two endpoints for a host and a monitor. No session, no rate limit, no cookie.
+
+| Endpoint | Answer | Meaning |
+| --- | --- | --- |
+| `GET /api/health` | `200 { "status": "ok" }` | The process is up and answering. Does not touch the database, so a database outage does not get a healthy server restarted. What a host's health check asks. |
+| `GET /api/health/ready` | `200 { "status": "ok" }`, or `503 { "error": "Database unavailable" }` | The process can do its work: a trivial query reaches the database within 2 seconds. What an uptime monitor asks. |
+
 ## Real-time events
 
 A Socket.io socket on the API's own origin (`/socket.io`). It is a notification layer on top of the REST endpoints: it never writes data, and every event has the same effect as refetching the matching endpoint, so a client that missed one (it was offline) gets the same truth by asking again. The event names and payloads are typed in `server/src/contract/events.ts`, which the frontend imports like the rest of the contract.
 
 ### Connecting
 
-- The handshake carries the session cookie and resolves it with the same lookup as a REST request. A connection without a valid session is refused: the client gets a `connect_error` with the message `Unauthorized Access` and does not try again by itself. In development the browser reaches Socket.io through the dev proxy (`/socket.io`, with `ws: true`), so the cookie is first-party.
+- The handshake carries the session cookie and resolves it with the same lookup as a REST request. A connection without a valid session is refused: the client gets a `connect_error` with the message `Unauthorized Access` and does not try again by itself. When the server's `APP_ORIGIN` is set (always, in production), a handshake whose `Origin` header names another origin is refused too (a WebSocket handshake is not covered by CORS, and `SameSite=Lax` keeps out other sites but not other origins of the same site); one with no `Origin` header (not a browser) goes on to the session check. In development the browser reaches Socket.io through the dev proxy (`/socket.io`, with `ws: true`), so the cookie is first-party.
 - The handshake puts the socket into its rooms before the connection is announced: `user:<id>` (every socket of one person: friend events, and being added to a room), `chat:<chatId>` for every room the person is a member of, and `session:<sessionId>` (the sockets of one login session, so that ending the session can end them).
 - Being added to a room puts the person's sockets into `chat:<chatId>`. Leaving, being removed and a deleted room take them out, so a removed member stops receiving that room.
-- The server closes the sockets of a session when it ends: `POST /api/account/logout` (that session's), `POST /api/account/password` (every other session), a password reset and `DELETE /api/account/me` (all of the account's). The client sees the reason `io server disconnect` and does not reconnect by itself; a new handshake with the old cookie is refused.
+- The server closes the sockets of a session when it ends: when it expires (the socket was checked at the handshake only, so a timer closes it at the session's `expiresAt`), `POST /api/account/logout` (that session's), `POST /api/account/password` (every other session), a password reset and `DELETE /api/account/me` (all of the account's). The client sees the reason `io server disconnect` and does not reconnect by itself; a new handshake with the old cookie is refused.
 
 ### Events from the server
 

@@ -99,8 +99,8 @@ Completed:
 - Unit tests for email verification (the settings checks, the link and the send helper, the body validator), for `hashToken`, and for how `EMAIL_VERIFICATION_TTL_MS` is read
 - Unit tests for the password reset (the settings checks, the two mails and their send helpers, the two body validators), for the key of the per-email limiter, and for how `PASSWORD_RESET_TTL_MS` is read
 - Frontend scaffold (step 1 of `./frontend.doc.md`): Vite + React + TypeScript in `frontend/`, a dev proxy that forwards `/api` to this server, the fetch wrapper and query client, TanStack Router with the signed-in/signed-out route guards (they use `GET /api/account/me`), a thin login page, and tests for all of it
-- Every route is served under the `/api` prefix: `app.ts` mounts the routers at `/api/account`, `/api/chat` and `/api/friend`, the frontend's dev proxy forwards `/api` unchanged (it used to strip the prefix), and the integration tests call the prefixed paths
-- Routes nothing serves answer `404 { "error": "Route not found" }` through `notFoundHandler` (in `middlewares/ErrorHandler.ts`, registered in `app.ts` after the routers and before `errorHandler`), so Express's own HTML 404 page no longer breaks the rule that every error body is `{ error }`
+- Every route is served under the `/api` prefix: `app.ts` mounts the routers at `/api/health`, `/api/account`, `/api/chat` and `/api/friend`, the frontend's dev proxy forwards `/api` unchanged (it used to strip the prefix), and the integration tests call the prefixed paths
+- Routes nothing serves answer `404 { "error": "Route not found" }` through `notFoundHandler` (in `middlewares/ErrorHandler.ts`, registered in `app.ts` after the routers and before `errorHandler`; an unmatched `/api` path gets it before the built frontend's fallback does, see "Production hardening"), so Express's own HTML 404 page no longer breaks the rule that every error body is `{ error }`
 - The API contract (`src/contract/`, see "API contract" in Conventions): the entity shapes of `api.doc.md` as TypeScript, every endpoint's request, response and error bodies, `bodyFields` for reading a request body through them, and the controllers and validators of the account, chat room and friends modules written against them (the chat room and friends ones through their serializers). The account module's own user type is the contract's `User` (it was `PublicUser` in `account.service.ts`, a second type of that name next to the friends module's, which is now the contract's `PublicUser`), and `toPublicUser` is `toUser`.
 
 - Real-time events over Socket.io (`src/modules/realtime/`, `src/contract/events.ts`, see "Real-time events (implemented)"): the handshake with the session cookie, rooms per person, session and chat room that follow membership, one event for each change a REST endpoint commits (messages, rooms, members, read markers, friend requests), typing, and sockets closed with the session they were opened with.
@@ -111,7 +111,7 @@ Still planned or not yet implemented:
 - Frontend application screens and state management (the scaffold exists; the steps still to do are in `./frontend.doc.md`)
 - Production deployment hardening
 
-The room and auth systems are now acting as the current working backend foundation. The friend endpoints are all in place and the real-time events are built, so what remains is production hardening (the `Origin` check, a second instance, see "Known limits" under "Real-time events (implemented)") and the frontend's last step.
+The room and auth systems are now acting as the current working backend foundation. The friend endpoints are all in place and the real-time events are built, and the production hardening and the deployment plan are written (see "Production hardening (implemented)" and `./deployment.doc.md`), so what remains is deploying it and the frontend's polish.
 
 Note: In the database, the mutual friendship model stores two rows per friendship pair, one for each user, as described in the project requirements.
 
@@ -504,7 +504,25 @@ The events and the handshake are specified in `./api.doc.md` ("Real-time events"
 - **Ending a session ends its sockets.** The controllers of logout (`disconnectSession`), password change (`disconnectUser(userId, { exceptSessionId })`), password reset and account deletion (`disconnectUser(userId)`) close them. `disconnectSockets()` without `close`, so the client sees `io server disconnect` and does not reconnect by itself.
 - **Typing.** `typing` from a socket is relayed to the room's other sockets if the sender is in it, the payload is checked like a request body, and a socket is relayed at most once a second per room (every relay is a broadcast, so one socket must not be able to make the server send more). The name is the one the socket connected with.
 - **Tests.** `test/realtime/` runs the real HTTP server with Socket.io on a free port (`useRealtimeServer` in `test/helpers/realtime.ts`) and `socket.io-client` (a dev dependency; WebSocket only, with the session cookie in `extraHeaders`), and drives the REST endpoints with supertest: the handshake (no cookie, a made-up, an expired and a signed-out session; the rooms joined), every event with who receives it and who does not, what is not sent (a refused or unchanged request), membership following the rooms, typing, and the end of each kind of session. A negative check waits a short while (`settle`) because the network is involved. `realtime.emitter.unit.test.ts` needs no database. A mutation check on 2026-11-11 (28 changes to the emit calls, the room joins and leaves, the handshake, the typing guards and the session ends) was caught by a test each.
-- **Known limits.** One server instance (a second needs the Redis adapter, and `socketsJoin`/`socketsLeave` become asynchronous). The handshake does not check the `Origin` header: with `SameSite=Lax` a cross-site page cannot make the browser send the cookie, but a page on the same site and another origin could; the fix is an allow-list from a setting, once the production origin is known. A connected socket outlives its session's expiry (the session is checked at the handshake, and at the end calls above, not on a timer). A socket that reads its memberships just before a removal commits and joins after the removal's `socketsLeave` stays in the removed room's socket room until it reconnects (a window of a few milliseconds). Deleting an account sends no `member:removed` to the rooms the person was in.
+- **Known limits.** One server instance (a second needs the Redis adapter, and `socketsJoin`/`socketsLeave` become asynchronous). A socket that reads its memberships just before a removal commits and joins after the removal's `socketsLeave` stays in the removed room's socket room until it reconnects (a window of a few milliseconds). Deleting an account sends no `member:removed` to the rooms the person was in.
+
+## Production hardening (implemented)
+
+What a deployment needs from the server, written with the plan in `./deployment.doc.md` (which has the reasons, the settings table and the runbook). Everything here has tests, and each piece was checked by breaking it on purpose.
+
+- **`createApp(options)`.** `app.ts` builds the Express app from options (`trustProxy`, `appOrigin`, `frontendDist`, `logClientIp`); the default export is the one the server and every existing test use, made from `config.ts`. The factory exists so each deployment behavior is tested on an app of its own (`test/app/`).
+- **`TRUST_PROXY`.** Express's `trust proxy`, parsed by `parseTrustProxy` (`src/lib/deploymentSettings.ts`): a number of proxies, `0`/`false`/blank for none, or a list of `loopback`, `linklocal`, `uniquelocal` and addresses or subnets. `true` is refused. Required in production: a count that is too low makes every visitor share the proxy's address (one login budget for everybody), and one that is too high lets a visitor choose their address. `LOG_CLIENT_IP=true` logs `req.ip`, `req.ips`, `X-Forwarded-For` and the socket address for the first 10 requests, to find the right number on a new host.
+- **`APP_ORIGIN`.** The origin the app is opened at (no path, https in production). The Socket.io handshake refuses a browser page on any other origin (`allowRequest`; no `Origin` header goes on to the session check). The REST API needs no such check: a cross-origin request with a JSON body needs a CORS preflight, and the server answers none. Also feeds the Content-Security-Policy's `connect-src`.
+- **Sockets end with their session.** `closeWhenSessionEnds` closes a socket at the session's `expiresAt` (`findSessionUser` now returns it). The timer is set again until the time comes, because one cannot wait longer than about 24.8 days, and is cleared when the socket goes.
+- **Security headers.** `middlewares/securityHeaders.ts`: helmet's defaults, `img-src` with any https image (avatars are addresses of images anywhere), `connect-src` with the origin as a `wss://` address, `upgrade-insecure-requests` off, HSTS for 180 days without `includeSubDomains`.
+- **Health.** `GET /api/health` (up; no database on purpose) and `GET /api/health/ready` (a query within 2 seconds, else `503`). See "Operations" in `./api.doc.md`.
+- **Graceful shutdown.** `installShutdownHandlers` (`src/lib/shutdown.ts`): on SIGTERM or SIGINT, once, with a 10-second limit: stop the cleanup job, close Socket.io (which closes the HTTP server: the open requests finish), disconnect Prisma, exit 0 (1 on an error or the limit).
+- **The server serves the frontend.** With `FRONTEND_DIST` set, `mountFrontend` serves the built files: `assets/` (hashed names) for a year, everything else revalidated; a path with no extension and no file is `index.html` (a screen of the app); a missing file with an extension is a 404; an `/api` path nothing answers keeps its JSON 404 (`app.use('/api', notFoundHandler)` comes first); only GET and HEAD get the page.
+- **Startup checks.** `checkDeploymentSettings` is called from `server.ts` with the other settings checks. In production `DATABASE_URL`, `APP_ORIGIN` (https) and `TRUST_PROXY` are required; `APP_ORIGIN` must be an origin only; `FRONTEND_DIST` must hold an `index.html`. `config.DATABASE_URL` no longer defaults to a placeholder text, which hid a missing setting behind a connection error.
+- **Packaging.** `Dockerfile` (two stages: build, then a runtime with the production dependencies only, `prisma` among them because the host runs `prisma migrate deploy` from the image), `.dockerignore` (every `.env` excluded, wherever it is), `render.yaml`, `server/.env.production.example` and `server/scripts/smoke-test.mjs` (a read-only check of a running deployment).
+- **Cookie.** The session cookie has no `domain` and path `/`, which makes it valid under a `__Host-` name; production sets `SESSION_COOKIE=__Host-session`.
+
+Not done: a scheduled cleanup of expired sessions and mail tokens, request logging, error reporting, a second instance (Redis adapter and rate-limit store). See "Limits to know" in `./deployment.doc.md`.
 
 ## Project Structure
 
@@ -532,8 +550,8 @@ message-app/
     │   ├── test-db.mjs              // up | down | deploy | reset for the test database
     │   └── try-email-flows.mjs      // manual: email verification and password reset with real mail, through a running server (npm run try:email)
     ├── src/
-    │   ├── app.ts
-    │   ├── server.ts
+    │   ├── app.ts                   // createApp(options) (trust proxy, security headers, routes, the built frontend) and the default app made from config.ts
+    │   ├── server.ts                // the startup checks, the HTTP server with Socket.io, the cleanup job, graceful shutdown
     │   ├── config/
     │   │   └── config.ts            // every number is read by numberSetting: Number(), blank = not set, never parseInt
     │   ├── contract/                // the shapes of the API's JSON, shared with the frontend (see "API contract" in Conventions)
@@ -544,9 +562,11 @@ message-app/
     │   │   └── events.ts            // the Socket.io events and their payloads, in both directions
     │   ├── lib/
     │   │   ├── constants.ts
+    │   │   ├── deploymentSettings.ts // parseTrustProxy; checkDeploymentSettings (DATABASE_URL, APP_ORIGIN, TRUST_PROXY, FRONTEND_DIST): what a deployment needs, checked at startup
     │   │   ├── emailAddress.ts      // validateEmail (validator.isEmail) and normalizeEmail (lower case): the one place that decides what an address is and how it is spelled; used by signup, login and the password reset
     │   │   ├── frontendLink.ts      // checkFrontendPageUrl (startup check of a setting that holds a frontend page address) and buildTokenLink (the page plus `#token=...`); used by the verification and reset mail modules
     │   │   ├── mailer.ts            // Mailer interface; console and Resend mailers; createMailerFromConfig, getMailer / setMailer
+    │   │   ├── shutdown.ts          // installShutdownHandlers: SIGTERM/SIGINT close everything, with a time limit
     │   │   ├── rateLimiter.ts       // createRateLimiter (the factory every limiter is made with) and resetRateLimiters (tests only: test/setup.ts calls it before each test)
     │   │   ├── randomToken.ts       // generateToken: 32 random bytes as base64url (session ids, emailed tokens); hashToken: its SHA-256, the only form of an emailed token that is stored
     │   │   ├── parseIdParam.ts      // numeric URL param -> ID or null (used by the chat and friend validators)
@@ -556,6 +576,9 @@ message-app/
     │   ├── middlewares/             // shared by several features
     │   │   ├── ErrorHandler.ts      // every error body is { error }; keeps the status of 4xx errors Express raises; notFoundHandler answers unmatched routes with a 404
     │   │   ├── SessionCookie.ts     // set/clear/read the session cookie
+    │   │   ├── securityHeaders.ts   // helmet with this app's Content-Security-Policy and HSTS
+    │   │   ├── serveFrontend.ts     // mountFrontend: the built frontend files and the fallback to index.html
+    │   │   ├── logClientIp.ts       // LOG_CLIENT_IP: logs how the first requests' addresses were read (for finding TRUST_PROXY)
     │   │   └── UserSessionAuth.ts   // requireUserAuth; AuthenticatedRequest, withUser and userKey (see "Typed requests" in Conventions)
     │   └── modules/
     │       ├── account/
@@ -587,6 +610,10 @@ message-app/
     │       │   ├── message.service.ts
     │       │   ├── chatRoomCleanup.service.ts
     │       │   └── chatRoomCleanup.job.ts
+    │       ├── health/
+    │       │   ├── health.routes.ts             // GET /api/health, GET /api/health/ready
+    │       │   ├── health.controller.ts
+    │       │   └── health.service.ts            // isDatabaseReachable (a trivial query, with a time limit)
     │       ├── realtime/
     │       │   ├── realtime.server.ts           // attachRealtime (the handshake, the typing relay), closeRealtime
     │       │   ├── realtime.emitter.ts          // emitMessageNew ... emitFriendAccepted, disconnectSession, disconnectUser; nothing happens without a registered server
@@ -643,7 +670,15 @@ message-app/
         ├── contract/                         // mirrors src/contract/
         │   ├── contract.unit.test.ts         // the folder's rules: its files import only each other, and none has a Date (no database)
         │   └── contract.usage.unit.test.ts   // the ways round it: a bare `res: Response`, a `req.user!`, a body or query read by hand (no database)
+        ├── app/                              // createApp's options, each on an app of its own
+        │   ├── trustProxy.test.ts            // the login limit with one proxy, a spoofed prefix, none counted, two; LOG_CLIENT_IP
+        │   └── frontend.test.ts              // serving the built frontend (fallback, caching, 404s, no traversal) and the security headers
+        ├── health/
+        │   ├── health.test.ts                // both endpoints answer 200 without a session, and are not limited
+        │   └── health.service.unit.test.ts   // isDatabaseReachable (true, false, timeout, no timer left) and the 503 (database replaced, no database needed)
         ├── lib/                              // mirrors src/lib/
+        │   ├── deploymentSettings.unit.test.ts // parseTrustProxy and checkDeploymentSettings (no database)
+        │   ├── shutdown.unit.test.ts         // the stop signal: closes once, exit codes, the time limit (no database)
         │   ├── emailAddress.unit.test.ts     // validateEmail (any case is valid) and normalizeEmail (case only, idempotent; no database)
         │   ├── mailer.unit.test.ts           // settings checks, console mailer, getMailer / setMailer, Resend mailer (real SDK, stubbed fetch)
         │   ├── rateLimiter.unit.test.ts      // createRateLimiter limits and keeps counts of its own, resetRateLimiters gives the budgets back and refuses to run outside a test (no database)
@@ -681,6 +716,8 @@ message-app/
         │   ├── realtime.messages.test.ts     // message:new, message:updated, message:deleted and read:updated: who receives them, and nothing for a refused or unchanged request
         │   ├── realtime.rooms.test.ts        // chat:updated, chat:removed, member:added, member:removed and member:role_changed, and the sockets joining and leaving the room
         │   ├── realtime.friends.test.ts      // friend:request and friend:accepted
+        │   ├── realtime.hardening.test.ts    // the origin check and a socket closing when its session expires
+        │   ├── realtime.expiry.unit.test.ts  // closeWhenSessionEnds with a controlled clock: the time, a 30-day session, no timer left behind (no database)
         │   ├── realtime.typing.test.ts       // the relay, the room check, the checked payload and the one-a-second limit
         │   ├── realtime.session.test.ts      // logout, a password change, a deletion and a reset close the right sockets, and a closed session is not let back in
         │   └── realtime.emitter.unit.test.ts // nothing without a server, the room it addresses, a failure is logged and not thrown (no database)
@@ -711,7 +748,8 @@ Conventions:
 - API contract: the shapes of the API's JSON are written once, in `src/contract/` (`types.ts` for what the API returns, `requests.ts` for request bodies, `responses.ts` for response bodies, `errors.ts` for error bodies), and the frontend imports the same files as `@contract/...`, with `import type`. A contract file imports only other contract files, never Prisma, Express or `src/lib/`, because the frontend has none of them, and every value in it is JSON: a timestamp is a `string` there, and a service's `Date` is turned into one before it is sent (`test/contract/contract.unit.test.ts` checks both). Request bodies keep the wire's snake_case keys. A controller types its `res` with the contract (`Response<UserResponse | ApiErrorBody>`), so a body of another shape does not compile, and a validator reads its body with `bodyFields<SomeBody>(body)` from `src/lib/validation.ts`, so a key the contract does not have does not compile either. A validator still checks every field by hand: the types say which keys exist, not that a client sent them right. A service keeps its own types, with `Date`s (`ChatRoomSummaryData` is the contract's `ChatRoomSummary` with its two timestamps as `Date`s; `FriendRequestData` holds one too): the contract is the wire, not the service layer, and a serializer turns the one into the other. The chat room module's is `chatRoom.serializer.ts` and the friends module's `friend.serializer.ts`: each names every field it sends, so a column added to a table later is not sent until the contract has it, and it writes timestamps with `toISOString`, the string `JSON.stringify` would have written. Every module is typed, and `test/contract/contract.usage.unit.test.ts` keeps it so: every controller handler types its `res`, there is no `req.user!`, and a body or query is read only through a validator or `bodyFields`. A body type does not say which fields a client must send: that is the validator's job (`FriendRequestConflictBody` is an `ApiErrorBody` plus `requestId`, so a conflict answer that forgot the `requestId` still compiles, and the friends tests pin it). The folder is inside `src/` because `tsc` runs with `rootDir: ./src`: a `shared/` folder at the repository root would need the build changed.
 - Session handling is split in two: `modules/account/session.service.ts` talks to the database, and `middlewares/SessionCookie.ts` reads, sets and clears the cookie.
 - Background jobs live in the folder of the feature they belong to and are started from `server.ts`, never from `app.ts`, so tests that import the app do not start timers.
-- `server.ts` checks the callback of `app.listen`: Express 5 passes a failed listen (a port that is already taken, for one) to it instead of throwing, so the callback logs the error and exits with code 1. Without the check the process printed "Server is running" and idled on the cleanup job's timer, serving nothing.
+- `server.ts` makes the HTTP server itself (Socket.io needs it) and handles its `error` event: a failed listen (a port that is already taken, for one) is that event, so the handler logs the error and exits with code 1. Without it the process would throw, or print "Server is running" and idle on the cleanup job's timer, serving nothing. (Before Socket.io it checked the callback of `app.listen`, where Express 5 passes the same failure.)
+- Route files make their router with `import { Router } from 'express'`. `import Router from 'express'` is the app factory, and each router was then a separate small app with its own settings (it re-sent `X-Powered-By`, and took `trust proxy` by inheritance).
 - Mail goes out through `getMailer()` from `src/lib/mailer.ts` and nowhere else: a feature never imports a mail provider's SDK, and services never send mail themselves. The real mailer is installed from `server.ts`, never `app.ts`; the tests install the outbox in `test/setup.ts`. A feature's mail (subject, text, link, and the send helper that logs a failure instead of throwing) is composed in its own `<feature>.mail.ts`, for example `emailVerification.mail.ts` and `passwordReset.mail.ts`.
 - Tests live in `server/test/`, in a folder per feature that mirrors `src/modules/` (`test/account/`, `test/chatrooms/`, `test/friends/`; `test/middlewares/` mirrors `src/middlewares/`, `test/lib/` mirrors `src/lib/` and `test/config/` mirrors `src/config/`), and import from `../../src/...`. Shared fixtures live in `test/helpers/`. `loginAs(user)` creates the session row and sends its cookie directly, so no test outside `test/account/` depends on `/api/account/login` or its rate limiter.
 - Every rate limiter is made with `createRateLimiter` from `src/lib/rateLimiter.ts`, never with `rateLimit` from `express-rate-limit` directly: the factory gives it a memory store of its own and remembers it, and `test/setup.ts` calls `resetRateLimiters` before each test, so every test starts with full budgets. Without that a limiter keeps its count for the whole test file, and one keyed by IP (`loginLimiter`, `emailVerifyLimiter`, `passwordResetRequestIpLimiter`, `passwordResetLimiter`) is shared by every request the test client sends, so a file would run out of budget part way and answer 429 to whichever test comes last. A test that wants a limit to fire sends the requests itself and may use up the whole budget (`emailVerifyLimiter.test.ts`); it is back for the next test. The limiters stay real in the path of every request: nothing is mocked or switched off in tests, and `resetRateLimiters` throws outside a test run.
@@ -811,7 +849,7 @@ HTTP request
 1. Build the React frontend and integrate it with TanStack Query, step by step (see `./frontend.doc.md`; steps 1 to 6 are done)
 2. Real-time communication with Socket.io, server and client together: done (see "Real-time events (implemented)")
 3. Add authentication-aware UI states and protected routes (the route guards, and the sign-up, verification and reset screens, are done)
-4. Add deployment configuration and production hardening, including the Resend account and verified domain that production mail needs (see "Email delivery", "Email verification (implemented)" and "Password reset (implemented)")
+4. Deployment configuration: done (`Dockerfile`, `render.yaml`, the plan in `./deployment.doc.md`); the first real deployment is the next step and production hardening, including the Resend account and verified domain that production mail needs (see "Email delivery", "Email verification (implemented)" and "Password reset (implemented)")
 
 ## Notes
 

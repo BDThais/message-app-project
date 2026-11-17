@@ -40,7 +40,7 @@ npm run build      # vite build, then the type check
 
 **Cookie.** The session cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` in production (`middlewares/SessionCookie.ts`). The frontend never reads it. Every request is sent with `credentials: 'include'`.
 
-**Production (planned, step 7).** Serve the built frontend and route `/api` and `/socket.io` (which needs WebSocket upgrades passed through) to the API from the same origin, for example with a reverse proxy. With `SameSite=Lax` the frontend and the API have to be on the same site anyway. Two server-side consequences:
+**Production (implemented).** The Node server serves the built frontend itself (`FRONTEND_DIST`; the `Dockerfile` builds both and sets it), so the page, `/api` and `/socket.io` share one origin with nothing in front of it but the host's HTTPS proxy. The plan, the settings and the runbook are in `./deployment.doc.md`. With `SameSite=Lax` the frontend and the API have to be on the same site anyway. Two server-side consequences:
 
 - CORS is only needed if the two end up on different origins. Then `cors` has to be added (see "Cookie / CORS Notes" in `./backend.doc.md`) and the cookie changed to `SameSite=None; Secure`, as the comment in `SessionCookie.ts` says.
 - Behind a reverse proxy, every request arrives from the proxy's address unless Express is told to trust the proxy's `X-Forwarded-For` header (`app.set('trust proxy', ...)`; `app.ts` does not set it today). The rate limiters key on the IP, so without it all users would share one limit.
@@ -412,7 +412,7 @@ Tests (`test/chatEvents.test.tsx`, `test/realtime.test.tsx`, and the cache, form
 ### Step 7 — design, polish, deployment
 
 - Polish of the chat and friends screens (the account screens are styled, see "Styling"), empty and error states, keyboard use, phone layout of the chat screens (the account screens already work at phone width).
-- Production setup as described in "How the frontend talks to the server".
+- Production setup: done (the server serves the build, see "How the frontend talks to the server"; the plan and runbook are in `./deployment.doc.md`). What is left is the first real deployment.
 
 ## Testing
 
