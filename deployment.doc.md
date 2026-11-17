@@ -10,7 +10,7 @@ On your computer the app is three programs: the Vite dev server (port 5173, the 
 
 In production the same idea is kept, with fewer pieces:
 
-```
+```text
  Browser ──https──> [ the host's front door ] ──http──> [ one Node process ] ──> [ Postgres ]
                      (HTTPS certificate,                  API + sockets +            (only the Node
                       http → https redirect)              the built frontend          process can reach it)
@@ -159,7 +159,7 @@ Section 5 explains why. The test takes five minutes:
 
 From your computer, in the repository (`npm ci` in `server/` once):
 
-```
+```text
 node server/scripts/smoke-test.mjs https://chat.yourdomain.com
 ```
 
@@ -218,9 +218,11 @@ While the old and the new version overlap, and after a rollback, the old code ru
 
 - Render's paid Postgres keeps point-in-time recovery for a few days (3 days on the Hobby workspace plan when this was written) and logical exports for a week. That covers "I deleted something by mistake yesterday".
 - That is not a backup you hold. **Once a month** keep a copy somewhere else: allow your own address in the database's *Access Control* (Render dashboard), then
-  ```
+
+  ```text
   pg_dump --format=custom --no-owner "EXTERNAL_DATABASE_URL" > message-app-$(date +%F).dump
   ```
+
   and remove your address again afterwards. Keep the file in storage that is not Render (a cloud drive, a USB disk).
 - **Test a restore once**, before you need it: create an empty database locally, `pg_restore --no-owner -d postgres://... message-app-xxxx.dump`, start the server against it, sign in. A backup that has never been restored is a hope.
 
