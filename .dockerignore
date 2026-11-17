@@ -4,22 +4,27 @@
 .vscode
 .idea
 
-# Dependencies
+# Dependencies (the image installs its own)
 node_modules
 **/node_modules
 
-# Build artifacts
-frontend/dist
-frontend/build
-server/dist
-server/.next
-server/coverage
+# Build artifacts and generated code (the image builds and generates its own: a stale copy must not win)
+**/dist
+**/build
+**/coverage
+server/src/generated
+frontend/src/routeTree.gen.ts
 
-# Environment files
-.env
-.env.*
-!.env.example
-!.env.test.example
+# Environment files: never in an image, wherever they are (a pattern without **/ only matches the root)
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.test.example
+!**/.env.production.example
+
+# Notes and docs (not needed to build or run)
+*.md
+CLAUDE_SANDBOX_NOTES.md
 
 # Logs and caches
 *.log
@@ -32,3 +37,4 @@ Thumbs.db
 # Docker files
 Dockerfile
 docker-compose*.yml
+**/docker-compose*.yml
