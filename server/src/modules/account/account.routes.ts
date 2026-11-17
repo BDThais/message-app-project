@@ -1,4 +1,4 @@
-import Router from 'express';
+import { Router } from 'express';
 import { requireUserAuth, withUser } from '../../middlewares/UserSessionAuth';
 import {
   signup,

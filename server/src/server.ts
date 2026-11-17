@@ -1,14 +1,18 @@
 import { createServer } from 'node:http';
 import app from './app';
 import config from './config/config';
+import { checkDeploymentSettings } from './lib/deploymentSettings';
 import { createMailerFromConfig, setMailer } from './lib/mailer';
+import { prisma } from './lib/prisma';
+import { installShutdownHandlers } from './lib/shutdown';
 import { checkEmailVerificationSettings } from './modules/account/emailVerification.mail';
 import { checkPasswordResetSettings } from './modules/account/passwordReset.mail';
 import { checkSessionSettings } from './modules/account/session.service';
 import { startEmptyChatRoomCleanup } from './modules/chatrooms/chatRoomCleanup.job';
-import { attachRealtime } from './modules/realtime/realtime.server';
+import { attachRealtime, closeRealtime } from './modules/realtime/realtime.server';
 
 // Before listen: a setting that cannot work stops the server before it takes requests.
+checkDeploymentSettings(config);
 setMailer(createMailerFromConfig(config));
 checkEmailVerificationSettings(config);
 checkPasswordResetSettings(config);
@@ -18,7 +22,7 @@ checkSessionSettings(config);
 // (a port that is already taken, for one) is an 'error' event of that server; without the handler the
 // process would throw, or idle on the cleanup job's timer.
 const httpServer = createServer(app);
-attachRealtime(httpServer);
+const realtime = attachRealtime(httpServer, { allowedOrigin: config.APP_ORIGIN || undefined });
 
 httpServer.on('error', (error) => {
   console.error(`Could not listen on port ${config.PORT}:`, error);
@@ -28,7 +32,17 @@ httpServer.listen(config.PORT, () => {
   console.log(`Server is running on port ${config.PORT}`);
 });
 
-startEmptyChatRoomCleanup({
+const stopCleanup = startEmptyChatRoomCleanup({
   retentionMs: config.EMPTY_ROOM_RETENTION_MS,
   intervalMs: config.EMPTY_ROOM_CLEANUP_INTERVAL_MS,
+});
+
+// A deploy sends SIGTERM: the sockets are told (their clients reconnect to the new instance and catch up),
+// requests in flight finish, the database connections close, and the process leaves.
+installShutdownHandlers({
+  close: async () => {
+    stopCleanup();
+    await closeRealtime(realtime); // also closes the HTTP server: no new connection, the open ones finish
+    await prisma.$disconnect();
+  },
 });

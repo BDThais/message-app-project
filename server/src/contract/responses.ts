@@ -104,3 +104,8 @@ export interface AcceptedFriendResponse {
 export interface FriendListResponse {
   friends: PublicUser[];
 }
+
+/** GET /api/health and GET /api/health/ready (200). */
+export interface HealthResponse {
+  status: 'ok';
+}

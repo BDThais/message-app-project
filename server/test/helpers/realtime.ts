@@ -6,7 +6,12 @@ import { afterEach, beforeEach } from 'vitest';
 import app from '../../src/app';
 import config from '../../src/config/config';
 import type { ClientToServerEvents, ServerToClientEvents } from '../../src/contract/events';
-import { attachRealtime, closeRealtime, type RealtimeServer } from '../../src/modules/realtime/realtime.server';
+import {
+  attachRealtime,
+  closeRealtime,
+  type RealtimeOptions,
+  type RealtimeServer,
+} from '../../src/modules/realtime/realtime.server';
 import { createSessionRow } from './users';
 
 export type TestSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -22,10 +27,10 @@ let realtime: RealtimeServer;
 const opened: TestSocket[] = [];
 
 /** The real HTTP server with Socket.io on it, on a free port, for the test that calls this inside `describe`. */
-export function useRealtimeServer() {
+export function useRealtimeServer(options: RealtimeOptions = {}) {
   beforeEach(async () => {
     httpServer = createServer(app);
-    realtime = attachRealtime(httpServer);
+    realtime = attachRealtime(httpServer, options);
     await new Promise<void>((resolve) => httpServer.listen(0, resolve));
   });
 
@@ -50,14 +55,17 @@ export async function openSession(user: { id: number }, expiresAt = new Date(Dat
  * the server's `connect_error`, whose `message` is the reason. Every event it receives from then on is
  * in `received`.
  */
-export function connectSocket(cookie?: string): Promise<TestSocket & { received: Received[] }> {
+export function connectSocket(
+  cookie?: string,
+  { origin }: { origin?: string } = {},
+): Promise<TestSocket & { received: Received[] }> {
   const { port } = httpServer.address() as AddressInfo;
   const socket = connect(`http://localhost:${port}`, {
     // No polling: the Node client sends the cookie header on a WebSocket too (`extraHeaders`), and a
     // test does not wait for an upgrade.
     transports: ['websocket'],
     reconnection: false,
-    ...(cookie === undefined ? {} : { extraHeaders: { cookie } }),
+    extraHeaders: { ...(cookie === undefined ? {} : { cookie }), ...(origin === undefined ? {} : { origin }) },
   }) as TestSocket & { received: Received[] };
   socket.received = [];
   socket.onAny((event: string, payload: unknown) => socket.received.push({ event, payload }));

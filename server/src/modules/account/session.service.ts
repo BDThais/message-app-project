@@ -58,7 +58,9 @@ export function deleteSession(sessionId: string) {
  * caller can react differently: an expired session is deleted here, but only
  * the HTTP layer can tell the browser to drop its cookie.
  */
-export type SessionLookup = { status: 'valid'; user: User } | { status: 'expired' } | { status: 'missing' };
+export type SessionLookup =
+  // `expiresAt` is when the session ends: the socket opened with it is closed then.
+  { status: 'valid'; user: User; expiresAt: Date } | { status: 'expired' } | { status: 'missing' };
 
 export async function findSessionUser(sessionId: string): Promise<SessionLookup> {
   const session = await prisma.session.findUnique({
@@ -77,5 +79,5 @@ export async function findSessionUser(sessionId: string): Promise<SessionLookup>
     return { status: 'expired' };
   }
 
-  return { status: 'valid', user: toUser(session.user) };
+  return { status: 'valid', user: toUser(session.user), expiresAt: session.expiresAt };
 }

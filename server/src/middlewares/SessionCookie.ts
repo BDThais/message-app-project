@@ -10,7 +10,8 @@ const cookieBaseOptions = () =>
   ({
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax', // switch to 'none' + secure if frontend/backend end up on different domains in prod
+    // Lax is enough because the app and its API share one origin (the server serves the frontend in production, the dev proxy does in development). No `domain` and the default path `/` also make the cookie valid under a `__Host-` name (SESSION_COOKIE), which a browser accepts only over https and only for this host. A frontend on another site would need 'none' + secure, CORS and CSRF protection.
+    sameSite: 'lax',
   }) as const;
 
 /**

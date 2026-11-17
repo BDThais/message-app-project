@@ -27,12 +27,16 @@ interface Config {
   EMAIL_VERIFICATION_URL: string;
   PASSWORD_RESET_TTL_MS: number;
   PASSWORD_RESET_URL: string;
+  APP_ORIGIN: string;
+  TRUST_PROXY: string;
+  FRONTEND_DIST: string;
+  LOG_CLIENT_IP: boolean;
 }
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const config: Config = {
   PORT: numberSetting('PORT', 3000),
   NODE_ENV,
-  DATABASE_URL: process.env.DATABASE_URL || 'backup_database_url_here',
+  DATABASE_URL: process.env.DATABASE_URL || '', // Required when NODE_ENV=production. Validated at startup by checkDeploymentSettings. (prisma.ts reads process.env.DATABASE_URL itself.)
   SESSION_COOKIE: process.env.SESSION_COOKIE || 'session_id',
   SESSION_TTL_MS: numberSetting('SESSION_TTL_MS', 604800000), // How long a login session lasts. Default: 7 days. Validated at startup by checkSessionSettings.
   EMPTY_ROOM_RETENTION_MS: numberSetting('EMPTY_ROOM_RETENTION_MS', 604800000), // How long a room with no members is kept before it (and its messages) is deleted. Default: 7 days.
@@ -46,5 +50,9 @@ const config: Config = {
   PASSWORD_RESET_TTL_MS: numberSetting('PASSWORD_RESET_TTL_MS', 1800000), // How long an emailed password reset link works. Default: 30 minutes. Validated at startup by checkPasswordResetSettings.
   PASSWORD_RESET_URL:
     process.env.PASSWORD_RESET_URL || (NODE_ENV === 'production' ? '' : 'http://localhost:5173/reset-password'), // The frontend page the mailed reset link opens (the token is appended as #token=...). Required when NODE_ENV=production, so a mail can never point at localhost. Validated at startup by checkPasswordResetSettings.
+  APP_ORIGIN: (process.env.APP_ORIGIN || '').trim(), // The one origin (scheme + host + port, no path) the browser loads the app from, e.g. 'https://chat.example.com'. A Socket.io handshake from a browser page on any other origin is refused. Required (and https) when NODE_ENV=production; when empty elsewhere, no origin is checked. Validated at startup by checkDeploymentSettings.
+  TRUST_PROXY: (process.env.TRUST_PROXY || '').trim(), // How many reverse proxies sit between the browser and this process: a number ('1'), '0'/'false' for none, or a comma-separated list of 'loopback', 'linklocal', 'uniquelocal' and IPs/CIDRs. Required when NODE_ENV=production, because a wrong value breaks the rate limits (see docs). Validated at startup by checkDeploymentSettings.
+  FRONTEND_DIST: (process.env.FRONTEND_DIST || '').trim(), // The folder of the built frontend (it holds index.html). When set, this server serves the frontend as well as the API, on one origin. Validated at startup by checkDeploymentSettings.
+  LOG_CLIENT_IP: process.env.LOG_CLIENT_IP === 'true', // Temporary: logs what the first requests look like (req.ip, X-Forwarded-For) so the right TRUST_PROXY can be found on a new host. Turn it off afterwards.
 };
 export default config;
