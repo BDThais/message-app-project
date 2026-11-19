@@ -1,49 +1,49 @@
 # yaml-language-server: $schema=https://render.com/schema/render.yaml.json
 #
-# A Render Blueprint: one web service (this repository's Dockerfile) and one Postgres database, both in
-# Singapore. Render > New > Blueprint > pick the repository. The values marked `sync: false` are asked for
-# when the Blueprint is created and are never overwritten by a later sync; see deployment.doc.md for what to enter.
-
-databases:
-  - name: message-app-db
-    region: singapore
-    plan: basic-256mb
-    postgresMajorVersion: '18' # the major version the test suite runs on (server/docker-compose.test.yml)
-    databaseName: message_app
-    user: message_app
-    ipAllowList: [] # nothing outside Render may connect; add your own address when you need a pg_dump from your computer
+# A Render Blueprint for the FREE plan: one web service (this repository's Dockerfile), in Singapore. The database
+# is not here: Render's free Postgres expires after 30 days, so the free setup uses a Neon database (Singapore,
+# free) whose connection string you enter below. Render > New > Blueprint > pick the repository. The values marked
+# `sync: false` are asked for when the Blueprint is created and are never overwritten by a later sync;
+# deployment.doc.md says what to enter. To move to a paid service and a Render database, see "Upgrading".
 
 services:
   - type: web
     name: message-app
     runtime: docker
     region: singapore
-    plan: starter # always on: a free web service sleeps after 15 minutes, which closes every socket
+    plan: free # sleeps after 15 minutes without traffic (an open page's socket counts as traffic) and wakes in about a minute
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    healthCheckPath: /api/health # does not touch the database, so a database outage does not restart the server
-    preDeployCommand: npx prisma migrate deploy # runs on the new version before traffic moves to it; a failure cancels the deploy
-    autoDeployTrigger: commit
+    healthCheckPath: /api/health # does not touch the database, so Render's checks never wake the sleeping Neon database
+    autoDeployTrigger: commit # every push builds the image, which spends build minutes: set to `off` to deploy by hand
     envVars:
       - key: NODE_ENV
         value: production
-      - key: DATABASE_URL
-        fromDatabase:
-          name: message-app-db
-          property: connectionString
+      - key: MIGRATE_ON_START # the free plan has no pre-deploy step, so the migrations run when the container starts
+        value: 'true'
+      - key: DATABASE_URL # the Neon DIRECT connection string (the host without "-pooler"), copied as Neon shows it
+        sync: false
       - key: TRUST_PROXY # how many proxies are in front: '1' on Render, but check it (LOG_CLIENT_IP, deployment.doc.md)
         sync: false
-      - key: APP_ORIGIN # https://your-domain, no path and no trailing slash
+      - key: APP_ORIGIN # https://<the service's name>.onrender.com, or your own domain: no path, no trailing slash
         sync: false
-      - key: EMAIL_VERIFICATION_URL # https://your-domain/verify-email
+      - key: EMAIL_VERIFICATION_URL # <APP_ORIGIN>/verify-email
         sync: false
-      - key: PASSWORD_RESET_URL # https://your-domain/reset-password
+      - key: PASSWORD_RESET_URL # <APP_ORIGIN>/reset-password
+        sync: false
+      - key: SIGNUP_ENABLED # 'false' without a verified mail domain (accounts are made with createVerifiedUser.ts), 'true' with one
         sync: false
       - key: MAIL_TRANSPORT
         value: resend
       - key: RESEND_API_KEY
         sync: false
-      - key: MAIL_FROM # 'Message App <no-reply@your-domain>', on a domain verified in Resend
+      - key: MAIL_FROM # 'Message App <onboarding@resend.dev>' without a domain (mail reaches only you), or a sender on a domain verified in Resend
         sync: false
       - key: SESSION_COOKIE # the __Host- prefix makes a browser refuse the cookie unless it is Secure, for this host only
         value: __Host-session
+
+# Upgrading to a paid service with a Render database later: set `plan: starter`, remove MIGRATE_ON_START and add
+#   preDeployCommand: npx prisma migrate deploy
+# to the service; add a `databases:` entry (name, region: singapore, plan: basic-256mb, postgresMajorVersion: '18',
+# databaseName, user, ipAllowList: []) and make DATABASE_URL `fromDatabase: { name: ..., property: connectionString }`.
+# The data moves with pg_dump and pg_restore (deployment.doc.md, "Upgrading").

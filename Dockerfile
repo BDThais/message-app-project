@@ -32,16 +32,24 @@ RUN cd frontend && npm run build
 # ---- runtime: only what runs -------------------------------------------------------------------
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production
+# The Prisma command-line tool otherwise looks for updates and sends usage data on every migration run.
+ENV CHECKPOINT_DISABLE=1 PRISMA_HIDE_UPDATE_MESSAGE=1
 WORKDIR /app/server
 
-# The production dependencies only. `prisma` is one of them: the host runs `prisma migrate deploy` from this
-# image before each new version takes traffic.
+# The production dependencies only. `prisma` is one of them: `prisma migrate deploy` runs from this image,
+# either as the host's pre-deploy command or at start (MIGRATE_ON_START, see scripts/docker-start.sh).
 COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-COPY --from=build /app/server/dist ./dist
 COPY --from=build /app/server/prisma ./prisma
 COPY --from=build /app/server/prisma.config.ts ./
+# Fetch Prisma's schema engine (the binary `migrate deploy` runs) now: `prisma --version` downloads it when it is
+# missing, so a build that cannot get it fails here, and the container never tries to download it when it starts
+# (the `node` user could not write it into node_modules anyway). The placeholder satisfies prisma.config.ts.
+RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npx prisma --version
+
+COPY --from=build /app/server/dist ./dist
+COPY --from=build /app/server/scripts/docker-start.sh ./scripts/docker-start.sh
 COPY --from=build /app/frontend/dist /app/frontend-dist
 ENV FRONTEND_DIST=/app/frontend-dist
 
@@ -52,4 +60,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD node -e "fetch('http://localhost:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
 
-CMD ["node", "dist/server.js"]
+CMD ["sh", "scripts/docker-start.sh"]
