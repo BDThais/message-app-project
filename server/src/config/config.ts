@@ -27,6 +27,7 @@ interface Config {
   EMAIL_VERIFICATION_URL: string;
   PASSWORD_RESET_TTL_MS: number;
   PASSWORD_RESET_URL: string;
+  SIGNUP_ENABLED: boolean;
   APP_ORIGIN: string;
   TRUST_PROXY: string;
   FRONTEND_DIST: string;
@@ -50,6 +51,7 @@ const config: Config = {
   PASSWORD_RESET_TTL_MS: numberSetting('PASSWORD_RESET_TTL_MS', 1800000), // How long an emailed password reset link works. Default: 30 minutes. Validated at startup by checkPasswordResetSettings.
   PASSWORD_RESET_URL:
     process.env.PASSWORD_RESET_URL || (NODE_ENV === 'production' ? '' : 'http://localhost:5173/reset-password'), // The frontend page the mailed reset link opens (the token is appended as #token=...). Required when NODE_ENV=production, so a mail can never point at localhost. Validated at startup by checkPasswordResetSettings.
+  SIGNUP_ENABLED: process.env.SIGNUP_ENABLED !== 'false', // 'false' closes POST /api/account/signup (403), for a deployment that cannot mail strangers a verification link (a free Resend plan sends only to its owner): accounts are then made with src/scripts/createVerifiedUser.ts. Anything else, or unset: open.
   APP_ORIGIN: (process.env.APP_ORIGIN || '').trim(), // The one origin (scheme + host + port, no path) the browser loads the app from, e.g. 'https://chat.example.com'. A Socket.io handshake from a browser page on any other origin is refused. Required (and https) when NODE_ENV=production; when empty elsewhere, no origin is checked. Validated at startup by checkDeploymentSettings.
   TRUST_PROXY: (process.env.TRUST_PROXY || '').trim(), // How many reverse proxies sit between the browser and this process: a number ('1'), '0'/'false' for none, or a comma-separated list of 'loopback', 'linklocal', 'uniquelocal' and IPs/CIDRs. Required when NODE_ENV=production, because a wrong value breaks the rate limits (see docs). Validated at startup by checkDeploymentSettings.
   FRONTEND_DIST: (process.env.FRONTEND_DIST || '').trim(), // The folder of the built frontend (it holds index.html). When set, this server serves the frontend as well as the API, on one origin. Validated at startup by checkDeploymentSettings.

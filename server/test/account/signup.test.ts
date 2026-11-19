@@ -355,3 +355,39 @@ describe(`POST ${signUpRoute} (verification email)`, () => {
     expect(outbox.send).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('POST /api/account/signup when sign-up is closed (SIGNUP_ENABLED=false)', () => {
+  afterEach(() => {
+    config.SIGNUP_ENABLED = true;
+  });
+
+  const body = { name: 'Alice', email: 'alice@example.com', tel: '+84901234567', password: 'Str0ng!Pass' };
+
+  it('answers 403 and says so, creates no account and sends no mail', async () => {
+    config.SIGNUP_ENABLED = false;
+
+    const res = await request(app).post(signUpRoute).send(body);
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: 'Sign-up is closed on this deployment' });
+    expect(await countUsers()).toBe(0);
+    expect(outbox.sent).toHaveLength(0);
+  });
+
+  it('answers 403 before it looks at the body: the same for an invalid one', async () => {
+    config.SIGNUP_ENABLED = false;
+
+    const res = await request(app).post(signUpRoute).send({});
+
+    expect(res.status).toBe(403);
+  });
+
+  it('is open again when the setting is on: the same request creates the account', async () => {
+    config.SIGNUP_ENABLED = true;
+
+    const res = await request(app).post(signUpRoute).send(body);
+
+    expect(res.status).toBe(201);
+    expect(await countUsers()).toBe(1);
+  });
+});

@@ -32,6 +32,10 @@ import config from '../../config/config';
 
 export async function signup(req: Request, res: Response<MessageResponse | ApiErrorBody>, next: NextFunction) {
   try {
+    if (!config.SIGNUP_ENABLED) {
+      return res.status(403).json({ error: 'Sign-up is closed on this deployment' });
+    }
+
     const validation = validateAccountBody(req.body);
     if (!validation.valid) {
       return res.status(400).json({ error: validation.message });
