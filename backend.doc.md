@@ -519,7 +519,9 @@ What a deployment needs from the server, written with the plan in `./deployment.
 - **Graceful shutdown.** `installShutdownHandlers` (`src/lib/shutdown.ts`): on SIGTERM or SIGINT, once, with a 10-second limit: stop the cleanup job, close Socket.io (which closes the HTTP server: the open requests finish), disconnect Prisma, exit 0 (1 on an error or the limit).
 - **The server serves the frontend.** With `FRONTEND_DIST` set, `mountFrontend` serves the built files: `assets/` (hashed names) for a year, everything else revalidated; a path with no extension and no file is `index.html` (a screen of the app); a missing file with an extension is a 404; an `/api` path nothing answers keeps its JSON 404 (`app.use('/api', notFoundHandler)` comes first); only GET and HEAD get the page.
 - **Startup checks.** `checkDeploymentSettings` is called from `server.ts` with the other settings checks. In production `DATABASE_URL`, `APP_ORIGIN` (https) and `TRUST_PROXY` are required; `APP_ORIGIN` must be an origin only; `FRONTEND_DIST` must hold an `index.html`. `config.DATABASE_URL` no longer defaults to a placeholder text, which hid a missing setting behind a connection error.
-- **Packaging.** `Dockerfile` (two stages: build, then a runtime with the production dependencies only, `prisma` among them because the host runs `prisma migrate deploy` from the image), `.dockerignore` (every `.env` excluded, wherever it is), `render.yaml`, `server/.env.production.example` and `server/scripts/smoke-test.mjs` (a read-only check of a running deployment).
+- **Packaging.** `Dockerfile` (two stages: build, then a runtime with the production dependencies only, `prisma` among them because `prisma migrate deploy` runs from the image), `.dockerignore` (every `.env` excluded, wherever it is), `render.yaml` (Render's free plan, with the database on Neon), `server/.env.production.example` and `server/scripts/smoke-test.mjs` (a read-only check of a running deployment).
+- **Start script.** The image runs `scripts/docker-start.sh`: with `MIGRATE_ON_START=true` it applies the pending migrations first (for hosts with no pre-deploy step, such as Render's free plan; safe because one instance runs), and it starts the server with `exec`, so SIGTERM reaches the server's shutdown handler. A failing migration stops the container.
+- **Closed sign-up and hand-made accounts.** `SIGNUP_ENABLED=false` makes `POST /api/account/signup` answer 403 before it reads the body: without a verified mail domain a stranger's sign-up would be "created" and never verified. `createVerifiedUser` (`modules/account/verifiedUser.service.ts`, run by `src/scripts/createVerifiedUser.ts` from a machine that can reach the database) makes an account that counts as verified: signup's validation and duplicate rules, the same rows, and the address verified through `verifyEmailToken` with a token that is never mailed. The password comes from `USER_PASSWORD`, not from an argument.
 - **Cookie.** The session cookie has no `domain` and path `/`, which makes it valid under a `__Host-` name; production sets `SESSION_COOKIE=__Host-session`.
 
 Not done: a scheduled cleanup of expired sessions and mail tokens, request logging, error reporting, a second instance (Redis adapter and rate-limit store). See "Limits to know" in `./deployment.doc.md`.
@@ -552,6 +554,8 @@ message-app/
     ├── src/
     │   ├── app.ts                   // createApp(options) (trust proxy, security headers, routes, the built frontend) and the default app made from config.ts
     │   ├── server.ts                // the startup checks, the HTTP server with Socket.io, the cleanup job, graceful shutdown
+    │   ├── scripts/
+    │   │   └── createVerifiedUser.ts // CLI: makes a verified account in the database DATABASE_URL points at (USER_PASSWORD from the environment)
     │   ├── config/
     │   │   └── config.ts            // every number is read by numberSetting: Number(), blank = not set, never parseInt
     │   ├── contract/                // the shapes of the API's JSON, shared with the frontend (see "API contract" in Conventions)
@@ -588,6 +592,7 @@ message-app/
     │       │   ├── account.service.ts
     │       │   ├── session.service.ts   // session database operations; checkSessionSettings (SESSION_TTL_MS, checked at startup)
     │       │   ├── emailVerification.service.ts   // newVerificationToken, issueEmailVerification (resend), verifyEmailToken
+    │       │   ├── verifiedUser.service.ts        // createVerifiedUser: an account that counts as verified, with no mail (signup's rules; run by src/scripts/createVerifiedUser.ts)
     │       │   ├── emailVerification.mail.ts      // settings check, the link, sendVerificationEmail (never rejects)
     │       │   ├── emailVerification.validator.ts // POST /api/account/email/verify body
     │       │   ├── passwordReset.service.ts       // newPasswordResetToken, issuePasswordReset (reset-request, under a row lock), resetPasswordWithToken
@@ -644,6 +649,7 @@ message-app/
         │   ├── emailVerificationToken.schema.test.ts   // the hand-written migration's rules: one token per user, unique hash, deleted with the user
         │   ├── user.schema.test.ts           // users.email: the CHECK constraint refuses capitals, the unique index still holds
         │   ├── emailVerification.service.test.ts       // expiry, one use, cooldown, row lock: the service called directly, with the races
+        │   ├── verifiedUser.test.ts          // createVerifiedUser (signs in at once, signup's validation and duplicates, two at the same moment) and the script as a process (exit codes)
         │   ├── emailVerify.test.ts           // POST /api/account/email/verify
         │   ├── emailVerifyLimiter.test.ts    // its per-IP limiter: one test uses up the whole budget, the next one starts with a full one again
         │   ├── emailVerificationResend.test.ts   // POST /api/account/email/verification
@@ -676,6 +682,8 @@ message-app/
         ├── health/
         │   ├── health.test.ts                // both endpoints answer 200 without a session, and are not limited
         │   └── health.service.unit.test.ts   // isDatabaseReachable (true, false, timeout, no timer left) and the 503 (database replaced, no database needed)
+        ├── scripts/
+        │   └── dockerStart.unit.test.ts      // docker-start.sh with a stand-in npx and node: when it migrates, that a failed migration stops it, that it execs the server (not run on Windows; no database)
         ├── lib/                              // mirrors src/lib/
         │   ├── deploymentSettings.unit.test.ts // parseTrustProxy and checkDeploymentSettings (no database)
         │   ├── shutdown.unit.test.ts         // the stop signal: closes once, exit codes, the time limit (no database)

@@ -61,6 +61,7 @@ Creates an account. Public. It does not sign the user in.
 - The account starts unverified (`emailVerified: false`) and a verification link is mailed to the address (see "Mailed links").
 - The account is created with its private chat room (see "Private chat room" under "GET /api/chat").
 - Response `201`: `{ "message": "Account created successfully" }`.
+- `403 Sign-up is closed on this deployment` when the server runs with `SIGNUP_ENABLED=false` (a deployment that cannot mail verification links); it is answered before the body is read.
 - `409` when the email or the phone number is taken: `Email already exists` or `Phone number already exists` (another spelling of a registered number counts, and so does another case of a registered address). When two signups collide at the same instant and the server cannot tell which field it was, the text is `Email or phone number already exists`.
 
 ### POST /api/account/login

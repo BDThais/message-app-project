@@ -43,7 +43,7 @@ Next priorities:
 - Frontend: React + TypeScript + Vite (scaffolded; see `frontend.doc.md`)
 - Routing and data fetching: TanStack Router and TanStack Query
 - Real-time communication: Socket.io (a notification layer over the REST API; see "Real-time events" in `api.doc.md`)
-- Deployment: one Docker image (`Dockerfile`) that serves the API, the sockets and the built frontend; a Render Blueprint (`render.yaml`); see `deployment.doc.md`
+- Deployment: one Docker image (`Dockerfile`) that serves the API, the sockets and the built frontend; a Render Blueprint (`render.yaml`) for Render's free plan, with the database on Neon's free plan; see `deployment.doc.md`
 
 ## Repository Layout
 
@@ -175,7 +175,7 @@ Open `http://localhost:5173`. The dev server forwards requests that start with `
 
 ## Running in production
 
-One Docker image runs everything (`docker build -t message-app .` from the repository root; the settings are in `server/.env.production.example`). The server refuses to start in production without `DATABASE_URL`, `APP_ORIGIN` and `TRUST_PROXY`, and serves the built frontend, the API and the sockets from one origin. `node server/scripts/smoke-test.mjs https://your-domain` checks a running deployment from outside. `deployment.doc.md` has the hosting decision (Render, with Resend for mail), the step-by-step first deployment and the operations notes.
+One Docker image runs everything (`docker build -t message-app .` from the repository root; the settings are in `server/.env.production.example`). The server refuses to start in production without `DATABASE_URL`, `APP_ORIGIN` and `TRUST_PROXY`, and serves the built frontend, the API and the sockets from one origin. `node server/scripts/smoke-test.mjs https://your-domain` checks a running deployment from outside. `deployment.doc.md` has the hosting decision (the free stack: Render, Neon and Resend, and what the free plans cost you instead of money), the step-by-step first deployment and the operations notes.
 
 ## Roadmap
 
